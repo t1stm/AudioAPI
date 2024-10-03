@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using AudioManager.Platforms.Errors;
 using AudioManager.Streams;
 using Result;
@@ -7,15 +8,21 @@ namespace AudioManager.Platforms;
 
 public abstract class PlatformResult
 {
+    [JsonInclude]
     public required string ID;
-    public required IReadOnlyList<ContentDownloader> Downloaders;
-    
-    public string? Name { get; protected set; }
-    public string? Artist { get; protected set; }
-    public string? Album { get; protected set; }
-    public TimeSpan Duration { get; protected set; }
+    [JsonIgnore]
+    public required IReadOnlyList<ContentDownloader> Downloaders = [];
+    [JsonInclude]
+    public string? Name { get; set; }
+    [JsonInclude]
+    public string? Artist { get; set; }
+    [JsonInclude]
+    public string? Album { get; set; }
+    [JsonInclude]
+    public TimeSpan Duration { get; set; }
+    public abstract string GetDownloadUrl();
 
-    public virtual async Task<Result<StreamSpreader, DownloadError>> TryGetData(CancellationToken token = default)
+    public virtual async Task<Result<StreamSpreader, DownloadError>> TryGetContentData(CancellationToken token = default)
     {
         foreach (var downloader in Downloaders)
         {

@@ -5,7 +5,7 @@ public class StreamSpreader : Stream
     protected readonly SemaphoreSlim Semaphore = new(1, 1);
     protected readonly List<StreamSubscriber> Subscribers = [];
     protected readonly Queue<StreamSubscriber> RemoveQueue = new();
-    protected readonly List<ReadOnlyMemory<byte>> DataQueue = [];
+    protected readonly List<ReadOnlyMemory<byte>> Data = [];
     protected bool Closed;
 
     public void Subscribe(StreamSubscriber subscriber)
@@ -54,7 +54,7 @@ public class StreamSpreader : Stream
         try
         {
             Semaphore.Wait();
-            DataQueue.Add(new ReadOnlyMemory<byte>(buffer, offset, count));
+            Data.Add(new ReadOnlyMemory<byte>(buffer, offset, count));
             SyncSubscribers();
         }
         finally
@@ -68,7 +68,7 @@ public class StreamSpreader : Stream
         try
         {
             Semaphore.Wait();
-            DataQueue.Add(new Memory<byte>(buffer.ToArray()));
+            Data.Add(new Memory<byte>(buffer.ToArray()));
             SyncSubscribers();
         }
         finally
@@ -82,7 +82,7 @@ public class StreamSpreader : Stream
         try
         {
             await Semaphore.WaitAsync(cancellation_token);
-            DataQueue.Add(new ReadOnlyMemory<byte>(buffer, offset, count));
+            Data.Add(new ReadOnlyMemory<byte>(buffer, offset, count));
             SyncSubscribers();
         }
         finally
@@ -96,7 +96,7 @@ public class StreamSpreader : Stream
         try
         {
             await Semaphore.WaitAsync(cancellation_token);
-            DataQueue.Add(buffer);
+            Data.Add(buffer);
             SyncSubscribers();
         }
         finally
@@ -115,12 +115,12 @@ public class StreamSpreader : Stream
         foreach (var subscriber in Subscribers)
         {
             var starting_index = subscriber.CachedDataIndex;
-            var data_length = DataQueue.Count;
+            var data_length = Data.Count;
 
-            for (var i = starting_index; i < data_length; i++)
+            for (subscriber.CachedDataIndex = starting_index; subscriber.CachedDataIndex < data_length; subscriber.CachedDataIndex++)
             {
-                var current_slice = DataQueue[i];
-                var status = subscriber.WriteCall(current_slice);
+                var current_slice = Data[subscriber.CachedDataIndex];
+                var status = subscriber.WriteCall.Invoke(current_slice);
                 
                 if (!status.HasFlag(StreamStatus.Closed)) continue;
                 
@@ -131,9 +131,9 @@ public class StreamSpreader : Stream
             if (Closed)
             {
                 subscriber.SourceClosed = true;
+                Task.Run(subscriber.CloseCall);
             }
             
-            subscriber.CachedDataIndex = starting_index;
             Task.Run(subscriber.SyncCall);
         }
     }
@@ -141,15 +141,10 @@ public class StreamSpreader : Stream
     public override bool CanRead => false;
     public override bool CanSeek => false;
     public override bool CanWrite => true;
-    public override long Length => 0;
+    public override long Length => Position;
+    public override long Position { get; set; }
 
     #region Not Supported
-    
-    public override long Position
-    {
-        get => throw new NotSupportedException();
-        set => throw new NotSupportedException();
-    }
     
     public override void Flush()
     {

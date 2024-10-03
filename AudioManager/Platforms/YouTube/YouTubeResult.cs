@@ -2,7 +2,11 @@ using AudioManager.Platforms.Optional;
 
 namespace AudioManager.Platforms.YouTube;
 
-public class YouTubeResult : PlatformResult, HasThumbnail
+public sealed class YouTubeResult : PlatformResult, HasThumbnail
 {
-    public string ThumbnailUrl => "";
+    public string? ThumbnailUrl { get; init; }
+    public override string GetDownloadUrl()
+    {
+        return $"https://www.youtube.com/watch?v={ID}";
+    }
 }
