@@ -8,6 +8,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Result", "Result\Result.csp
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AudioManager.CLI", "AudioManager.CLI\AudioManager.CLI.csproj", "{4A3F2E1D-D765-4B93-A87F-FA94C9927F04}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AudioManager.Tests", "AudioManager.Tests\AudioManager.Tests.csproj", "{B96BFB0E-3CB8-4DCD-A6BA-881721E2649A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -23,12 +25,16 @@ Global
 		{793CEFC8-4DC3-4D92-8335-C15B490E9EB6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{793CEFC8-4DC3-4D92-8335-C15B490E9EB6}.Release|Any CPU.Build.0 = Release|Any CPU
 		{3148CC88-5675-4AFF-B6CD-37A87663B591}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-        {3148CC88-5675-4AFF-B6CD-37A87663B591}.Debug|Any CPU.Build.0 = Debug|Any CPU
+								{3148CC88-5675-4AFF-B6CD-37A87663B591}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3148CC88-5675-4AFF-B6CD-37A87663B591}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3148CC88-5675-4AFF-B6CD-37A87663B591}.Release|Any CPU.Build.0 = Release|Any CPU
 		{4A3F2E1D-D765-4B93-A87F-FA94C9927F04}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{4A3F2E1D-D765-4B93-A87F-FA94C9927F04}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4A3F2E1D-D765-4B93-A87F-FA94C9927F04}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4A3F2E1D-D765-4B93-A87F-FA94C9927F04}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B96BFB0E-3CB8-4DCD-A6BA-881721E2649A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B96BFB0E-3CB8-4DCD-A6BA-881721E2649A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B96BFB0E-3CB8-4DCD-A6BA-881721E2649A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B96BFB0E-3CB8-4DCD-A6BA-881721E2649A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

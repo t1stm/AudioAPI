@@ -5,7 +5,7 @@ public class StreamSpreader : Stream
     protected readonly SemaphoreSlim Semaphore = new(1, 1);
     protected readonly List<StreamSubscriber> Subscribers = [];
     protected readonly Queue<StreamSubscriber> RemoveQueue = new();
-    protected readonly List<ReadOnlyMemory<byte>> Data = [];
+    protected readonly List<(byte[], int, int)> Data = [];
     protected bool Closed;
 
     public void Subscribe(StreamSubscriber subscriber)
@@ -54,21 +54,7 @@ public class StreamSpreader : Stream
         try
         {
             Semaphore.Wait();
-            Data.Add(new ReadOnlyMemory<byte>(buffer, offset, count));
-            SyncSubscribers();
-        }
-        finally
-        {
-            Semaphore.Release();
-        }
-    }
-
-    public override void Write(ReadOnlySpan<byte> buffer)
-    {
-        try
-        {
-            Semaphore.Wait();
-            Data.Add(new Memory<byte>(buffer.ToArray()));
+            Data.Add((buffer.ToArray(), offset, count));
             SyncSubscribers();
         }
         finally
@@ -82,7 +68,7 @@ public class StreamSpreader : Stream
         try
         {
             await Semaphore.WaitAsync(cancellation_token);
-            Data.Add(new ReadOnlyMemory<byte>(buffer, offset, count));
+            Data.Add((buffer.ToArray(), offset, count));
             SyncSubscribers();
         }
         finally
@@ -96,7 +82,9 @@ public class StreamSpreader : Stream
         try
         {
             await Semaphore.WaitAsync(cancellation_token);
-            Data.Add(buffer);
+            var new_array = new byte[buffer.Length];
+            buffer.CopyTo(new_array);
+            Data.Add((new_array, 0, new_array.Length));
             SyncSubscribers();
         }
         finally
@@ -120,7 +108,8 @@ public class StreamSpreader : Stream
             for (subscriber.CachedDataIndex = starting_index; subscriber.CachedDataIndex < data_length; subscriber.CachedDataIndex++)
             {
                 var current_slice = Data[subscriber.CachedDataIndex];
-                var status = subscriber.WriteCall.Invoke(current_slice);
+                var (bytes, offset, length) = current_slice;
+                var status = subscriber.WriteCall.Invoke(bytes, offset, length);
                 
                 if (!status.HasFlag(StreamStatus.Closed)) continue;
                 

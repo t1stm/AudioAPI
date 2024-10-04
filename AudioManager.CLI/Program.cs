@@ -32,11 +32,11 @@ var waiting_semaphore = new SemaphoreSlim(0, 1);
 var total = 0;
 var stream_subscriber = new StreamSubscriber
 {
-    WriteCall = memory =>
+    WriteCall = (bytes, offset, length) =>
     {
-        total += memory.Length;
+        total += length;
         
-        stream.Write(memory.Span);
+        stream.Write(bytes.AsSpan(offset, length));
         return StreamStatus.Open;
     },
     SyncCall = () =>

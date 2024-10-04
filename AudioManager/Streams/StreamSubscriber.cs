@@ -2,7 +2,7 @@ namespace AudioManager.Streams;
 
 public class StreamSubscriber
 {
-    public required Func<ReadOnlyMemory<byte>, StreamStatus> WriteCall;
+    public required Func<byte[], int, int, StreamStatus> WriteCall;
     public required Action SyncCall;
     public required Action CloseCall;
     public int CachedDataIndex;
