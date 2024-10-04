@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Timers;
 using Audio;
 using Audio.FFmpeg;
 using AudioManager.Streams;
@@ -13,13 +14,41 @@ public class Content : ControllerBase
 {
     private readonly ILogger<Content> Logger;
     private readonly Audio.AudioManager AudioManager;
-    private readonly ConcurrentDictionary<(string codec, int bitrate, string id), FFmpegEncoder> CachedEncoders = new();
+    
+    private readonly Dictionary<(string codec, int bitrate, string id), FFmpegEncoder> CachedEncoders = new();
+    private readonly Dictionary<(string codec, int bitrate, string id), DateTime> ExpireTimes = new();
+    
+    private readonly System.Timers.Timer ExpireTimer;
+    private readonly SemaphoreSlim CacheSemaphore = new(1,1);
 
     public Content(ILogger<Content> logger)
     {
         Logger = logger;
         AudioManager = new Audio.AudioManager();
         AudioManager.Initialize();
+        ExpireTimer = new System.Timers.Timer();
+        ExpireTimer.Interval = 60 * 1000;
+        ExpireTimer.Elapsed += ExpireFFmpegSessions;
+    }
+
+    protected void ExpireFFmpegSessions(object? sender, ElapsedEventArgs elapsedEventArgs)
+    {
+        CacheSemaphore.Wait();
+        
+        var expire_copy = ExpireTimes.ToDictionary();
+        var now = DateTime.Now;
+        foreach (var (tuple, expire) in expire_copy)
+        {
+            if (expire > now) continue;
+            ExpireTimes.Remove(tuple);
+            
+            var encoder = CachedEncoders[tuple];
+            CachedEncoders.Remove(tuple);
+
+            encoder.Cleanup();
+        }
+        
+        CacheSemaphore.Release();
     }
 
     [HttpGet]
@@ -71,12 +100,17 @@ public class Content : ControllerBase
     {
         Logger.LogInformation("Downloading Raw \'{Id}\'", id);
         
+        var start = DateTime.Now;
         var search = await AudioManager.SearchID(id);
         if (search == Status.Error) return NotFound();
         
         var result = search.GetOK();
+
+        var found_result = DateTime.Now;
+        Logger.LogInformation("Searching \'{Id}\' took \'{Duration}\'", id, found_result - start);
         
-        var content_downloader_request = await AudioManager.GetContentDownloader(result);
+        var content_downloader_request = 
+            await AudioManager.TryGetContentData(result);
         if (content_downloader_request == Status.Error) 
             return StatusCode(500);
         
@@ -107,10 +141,17 @@ public class Content : ControllerBase
                 waiting_semaphore.Release();
             }
         };
+
+        var subscribed = DateTime.Now;
         stream_spreader.Subscribe(stream_subscriber);
 
         await waiting_semaphore.WaitAsync();
         await Response.Body.FlushAsync();
+        
+        var finish = DateTime.Now;
+        Logger.LogInformation(
+            "Finishing \'{Id}\' took: \'{Duration}\', with the time while subscribed being \'{Time}\'", 
+            id, finish - start, finish - subscribed);
         return new EmptyResult();
 
         async void SyncCall()
@@ -142,17 +183,24 @@ public class Content : ControllerBase
         };
         Response.ContentType = type;
 
+        await CacheSemaphore.WaitAsync();
         if (!CachedEncoders.TryGetValue((codec, bitrate, id), out var encoder))
         {
             encoder = new FFmpegEncoder();
+            
             var search = await AudioManager.SearchID(id);
             if (search == Status.Error) return NotFound();
         
             var result = search.GetOK();
         
-            var content_downloader_request = await AudioManager.GetContentDownloader(result);
+            var content_downloader_request = 
+                await AudioManager.TryGetContentData(result);
+            
             if (content_downloader_request == Status.Error) 
                 return StatusCode(500);
+            
+            CachedEncoders[(codec, bitrate, id)] = encoder;
+            CacheSemaphore.Release();
 
             var ffmpeg_codec = codec switch
             {
@@ -161,19 +209,29 @@ public class Content : ControllerBase
                 "MP3" => "-c:a libmp3lame",
                 _ => "-c:a libopus"
             };
+            
+            var ffmpeg_output_format = codec switch
+            {
+                "Opus" or "Vorbis" => "-f ogg",
+                "AAC" => "-f adts",
+                "MP3" => "-f mp3",
+                _ => "-f mka"
+            };
+            
             var source_stream_spreader = content_downloader_request.GetOK();
-            var stream_subscriber_result = encoder.Convert(bitrate, ffmpeg_codec);
+            var stream_subscriber_result = encoder.Convert(bitrate, ffmpeg_codec, ffmpeg_output_format);
             
             if (stream_subscriber_result == Status.Error) return StatusCode(500);
 
             var source_stream_subscriber = stream_subscriber_result.GetOK();
             source_stream_spreader.Subscribe(source_stream_subscriber);
         }
+        else CacheSemaphore.Release();
 
         var cache = new ConcurrentQueue<(byte[], int, int)>();
         var waiting_semaphore = new SemaphoreSlim(0, 1);
         var sync_semaphore = new SemaphoreSlim(1, 1);
-        var encoded_stream_spreader = encoder.GetStreamSpreader();
+        var encoder_stream_spreader = encoder.GetStreamSpreader();
         
         var split_query = id.Split("://");
         var pure_id = split_query.Length > 1 ? 
@@ -196,10 +254,11 @@ public class Content : ControllerBase
                 waiting_semaphore.Release();
             }
         };
-        encoded_stream_spreader.Subscribe(stream_subscriber);
+        encoder_stream_spreader.Subscribe(stream_subscriber);
 
         await waiting_semaphore.WaitAsync();
         await Response.Body.FlushAsync();
+        
         return new EmptyResult();
 
         async void SyncCall()

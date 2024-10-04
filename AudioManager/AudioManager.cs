@@ -61,7 +61,7 @@ public class AudioManager
             Task.FromResult(Result<PlatformResult, SearchError>.Error(SearchError.NotFound));
     }
 
-    public async Task<Result<StreamSpreader, DownloadError>> GetContentDownloader(PlatformResult result,
+    public async Task<Result<StreamSpreader, DownloadError>> TryGetContentData(PlatformResult result,
         CancellationToken cancellation_token = default)
     {
         try

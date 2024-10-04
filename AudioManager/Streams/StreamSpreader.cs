@@ -136,6 +136,11 @@ public class StreamSpreader : Stream
         
         return ValueTask.CompletedTask;
     }
+    
+    public void Clean()
+    {
+        Data.Clear();
+    }
 
     public override bool CanRead => false;
     public override bool CanSeek => false;

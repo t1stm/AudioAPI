@@ -8,22 +8,26 @@ namespace Audio.FFmpeg;
 public class FFmpegEncoder
 {
     protected readonly StreamSpreader InnerStreamSpreader = new();
+    protected Process? Process;
     
-    public Result<StreamSubscriber, FFmpegError> Convert(int bitrate, string codec = "-c:a libopus")
+    public Result<StreamSubscriber, FFmpegError> Convert(int bitrate, string codec = "-c:a libopus",
+        string output_format = "-f mka")
     {
         var queue = new ConcurrentQueue<(byte[], int, int)>();
-        var update_semaphore = new SemaphoreSlim(0, 1);
+        var update_semaphore = new SemaphoreSlim(1, 1);
         
         var process_start_info = new ProcessStartInfo
         {
             FileName = "ffmpeg",
-            Arguments = $"-i - {codec} -b:a {bitrate} -vn -d copy",
+            Arguments = $"-v quiet -nostats -i - {codec} -b:a {bitrate}k -vn -d copy {output_format} pipe:1",
             RedirectStandardInput = true,
-            RedirectStandardOutput = true
+            RedirectStandardOutput = true,
+            RedirectStandardError = false,
+            UseShellExecute = false
         };
         
-        var process = Process.Start(process_start_info);
-        if (process == null) return Result<StreamSubscriber, FFmpegError>
+        Process = Process.Start(process_start_info);
+        if (Process == null) return Result<StreamSubscriber, FFmpegError>
             .Error(FFmpegError.UnableToOpen);
 
         var stream_subscriber = new StreamSubscriber
@@ -39,7 +43,7 @@ public class FFmpegEncoder
 
         Task.Run(async () =>
         {
-            await process.StandardOutput.BaseStream.CopyToAsync(InnerStreamSpreader);
+            await Process.StandardOutput.BaseStream.CopyToAsync(InnerStreamSpreader);
             await InnerStreamSpreader.CloseAsync();
         });
         
@@ -49,7 +53,7 @@ public class FFmpegEncoder
         async void CloseCall()
         {
             await SyncCall();
-            process.StandardInput.BaseStream.Close();
+            Process.StandardInput.BaseStream.Close();
         }
 
         async Task SyncCall()
@@ -59,7 +63,7 @@ public class FFmpegEncoder
             while (queue.TryDequeue(out var entry))
             {
                 var (bytes, offset, length) = entry;
-                await process.StandardInput.BaseStream.WriteAsync(
+                await Process.StandardInput.BaseStream.WriteAsync(
                     bytes.AsMemory(offset, length));
             }
 
@@ -68,4 +72,10 @@ public class FFmpegEncoder
     }
     
     public StreamSpreader GetStreamSpreader() => InnerStreamSpreader;
+
+    public void Cleanup()
+    {
+        InnerStreamSpreader.Clean();
+        Process?.Close();
+    }
 }
