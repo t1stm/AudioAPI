@@ -1,21 +1,18 @@
 using AudioManager.Platforms.Errors;
+using AudioManager.Platforms.Optional;
 using Result;
 using YoutubeExplode;
 using YoutubeExplode.Search;
 
 namespace AudioManager.Platforms.YouTube;
 
-public sealed class YouTubeSearchProvider_Explode : SearchProvider
+public sealed class YouTubeSearchProvider_Explode : SearchProvider, ISupportsID, ISupportsPlaylist, ISupportsSearch
 {
     public override string Name => "YouTube Explode";
+    public override string PlatformIdentifier => "yt://";
     public override int Priority => 0;
-    
-    public override bool SupportsID => true;
-    public override bool SupportsSearch => true;
-    public override bool SupportsPlaylists => true;
-    public override bool SupportsPagination => false;
 
-    public override async Task<Result<PlatformResult, SearchError>> TryID(string id, CancellationToken token)
+    public async Task<Result<PlatformResult, SearchError>> TryID(string id, CancellationToken token)
     {
         try
         {
@@ -27,7 +24,7 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider
                 Name = video.Title,
                 Artist = video.Author.ChannelTitle,
                 Duration = video.Duration.GetValueOrDefault(TimeSpan.Zero),
-                ID = id,
+                ID = PlatformIdentifier + id,
                 Downloaders = ContentDownloaders
             });
         }
@@ -37,24 +34,25 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider
         }
     }
 
-    public override async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchResults(string keywords, CancellationToken token)
+    public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchKeywords(string keywords,
+        CancellationToken token)
     {
         try
         {
             var youtube_client = new YoutubeClient();
             var search_results = new List<PlatformResult>();
-            
+
             await foreach (var result in youtube_client.Search.GetResultsAsync(keywords, token))
             {
                 if (result is not VideoSearchResult video) continue;
-                
+
                 search_results.Add(new YouTubeResult
                 {
-                    ID = video.Id,
+                    ID = PlatformIdentifier + video.Id,
                     Name = video.Title,
                     Artist = video.Author.ChannelTitle,
                     Duration = video.Duration.GetValueOrDefault(TimeSpan.Zero),
-                    ThumbnailUrl = video.Thumbnails[0].Url, 
+                    ThumbnailUrl = video.Thumbnails[0].Url,
                     Downloaders = ContentDownloaders
                 });
             }
@@ -66,14 +64,8 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider
             return Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.GenericError);
         }
     }
-    
-    public override Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchResultsPaginated(string keywords, int page, int page_size, 
-        CancellationToken token)
-    {
-        return Task.FromResult(Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.NotSupported));
-    }
 
-    public override async Task<Result<IEnumerable<PlatformResult>, SearchError>> TryPlaylist(string playlist_url, CancellationToken cancellation_token)
+    public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchPlaylist(string playlist_url, CancellationToken cancellation_token)
     {
         try
         {
@@ -88,7 +80,7 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider
                 var items = video.Items;
                 playlist_results.AddRange(items.Select(v => new YouTubeResult
                 {
-                    ID = v.Id,
+                    ID = PlatformIdentifier + v.Id,
                     Name = v.Title,
                     Artist = v.Author.ChannelTitle,
                     Duration = v.Duration.GetValueOrDefault(TimeSpan.Zero),

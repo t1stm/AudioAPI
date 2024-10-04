@@ -6,7 +6,7 @@ public class StreamSpreader : Stream
     protected readonly List<StreamSubscriber> Subscribers = [];
     protected readonly Queue<StreamSubscriber> RemoveQueue = new();
     protected readonly List<(byte[], int, int)> Data = [];
-    protected bool Closed;
+    public bool Closed { get; protected set; }
 
     public void Subscribe(StreamSubscriber subscriber)
     {
@@ -125,6 +125,16 @@ public class StreamSpreader : Stream
             
             Task.Run(subscriber.SyncCall);
         }
+    }
+
+    public override ValueTask DisposeAsync()
+    {
+        if (!Closed) return ValueTask.CompletedTask;
+        
+        Data.Clear();
+        GC.SuppressFinalize(this);
+        
+        return ValueTask.CompletedTask;
     }
 
     public override bool CanRead => false;
