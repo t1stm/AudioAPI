@@ -156,10 +156,10 @@ public class Content : ControllerBase
 
             var ffmpeg_codec = codec switch
             {
-                "Opus" => "-c:a libopus",
                 "Vorbis" => "-c:a libvorbis",
                 "AAC" => "-c:a aac",
-                "MP3" => "-c:a libmp3lame"
+                "MP3" => "-c:a libmp3lame",
+                _ => "-c:a libopus"
             };
             var source_stream_spreader = content_downloader_request.GetOK();
             var stream_subscriber_result = encoder.Convert(bitrate, ffmpeg_codec);
