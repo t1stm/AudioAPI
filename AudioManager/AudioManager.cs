@@ -134,4 +134,19 @@ public class AudioManager
             where platform.SearchPlaylistIdentifiers.Contains(protocol) 
             select platform).Any() ? QueryType.Playlist : QueryType.Keywords;
     }
+
+    public async Task<Result<IEnumerable<PlatformResult>, SearchError>> SearchKeywords(string query)
+    {
+        foreach (var platform in Platforms
+                     .Where(p => p is ISupportsSearch)
+                     .Cast<ISupportsSearch>())
+        {
+            var search = await platform.TrySearchKeywords(query);
+            if (search == Status.Error) continue;
+
+            return search;
+        }
+        
+        return Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.NotFound);
+    }
 }
