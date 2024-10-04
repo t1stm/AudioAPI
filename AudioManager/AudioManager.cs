@@ -13,9 +13,10 @@ public class AudioManager
 {
     protected readonly Dictionary<string, Platform> SearchIDMap = [];
     protected readonly Dictionary<string, StreamSpreader> CachedResults = [];
-    protected readonly Dictionary<StreamSpreader, DateTime> ExpireTimestamps = [];
+    protected readonly Dictionary<string, DateTime> ExpireTimestamps = [];
+    
     protected readonly SemaphoreSlim Semaphore = new(1, 1);
-    protected readonly TimeSpan ExpireTimeSpan = TimeSpan.FromMinutes(30);
+    protected readonly TimeSpan ExpireTimeSpan = TimeSpan.FromMinutes(45);
     protected System.Timers.Timer? ExpireTimer;
     
     public List<Platform> Platforms { get; } = [
@@ -77,8 +78,8 @@ public class AudioManager
                 return Result<StreamSpreader, DownloadError>.Error(DownloadError.GenericError);
         
             stream_spreader = downloader.GetOK();
-            CachedResults[result.ID] = stream_spreader;
-            ExpireTimestamps[stream_spreader] = DateTime.UtcNow.Add(ExpireTimeSpan);
+            CachedResults.Add(result.ID, stream_spreader);
+            ExpireTimestamps.Add(result.ID, DateTime.UtcNow.Add(ExpireTimeSpan));
         
             return Result<StreamSpreader, DownloadError>.Success(stream_spreader);
         }
@@ -92,23 +93,25 @@ public class AudioManager
     {
         await Semaphore.WaitAsync();
         
-        foreach (var (_, stream_spreader) in CachedResults)
+        foreach (var (id, stream_spreader) in CachedResults)
         {
             if (!stream_spreader.Closed) continue;
-            if (ExpireTimestamps.ContainsKey(stream_spreader)) continue;
+            if (ExpireTimestamps.ContainsKey(id)) continue;
             
-            ExpireTimestamps[stream_spreader] = DateTime.UtcNow.Add(ExpireTimeSpan);
+            ExpireTimestamps[id] = DateTime.UtcNow.Add(ExpireTimeSpan);
         }
 
         var cached_dictionary = ExpireTimestamps.ToDictionary();
         var now = DateTime.UtcNow;
         
-        foreach (var (spreader, expire) in cached_dictionary)
+        foreach (var (id, expire) in cached_dictionary)
         {
             if (expire < now) continue;
-            ExpireTimestamps.Remove(spreader);
+            ExpireTimestamps.Remove(id);
             
+            var spreader = CachedResults[id];
             await spreader.DisposeAsync();
+            CachedResults.Remove(id);
         }
         
         Semaphore.Release();

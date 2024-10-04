@@ -5,51 +5,19 @@ using Audio.FFmpeg;
 using AudioManager.Streams;
 using Microsoft.AspNetCore.Mvc;
 using Result.Objects;
+using WebApplication3;
 
 namespace AudioAPI.Controllers;
 
 [ApiController]
 [Route("[controller]")]
-public class Content : ControllerBase
+public class Content(ILogger<Content> logger) : ControllerBase
 {
-    private readonly ILogger<Content> Logger;
-    private readonly Audio.AudioManager AudioManager;
-    
-    private readonly Dictionary<(string codec, int bitrate, string id), FFmpegEncoder> CachedEncoders = new();
-    private readonly Dictionary<(string codec, int bitrate, string id), DateTime> ExpireTimes = new();
-    
-    private readonly System.Timers.Timer ExpireTimer;
-    private readonly SemaphoreSlim CacheSemaphore = new(1,1);
-
-    public Content(ILogger<Content> logger)
-    {
-        Logger = logger;
-        AudioManager = new Audio.AudioManager();
-        AudioManager.Initialize();
-        ExpireTimer = new System.Timers.Timer();
-        ExpireTimer.Interval = 60 * 1000;
-        ExpireTimer.Elapsed += ExpireFFmpegSessions;
-    }
-
-    protected void ExpireFFmpegSessions(object? sender, ElapsedEventArgs elapsedEventArgs)
-    {
-        CacheSemaphore.Wait();
-        
-        var expire_copy = ExpireTimes.ToDictionary();
-        var now = DateTime.Now;
-        foreach (var (tuple, expire) in expire_copy)
-        {
-            if (expire > now) continue;
-            ExpireTimes.Remove(tuple);
-            
-            var encoder = CachedEncoders[tuple];
-            CachedEncoders.Remove(tuple);
-
-            encoder.Cleanup();
-        }
-        
-        CacheSemaphore.Release();
-    }
+    private readonly ILogger<Content> Logger = logger;
+    public static Audio.AudioManager AudioManager => Globals.AudioManager;
+    public static Dictionary<(string codec, int bitrate, string id), FFmpegEncoder> CachedEncoders => Globals.CachedEncoders;
+    public static Dictionary<(string codec, int bitrate, string id), DateTime> ExpireTimes => Globals.ExpireTimes;
+    public static SemaphoreSlim CacheSemaphore => Globals.CacheSemaphore;
 
     [HttpGet]
     [Route("/Audio/Search")]
@@ -199,7 +167,7 @@ public class Content : ControllerBase
             if (content_downloader_request == Status.Error) 
                 return StatusCode(500);
             
-            CachedEncoders[(codec, bitrate, id)] = encoder;
+            CachedEncoders.Add((codec, bitrate, id), encoder);
             CacheSemaphore.Release();
 
             var ffmpeg_codec = codec switch
@@ -252,6 +220,7 @@ public class Content : ControllerBase
             CloseCall = () =>
             {
                 waiting_semaphore.Release();
+                ExpireTimes.Add((codec, bitrate, id), DateTime.Now.Add(TimeSpan.FromMinutes(45)));
             }
         };
         encoder_stream_spreader.Subscribe(stream_subscriber);
