@@ -2,7 +2,7 @@ using AudioManager.Platforms.Errors;
 using AudioManager.Platforms.Optional;
 using Result;
 using YoutubeExplode;
-using YoutubeExplode.Search;
+using YoutubeExplode.Common;
 
 namespace AudioManager.Platforms.YouTube;
 
@@ -40,24 +40,17 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider, ISupportsID,
         try
         {
             var youtube_client = new YoutubeClient();
-            var search_results = new List<PlatformResult>();
-
-            await foreach (var result in youtube_client.Search.GetResultsAsync(keywords, token))
+            var results = await youtube_client.Search.GetVideosAsync(keywords, token).CollectAsync(15);
+            return Result<IEnumerable<PlatformResult>, SearchError>.Success(
+                results.Select(video => new YouTubeResult
             {
-                if (result is not VideoSearchResult video) continue;
-
-                search_results.Add(new YouTubeResult
-                {
-                    ID = PlatformIdentifier + video.Id,
-                    Name = video.Title,
-                    Artist = video.Author.ChannelTitle,
-                    Duration = video.Duration.GetValueOrDefault(TimeSpan.Zero),
-                    ThumbnailUrl = video.Thumbnails[0].Url,
-                    Downloaders = ContentDownloaders
-                });
-            }
-
-            return Result<IEnumerable<PlatformResult>, SearchError>.Success(search_results);
+                ID = PlatformIdentifier + video.Id,
+                Name = video.Title,
+                Artist = video.Author.ChannelTitle,
+                Duration = video.Duration.GetValueOrDefault(TimeSpan.Zero),
+                ThumbnailUrl = video.Thumbnails[0].Url,
+                Downloaders = ContentDownloaders
+            }));
         }
         catch
         {
@@ -95,5 +88,10 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider, ISupportsID,
         {
             return Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.GenericError);
         }
+    }
+    
+    public bool IsPlaylistUrl(string query)
+    {
+        throw new NotSupportedException();
     }
 }

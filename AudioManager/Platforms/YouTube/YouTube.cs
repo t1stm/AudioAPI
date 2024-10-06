@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using AudioManager.Platforms.Cross_Platform;
 using AudioManager.Platforms.Errors;
 using AudioManager.Platforms.Optional;
@@ -6,7 +7,7 @@ using Result.Objects;
 
 namespace AudioManager.Platforms.YouTube;
 
-public sealed class YouTube : Platform, ISupportsSearch, ISupportsPlaylist
+public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlaylist
 {
     
     public override HashSet<string> SearchIDIdentifiers => ["yt://"];
@@ -61,4 +62,12 @@ public sealed class YouTube : Platform, ISupportsSearch, ISupportsPlaylist
 
         return Result<IEnumerable<PlatformResult>, SearchError>.Error(default);
     }
+
+    public bool IsPlaylistUrl(string query)
+    {
+        return PlaylistRegex().IsMatch(query);
+    }
+    
+    [GeneratedRegex(@"\/playlist\?list=[a-zA-Z0-9_-]+")]
+    private static partial Regex PlaylistRegex();
 }

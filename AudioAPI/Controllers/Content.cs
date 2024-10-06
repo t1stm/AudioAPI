@@ -41,12 +41,10 @@ public class Content(ILogger<Content> logger) : ControllerBase
 
             case QueryType.Playlist:
             {
-                var split_query = query.Split("://");
-                var pure_id = split_query.Length > 1 ? 
-                    string.Join("://", split_query[1..]) : split_query[0];
+                var search = await AudioManager.SearchPlaylist(query);
+                if (search == Status.Error) return NotFound();
                 
-                // TODO
-                return new JsonResult("TODO");
+                return new JsonResult(search.GetOK());
             }
 
             case QueryType.Keywords:
@@ -58,7 +56,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
             }
             
             default: 
-                return new EmptyResult();
+                return new StatusCodeResult(403);
         }
     }
 

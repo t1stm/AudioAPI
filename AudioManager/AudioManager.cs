@@ -61,6 +61,43 @@ public class AudioManager
             platform.TryID(pure_id, cancellation_token) :
             Task.FromResult(Result<PlatformResult, SearchError>.Error(SearchError.NotFound));
     }
+    
+    public async Task<Result<IEnumerable<PlatformResult>, SearchError>> SearchKeywords(string query)
+    {
+        var results = new List<PlatformResult>();
+        foreach (var platform in Platforms
+                     .Where(p => p is ISupportsSearch)
+                     .Cast<ISupportsSearch>())
+        {
+            var search = await platform.TrySearchKeywords(query);
+            if (search == Status.Error) continue;
+
+            results.AddRange(search.GetOK());
+        }
+        
+        return results.Count == 0 ? 
+            Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.NotFound) : 
+            Result<IEnumerable<PlatformResult>, SearchError>.Success(results);
+    }
+    
+    public async Task<Result<IEnumerable<PlatformResult>, SearchError>> SearchPlaylist(string query)
+    {
+        var results = new List<PlatformResult>();
+        foreach (var platform in Platforms
+                     .Where(p => p is ISupportsPlaylist)
+                     .Cast<ISupportsPlaylist>()
+                     .Where(p => p.IsPlaylistUrl(query)))
+        {
+            var search = await platform.TrySearchPlaylist(query);
+            if (search == Status.Error) continue;
+
+            results.AddRange(search.GetOK());
+        }
+        
+        return results.Count == 0 ? 
+            Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.NotFound) : 
+            Result<IEnumerable<PlatformResult>, SearchError>.Success(results);
+    }
 
     public async Task<Result<StreamSpreader, DownloadError>> TryGetContentData(PlatformResult result,
         CancellationToken cancellation_token = default)
@@ -127,29 +164,16 @@ public class AudioManager
         }
         
         var playlist_platforms = Platforms.Where(p => p is ISupportsPlaylist).ToList();
-        foreach (var platform in playlist_platforms)
+        if (playlist_platforms.Cast<ISupportsPlaylist>()
+            .Select(platform => platform.IsPlaylistUrl(query))
+            .Any())
         {
-            
+            return QueryType.Playlist;
         }
         
         return (from platform in playlist_platforms let split_query = query.Split("://") 
             let protocol = $"{split_query[0]}://" 
             where platform.SearchPlaylistIdentifiers.Contains(protocol) 
             select platform).Any() ? QueryType.Playlist : QueryType.Keywords;
-    }
-
-    public async Task<Result<IEnumerable<PlatformResult>, SearchError>> SearchKeywords(string query)
-    {
-        foreach (var platform in Platforms
-                     .Where(p => p is ISupportsSearch)
-                     .Cast<ISupportsSearch>())
-        {
-            var search = await platform.TrySearchKeywords(query);
-            if (search == Status.Error) continue;
-
-            return search;
-        }
-        
-        return Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.NotFound);
     }
 }
