@@ -24,6 +24,14 @@ public abstract class PlatformResult
     public string? ThumbnailUrl { get; set; }
     public abstract string GetDownloadUrl();
 
+    public virtual string GetPureID()
+    {
+        var split_id = ID.Split("://");
+        var pure_id = split_id.Length > 1 ? string.Join("://", split_id[1..]) : ID;
+        
+        return pure_id;
+    }
+
     public virtual async Task<Result<StreamSpreader, DownloadError>> TryGetContentData(CancellationToken token = default)
     {
         foreach (var downloader in Downloaders)

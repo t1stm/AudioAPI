@@ -6,8 +6,10 @@ using YoutubeExplode.Common;
 
 namespace AudioManager.Platforms.YouTube;
 
-public sealed class YouTubeSearchProvider_Explode : SearchProvider, ISupportsID, ISupportsPlaylist, ISupportsSearch
+public sealed class YouTubeSearchProvider_Explode : SearchProvider, 
+    ISupportsID, ISupportsPlaylist, ISupportsSearch
 {
+    public static YoutubeClient Client { get; } = new();
     public override string Name => "YouTube Explode";
     public override string PlatformIdentifier => "yt://";
     public override int Priority => 0;
@@ -16,7 +18,7 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider, ISupportsID,
     {
         try
         {
-            var youtube_client = new YoutubeClient();
+            var youtube_client = Client;
             var video = await youtube_client.Videos.GetAsync(id, token);
         
             return Result<PlatformResult, SearchError>.Success(new YouTubeResult

@@ -9,7 +9,6 @@ namespace AudioManager.Platforms.YouTube;
 
 public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlaylist
 {
-    
     public override HashSet<string> SearchIDIdentifiers => ["yt://"];
     public override HashSet<string> SearchPlaylistIdentifiers => ["yt-playlist://"];
     public override HashSet<string> PlatformDomains => ["youtube.com", "youtu.be", 
@@ -23,6 +22,7 @@ public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlayli
     ];
 
     protected override List<ContentDownloader> ContentDownloaders { get; set; } = [
+        new Downloader_YouTubeExplode(),
         new Downloader_YtDLP()
     ];
 

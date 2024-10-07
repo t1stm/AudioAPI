@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Timers;
 using Audio;
 using Audio.FFmpeg;
 using AudioManager.Streams;
@@ -13,7 +12,6 @@ namespace AudioAPI.Controllers;
 [Route("[controller]")]
 public class Content(ILogger<Content> logger) : ControllerBase
 {
-    private readonly ILogger<Content> Logger = logger;
     public static Audio.AudioManager AudioManager => Globals.AudioManager;
     public static Dictionary<(string codec, int bitrate, string id), FFmpegEncoder> CachedEncoders => Globals.CachedEncoders;
     public static Dictionary<(string codec, int bitrate, string id), DateTime> ExpireTimes => Globals.ExpireTimes;
@@ -23,7 +21,8 @@ public class Content(ILogger<Content> logger) : ControllerBase
     [Route("/Audio/Search")]
     public async Task<IActionResult> Search(string query)
     {
-        Logger.LogInformation("Searching for {Query}", query);
+        if (string.IsNullOrWhiteSpace(query)) return NotFound();
+        logger.LogInformation("Searching for {Query}", query);
         
         var query_type = AudioManager.FindQueryType(query);
         switch (query_type)
@@ -64,7 +63,8 @@ public class Content(ILogger<Content> logger) : ControllerBase
     [Route("/Audio/DownloadRaw")]
     public async Task<IActionResult> DownloadRaw(string id)
     {
-        Logger.LogInformation("Downloading Raw \'{Id}\'", id);
+        if (string.IsNullOrWhiteSpace(id)) return NotFound();
+        logger.LogInformation("Downloading Raw \'{Id}\'", id);
         
         var start = DateTime.Now;
         var search = await AudioManager.SearchID(id);
@@ -73,7 +73,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
         var result = search.GetOK();
 
         var found_result = DateTime.Now;
-        Logger.LogInformation("Searching \'{Id}\' took \'{Duration}\'", id, found_result - start);
+        logger.LogInformation("Searching \'{Id}\' took \'{Duration}\'", id, found_result - start);
         
         var content_downloader_request = 
             await AudioManager.TryGetContentData(result);
@@ -115,7 +115,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
         await Response.Body.FlushAsync();
         
         var finish = DateTime.Now;
-        Logger.LogInformation(
+        logger.LogInformation(
             "Finishing \'{Id}\' took: \'{Duration}\', with the time while subscribed being \'{Time}\'", 
             id, finish - start, finish - subscribed);
         return new EmptyResult();
@@ -139,7 +139,8 @@ public class Content(ILogger<Content> logger) : ControllerBase
     [Route("/Audio/Download/{codec:required}/{bitrate:int:required}")]
     public async Task<IActionResult> Download(string codec, int bitrate, string id)
     {
-        Logger.LogInformation("Downloading \'{Id}\' {Codec} {Bitrate}", codec, bitrate, id);
+        if (string.IsNullOrWhiteSpace(id)) return NotFound();
+        logger.LogInformation("Downloading \'{Id}\' {Codec} {Bitrate}", codec, bitrate, id);
         
         var type = codec switch
         {

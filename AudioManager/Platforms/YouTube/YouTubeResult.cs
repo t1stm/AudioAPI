@@ -1,5 +1,3 @@
-using AudioManager.Platforms.Optional;
-
 namespace AudioManager.Platforms.YouTube;
 
 public sealed class YouTubeResult : PlatformResult

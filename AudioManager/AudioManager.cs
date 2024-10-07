@@ -164,9 +164,9 @@ public class AudioManager
         }
         
         var playlist_platforms = Platforms.Where(p => p is ISupportsPlaylist).ToList();
-        if (playlist_platforms.Cast<ISupportsPlaylist>()
-            .Select(platform => platform.IsPlaylistUrl(query))
-            .Any())
+        if (playlist_platforms
+            .Cast<ISupportsPlaylist>()
+            .Any(platform => platform.IsPlaylistUrl(query)))
         {
             return QueryType.Playlist;
         }
