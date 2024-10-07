@@ -6,7 +6,7 @@ using YoutubeSearchApi.Net;
 using YoutubeSearchApi.Net.Backends;
 using YoutubeSearchApi.Net.Objects;
 
-namespace AudioManager.Platforms.YouTube;
+namespace AudioManager.Platforms.YouTube.Search_Providers;
 
 public class YouTubeSearchProvider_Madeyoga : SearchProvider, 
     ISupportsSearch

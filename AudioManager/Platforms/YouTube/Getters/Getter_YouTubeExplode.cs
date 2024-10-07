@@ -1,10 +1,10 @@
 using AudioManager.Platforms.Errors;
-using AudioManager.Platforms.YouTube;
+using AudioManager.Platforms.YouTube.Search_Providers;
 using AudioManager.Streams;
 using Result;
 using YoutubeExplode;
 
-namespace AudioManager.Platforms.Cross_Platform;
+namespace AudioManager.Platforms.YouTube.Getters;
 
 public class Getter_YouTubeExplode : ContentGetter
 {

@@ -3,7 +3,7 @@ using AudioManager.Streams;
 using Result;
 using VideoLibrary;
 
-namespace AudioManager.Platforms.Cross_Platform;
+namespace AudioManager.Platforms.YouTube.Getters;
 
 public class Getter_VideoLibrary : ContentGetter
 {

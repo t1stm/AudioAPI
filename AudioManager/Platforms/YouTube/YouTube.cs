@@ -2,6 +2,8 @@ using System.Text.RegularExpressions;
 using AudioManager.Platforms.Cross_Platform;
 using AudioManager.Platforms.Errors;
 using AudioManager.Platforms.Optional;
+using AudioManager.Platforms.YouTube.Getters;
+using AudioManager.Platforms.YouTube.Search_Providers;
 using Result;
 using Result.Objects;
 
