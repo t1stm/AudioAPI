@@ -14,6 +14,7 @@ public class StreamSpreader : Stream
         {
             Semaphore.Wait();
             Subscribers.Add(subscriber);
+            SyncSubscribers();
         }
         finally
         {
@@ -121,6 +122,7 @@ public class StreamSpreader : Stream
             {
                 subscriber.SourceClosed = true;
                 Task.Run(subscriber.CloseCall);
+                continue;
             }
             
             Task.Run(subscriber.SyncCall);

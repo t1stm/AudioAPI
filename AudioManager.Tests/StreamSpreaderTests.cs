@@ -154,4 +154,33 @@ public class StreamSpreaderTests(ITestOutputHelper output)
             output.WriteLine($"Equality check for [{index++}] is successful.");
         }
     }
+
+    [Fact]
+    public async Task ClosedCopyTest()
+    {
+        var stream_spreader = new StreamSpreader();
+        var random_bytes = RandomNumberGenerator.GetBytes(4096);
+
+        var memory_stream = new MemoryStream();
+        var waiting_semaphore = new SemaphoreSlim(0, 1);
+        var stream_subscriber = new StreamSubscriber
+        {
+            WriteCall = (bytes, offset, length) =>
+            {
+                memory_stream.Write(bytes, offset, length);
+                return StreamStatus.Open;
+            },
+            SyncCall = () => {},
+            CloseCall = () => waiting_semaphore.Release()
+        };
+        
+        await stream_spreader.WriteAsync(random_bytes);
+        await stream_spreader.CloseAsync();
+        await Task.Delay(2000);
+        
+        stream_spreader.Subscribe(stream_subscriber);
+        await Task.Delay(2000);
+        
+        Assert.False(memory_stream.ToArray().Length == 0, "No data copied to the MemoryStream.");
+    }
 }
