@@ -20,6 +20,8 @@ public abstract class PlatformResult
     public string? Album { get; set; }
     [JsonInclude]
     public TimeSpan Duration { get; set; }
+    [JsonInclude]
+    public string? ThumbnailUrl { get; set; }
     public abstract string GetDownloadUrl();
 
     public virtual async Task<Result<StreamSpreader, DownloadError>> TryGetContentData(CancellationToken token = default)
