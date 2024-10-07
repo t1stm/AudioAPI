@@ -5,7 +5,7 @@ using Result;
 
 namespace AudioManager.Platforms.Cross_Platform;
 
-public sealed class Downloader_YtDLP : ContentDownloader
+public sealed class Getter_YtDLP : ContentGetter
 {
     public override int Priority => 0;
     public override Task<Result<StreamSpreader, DownloadError>> TryGetContentData(

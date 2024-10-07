@@ -6,7 +6,7 @@ using YoutubeExplode;
 
 namespace AudioManager.Platforms.Cross_Platform;
 
-public class Downloader_YouTubeExplode : ContentDownloader
+public class Getter_YouTubeExplode : ContentGetter
 {
     public override int Priority => 20;
     protected static YoutubeClient Client => YouTubeSearchProvider_Explode.Client;

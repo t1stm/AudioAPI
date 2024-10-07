@@ -15,7 +15,7 @@ public abstract class Platform : ISupportsID
     public abstract int Priority { get; }
     
     protected abstract List<SearchProvider> SearchProviders { get; set; }
-    protected abstract List<ContentDownloader> ContentDownloaders { get; set; }
+    protected abstract List<ContentGetter> ContentDownloaders { get; set; }
 
     public virtual void Initialize()
     {

@@ -11,7 +11,7 @@ public abstract class PlatformResult
     [JsonInclude]
     public required string ID;
     [JsonIgnore]
-    public required IReadOnlyList<ContentDownloader> Downloaders = [];
+    public required IReadOnlyList<ContentGetter> Downloaders = [];
     [JsonInclude]
     public string? Name { get; set; }
     [JsonInclude]

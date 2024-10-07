@@ -22,9 +22,9 @@ public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlayli
         new YouTubeSearchProvider_Explode()
     ];
 
-    protected override List<ContentDownloader> ContentDownloaders { get; set; } = [
-        new Downloader_YouTubeExplode(),
-        new Downloader_YtDLP()
+    protected override List<ContentGetter> ContentDownloaders { get; set; } = [
+        new Getter_YouTubeExplode(),
+        new Getter_YtDLP()
     ];
 
     public override void Initialize()

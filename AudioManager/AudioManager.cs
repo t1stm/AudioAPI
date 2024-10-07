@@ -1,6 +1,7 @@
 ﻿using System.Timers;
 using AudioManager.Platforms;
 using AudioManager.Platforms.Errors;
+using AudioManager.Platforms.Local;
 using AudioManager.Platforms.Optional;
 using AudioManager.Platforms.YouTube;
 using AudioManager.Streams;
@@ -20,6 +21,7 @@ public class AudioManager
     protected System.Timers.Timer? ExpireTimer;
     
     public List<Platform> Platforms { get; } = [
+        new MusicDatabase(),
         new YouTube()
     ];
 

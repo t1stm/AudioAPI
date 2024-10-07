@@ -4,7 +4,7 @@ using Result;
 
 namespace AudioManager.Platforms;
 
-public abstract class ContentDownloader
+public abstract class ContentGetter
 {
     public abstract Task<Result<StreamSpreader, DownloadError>> TryGetContentData(PlatformResult result, CancellationToken cancellation_token);
     public abstract int Priority { get; }
