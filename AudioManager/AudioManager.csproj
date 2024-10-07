@@ -12,5 +12,6 @@
 
     <ItemGroup>
       <PackageReference Include="YoutubeExplode" Version="6.4.3" />
+      <PackageReference Include="YoutubeSearchApi.Net" Version="2021.8.24" />
     </ItemGroup>
 </Project>

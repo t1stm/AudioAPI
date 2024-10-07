@@ -18,6 +18,7 @@ public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlayli
     public override int Priority => 50;
 
     protected override List<SearchProvider> SearchProviders { get; set; } = [
+        new YouTubeSearchProvider_Madeyoga(),
         new YouTubeSearchProvider_Explode()
     ];
 
