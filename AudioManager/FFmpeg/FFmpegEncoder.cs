@@ -35,9 +35,9 @@ public class FFmpegEncoder
             WriteCall = (bytes,offset, length) =>
             {
                 queue.Enqueue((bytes,offset, length));
-                return StreamStatus.Open;
+                return Task.FromResult(StreamStatus.Open);
             },
-            SyncCall = () => _ = SyncCall(),
+            SyncCall = SyncCall,
             CloseCall = CloseCall
         };
 
@@ -50,7 +50,7 @@ public class FFmpegEncoder
         return Result<StreamSubscriber, FFmpegError>.Success(
             stream_subscriber);
 
-        async void CloseCall()
+        async Task CloseCall()
         {
             await SyncCall();
             Process.StandardInput.BaseStream.Close();

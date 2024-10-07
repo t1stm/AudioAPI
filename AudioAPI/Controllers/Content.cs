@@ -98,13 +98,14 @@ public class Content(ILogger<Content> logger) : ControllerBase
             WriteCall = (bytes, offset, length) =>
             {
                 cache.Enqueue((bytes, offset, length));
-                return HttpContext.RequestAborted.IsCancellationRequested ? 
-                    StreamStatus.Closed : StreamStatus.Open;
+                return Task.FromResult(HttpContext.RequestAborted.IsCancellationRequested ? 
+                    StreamStatus.Closed : StreamStatus.Open);
             },
             SyncCall = SyncCall,
             CloseCall = () =>
             {
                 waiting_semaphore.Release();
+                return Task.CompletedTask;
             }
         };
 
@@ -120,7 +121,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
             id, finish - start, finish - subscribed);
         return new EmptyResult();
 
-        async void SyncCall()
+        async Task SyncCall()
         {
             if (HttpContext.RequestAborted.IsCancellationRequested) return;
             await sync_semaphore.WaitAsync();
@@ -196,8 +197,8 @@ public class Content(ILogger<Content> logger) : ControllerBase
         else CacheSemaphore.Release();
 
         var cache = new ConcurrentQueue<(byte[], int, int)>();
-        var waiting_semaphore = new SemaphoreSlim(0, 1);
-        var sync_semaphore = new SemaphoreSlim(1, 1);
+        var waiting_semaphore = new SemaphoreSlim(0);
+        var sync_semaphore = new SemaphoreSlim(1);
         var encoder_stream_spreader = encoder.GetStreamSpreader();
         
         var split_query = id.Split("://");
@@ -206,32 +207,39 @@ public class Content(ILogger<Content> logger) : ControllerBase
         
         Response.Headers.Append("Content-Disposition", $"attachment; filename={pure_id}");
         Response.Headers.Append("Cache-Control", "no-cache; no-store; must-revalidate");
-        
+
         var stream_subscriber = new StreamSubscriber
         {
             WriteCall = (bytes, offset, length) =>
             {
                 cache.Enqueue((bytes, offset, length));
-                return HttpContext.RequestAborted.IsCancellationRequested ? 
-                    StreamStatus.Closed : StreamStatus.Open;
+                return Task.FromResult(HttpContext.RequestAborted.IsCancellationRequested ? 
+                    StreamStatus.Closed : StreamStatus.Open);
             },
             SyncCall = SyncCall,
-            CloseCall = () =>
-            {
-                waiting_semaphore.Release();
-                ExpireTimes.Add((codec, bitrate, id), DateTime.Now.Add(TimeSpan.FromMinutes(45)));
-            }
+            CloseCall = CloseCall
         };
         encoder_stream_spreader.Subscribe(stream_subscriber);
-
         await waiting_semaphore.WaitAsync();
-        await Response.Body.FlushAsync();
         
+        await Response.Body.FlushAsync();
         return new EmptyResult();
 
-        async void SyncCall()
+        async Task CloseCall()
+        {
+            await sync_semaphore.WaitAsync();
+            sync_semaphore.Release();
+            
+            await SyncCall();
+            waiting_semaphore.Release();
+            ExpireTimes.TryAdd((codec, bitrate, id), DateTime.Now.Add(TimeSpan.FromMinutes(45)));
+        }
+
+        async Task SyncCall()
         {
             if (HttpContext.RequestAborted.IsCancellationRequested) return;
+            if (sync_semaphore.CurrentCount == 0) return;
+            
             await sync_semaphore.WaitAsync();
 
             while (cache.TryDequeue(out var entry))

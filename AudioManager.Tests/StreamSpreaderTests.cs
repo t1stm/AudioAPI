@@ -22,14 +22,18 @@ public class StreamSpreaderTests(ITestOutputHelper output)
             var waiting_semaphore = new SemaphoreSlim(0, 1);
             var stream_subscriber = new StreamSubscriber
             {
-                WriteCall = (bytes, offset, length) =>
+                WriteCall = async (bytes, offset, length) =>
                 {
-                    stream.Write(bytes.AsSpan(offset, length));
-                    Task.Delay(16).Wait();
+                    await stream.WriteAsync(bytes.AsMemory(offset, length));
+                    await Task.Delay(16);
                     return StreamStatus.Open;
                 },
-                SyncCall = () => {},
-                CloseCall = () => waiting_semaphore.Release()
+                SyncCall = () => Task.CompletedTask,
+                CloseCall = () =>
+                {
+                    waiting_semaphore.Release();
+                    return Task.CompletedTask;
+                }
             };
             
             stream_spreader.Subscribe(stream_subscriber);
@@ -102,9 +106,9 @@ public class StreamSpreaderTests(ITestOutputHelper output)
                 WriteCall = (bytes, offset, length) =>
                 {
                     data_queue.Enqueue((bytes, offset, length));
-                    return StreamStatus.Open;
+                    return Task.FromResult(StreamStatus.Open);
                 },
-                SyncCall = () => {  },
+                SyncCall = () => Task.CompletedTask,
                 CloseCall = async () =>
                 {
                     output.WriteLine($"Releasing waiting semaphore for stream [{local_i}].");
@@ -165,13 +169,17 @@ public class StreamSpreaderTests(ITestOutputHelper output)
         var waiting_semaphore = new SemaphoreSlim(0, 1);
         var stream_subscriber = new StreamSubscriber
         {
-            WriteCall = (bytes, offset, length) =>
+            WriteCall = async (bytes, offset, length) =>
             {
-                memory_stream.Write(bytes, offset, length);
+                await memory_stream.WriteAsync(bytes.AsMemory(offset, length));
                 return StreamStatus.Open;
             },
-            SyncCall = () => {},
-            CloseCall = () => waiting_semaphore.Release()
+            SyncCall = () => Task.CompletedTask,
+            CloseCall = () =>
+            {
+                waiting_semaphore.Release();
+                return Task.CompletedTask;
+            }
         };
         
         await stream_spreader.WriteAsync(random_bytes);

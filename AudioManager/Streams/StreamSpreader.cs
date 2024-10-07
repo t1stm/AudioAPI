@@ -14,7 +14,7 @@ public class StreamSpreader : Stream
         {
             Semaphore.Wait();
             Subscribers.Add(subscriber);
-            SyncSubscribers();
+            SyncSubscribers().GetAwaiter().GetResult();
         }
         finally
         {
@@ -28,7 +28,7 @@ public class StreamSpreader : Stream
         {
             Semaphore.Wait();
             Closed = true;
-            SyncSubscribers();
+            SyncSubscribers().GetAwaiter().GetResult();
         }
         finally
         {
@@ -42,7 +42,7 @@ public class StreamSpreader : Stream
         {
             await Semaphore.WaitAsync();
             Closed = true;
-            SyncSubscribers();
+            SyncSubscribers().GetAwaiter().GetResult();
         }
         finally
         {
@@ -56,7 +56,7 @@ public class StreamSpreader : Stream
         {
             Semaphore.Wait();
             Data.Add((buffer.ToArray(), offset, count));
-            SyncSubscribers();
+            SyncSubscribers().GetAwaiter().GetResult();
         }
         finally
         {
@@ -70,7 +70,7 @@ public class StreamSpreader : Stream
         {
             await Semaphore.WaitAsync(cancellation_token);
             Data.Add((buffer.ToArray(), offset, count));
-            SyncSubscribers();
+            await SyncSubscribers();
         }
         finally
         {
@@ -86,7 +86,7 @@ public class StreamSpreader : Stream
             var new_array = new byte[buffer.Length];
             buffer.CopyTo(new_array);
             Data.Add((new_array, 0, new_array.Length));
-            SyncSubscribers();
+            await SyncSubscribers();
         }
         finally
         {
@@ -94,7 +94,7 @@ public class StreamSpreader : Stream
         }
     }
 
-    protected void SyncSubscribers()
+    protected async Task SyncSubscribers()
     {
         while (RemoveQueue.TryDequeue(out var subscriber))
         {
@@ -110,7 +110,7 @@ public class StreamSpreader : Stream
             {
                 var current_slice = Data[subscriber.CachedDataIndex];
                 var (bytes, offset, length) = current_slice;
-                var status = subscriber.WriteCall.Invoke(bytes, offset, length);
+                var status = await subscriber.WriteCall.Invoke(bytes, offset, length);
                 
                 if (!status.HasFlag(StreamStatus.Closed)) continue;
                 
@@ -118,14 +118,14 @@ public class StreamSpreader : Stream
                 break;
             }
 
-            if (Closed)
+            _ = Task.Run(async () =>
             {
-                subscriber.SourceClosed = true;
-                Task.Run(subscriber.CloseCall);
-                continue;
-            }
+                await subscriber.SyncCall();
+                if (!Closed) return;
             
-            Task.Run(subscriber.SyncCall);
+                subscriber.SourceClosed = true;
+                await subscriber.CloseCall();
+            });
         }
     }
 

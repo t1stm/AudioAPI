@@ -32,20 +32,18 @@ var waiting_semaphore = new SemaphoreSlim(0, 1);
 var total = 0;
 var stream_subscriber = new StreamSubscriber
 {
-    WriteCall = (bytes, offset, length) =>
+    WriteCall = async (bytes, offset, length) =>
     {
         total += length;
         
-        stream.Write(bytes.AsSpan(offset, length));
+        await stream.WriteAsync(bytes.AsMemory(offset, length));
         return StreamStatus.Open;
     },
-    SyncCall = () =>
-    {
-        
-    },
+    SyncCall = () => Task.CompletedTask,
     CloseCall = () =>
     {
         waiting_semaphore.Release();
+        return Task.CompletedTask;
     }
 };
 
