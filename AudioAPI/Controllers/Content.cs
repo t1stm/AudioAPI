@@ -150,6 +150,24 @@ public class Content(ILogger<Content> logger) : ControllerBase
             _ => "audio/mp3"
         };
         Response.ContentType = type;
+        
+        var ffmpeg_codec = codec switch
+        {
+            "Vorbis" => "-c:a libvorbis",
+            "AAC" => "-c:a aac",
+            "MP3" => "-c:a libmp3lame",
+            _ => "-c:a libopus"
+        };
+            
+        var ffmpeg_output_format = codec switch
+        {
+            "Opus" or "Vorbis" => "-f ogg",
+            "AAC" => "-f adts",
+            "MP3" => "-f mp3",
+            _ => "-f mka"
+        };
+
+        var extension = ffmpeg_output_format[3..];
 
         await CacheSemaphore.WaitAsync();
         if (!CachedEncoders.TryGetValue((codec, bitrate, id), out var encoder))
@@ -169,22 +187,6 @@ public class Content(ILogger<Content> logger) : ControllerBase
             
             CachedEncoders.Add((codec, bitrate, id), encoder);
             CacheSemaphore.Release();
-
-            var ffmpeg_codec = codec switch
-            {
-                "Vorbis" => "-c:a libvorbis",
-                "AAC" => "-c:a aac",
-                "MP3" => "-c:a libmp3lame",
-                _ => "-c:a libopus"
-            };
-            
-            var ffmpeg_output_format = codec switch
-            {
-                "Opus" or "Vorbis" => "-f ogg",
-                "AAC" => "-f adts",
-                "MP3" => "-f mp3",
-                _ => "-f mka"
-            };
             
             var source_stream_spreader = content_downloader_request.GetOK();
             var stream_subscriber_result = encoder.Convert(bitrate, ffmpeg_codec, ffmpeg_output_format);
@@ -205,7 +207,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
         var pure_id = split_query.Length > 1 ? 
             string.Join("://", split_query[1..]) : split_query[0];
         
-        Response.Headers.Append("Content-Disposition", $"attachment; filename={pure_id}");
+        Response.Headers.Append("Content-Disposition", $"attachment; filename={pure_id}.{extension}");
         Response.Headers.Append("Cache-Control", "no-cache; no-store; must-revalidate");
 
         var stream_subscriber = new StreamSubscriber

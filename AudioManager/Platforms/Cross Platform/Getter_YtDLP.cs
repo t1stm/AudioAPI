@@ -7,7 +7,7 @@ namespace AudioManager.Platforms.Cross_Platform;
 
 public sealed class Getter_YtDLP : ContentGetter
 {
-    public override int Priority => 0;
+    public override int Priority => 20;
     public override Task<Result<StreamSpreader, DownloadError>> TryGetContentData(
         PlatformResult youtube_result, CancellationToken cancellation_token)
     {

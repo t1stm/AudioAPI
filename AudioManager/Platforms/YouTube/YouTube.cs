@@ -24,7 +24,8 @@ public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlayli
 
     protected override List<ContentGetter> ContentDownloaders { get; set; } = [
         new Getter_YouTubeExplode(),
-        new Getter_YtDLP()
+        new Getter_YtDLP(),
+        new Getter_VideoLibrary()
     ];
 
     public override void Initialize()
@@ -35,7 +36,7 @@ public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlayli
         }
         base.Initialize();
     }
-    
+
     public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchKeywords(string keywords,
         CancellationToken cancellation_token = default)
     {

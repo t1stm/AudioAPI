@@ -8,7 +8,7 @@ namespace AudioManager.Platforms.Cross_Platform;
 
 public class Getter_YouTubeExplode : ContentGetter
 {
-    public override int Priority => 20;
+    public override int Priority => 40;
     protected static YoutubeClient Client => YouTubeSearchProvider_Explode.Client;
     
     public override async Task<Result<StreamSpreader, DownloadError>> TryGetContentData(PlatformResult result, CancellationToken cancellation_token)
@@ -19,7 +19,7 @@ public class Getter_YouTubeExplode : ContentGetter
         var stream = await youtube_client.Videos.Streams.GetManifestAsync(
             youtube_result.GetPureID(), cancellation_token);
         var audio_only_streams = stream.GetAudioOnlyStreams()
-            .OrderBy(s => s.AudioCodec is "Opus");
+            .OrderByDescending(s => s.Bitrate.KiloBitsPerSecond * (s.AudioCodec is "Opus" ? 2 : 1));
         
         var chosen_audio_only_stream = audio_only_streams.FirstOrDefault();
         if (chosen_audio_only_stream is null)

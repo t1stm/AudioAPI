@@ -1,4 +1,3 @@
-using System.Globalization;
 using Audio;
 using AudioManager.Platforms.Errors;
 using AudioManager.Platforms.Optional;
