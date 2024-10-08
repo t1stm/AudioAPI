@@ -1,7 +1,7 @@
 using AudioManager.Platforms.Errors;
 using Result;
 
-namespace AudioManager.Platforms.Optional;
+namespace AudioManager.Platforms.Optional.Supports;
 
 public interface ISupportsSearch
 {

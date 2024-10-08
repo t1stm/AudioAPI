@@ -1,6 +1,6 @@
 using Audio;
 using AudioManager.Platforms.Errors;
-using AudioManager.Platforms.Optional;
+using AudioManager.Platforms.Optional.Supports;
 using Result;
 using YoutubeSearchApi.Net;
 using YoutubeSearchApi.Net.Backends;
@@ -22,7 +22,7 @@ public class YouTubeSearchProvider_Madeyoga : SearchProvider,
         if (search == null) return Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.NotFound);
         
         return Result<IEnumerable<PlatformResult>, SearchError>.Success(
-            search.Results.Where(r => r is YoutubeVideo)
+            search.Results.Where(r => r is YoutubeVideo v && !string.IsNullOrWhiteSpace(v.Duration))
                 .Cast<YoutubeVideo>()
                 .Select(v => new YouTubeResult
                 {

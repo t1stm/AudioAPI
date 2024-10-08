@@ -2,7 +2,7 @@
 using AudioManager.Platforms;
 using AudioManager.Platforms.Errors;
 using AudioManager.Platforms.Local;
-using AudioManager.Platforms.Optional;
+using AudioManager.Platforms.Optional.Supports;
 using AudioManager.Platforms.YouTube;
 using AudioManager.Streams;
 using Result;

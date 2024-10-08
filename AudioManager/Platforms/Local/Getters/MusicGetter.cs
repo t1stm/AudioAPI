@@ -2,7 +2,7 @@ using AudioManager.Platforms.Errors;
 using AudioManager.Streams;
 using Result;
 
-namespace AudioManager.Platforms.Local;
+namespace AudioManager.Platforms.Local.Getters;
 
 public class MusicGetter : ContentGetter
 {

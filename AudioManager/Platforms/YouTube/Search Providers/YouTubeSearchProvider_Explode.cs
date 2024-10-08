@@ -1,5 +1,5 @@
 using AudioManager.Platforms.Errors;
-using AudioManager.Platforms.Optional;
+using AudioManager.Platforms.Optional.Supports;
 using Result;
 using YoutubeExplode;
 using YoutubeExplode.Common;
@@ -12,7 +12,7 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider,
     public static YoutubeClient Client { get; } = new();
     public override string Name => "YouTube Explode";
     public override string PlatformIdentifier => "yt://";
-    public override int Priority => 0;
+    public override int Priority => 40;
 
     public async Task<Result<PlatformResult, SearchError>> TryID(string id, CancellationToken token)
     {
@@ -50,7 +50,7 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider,
                 Name = video.Title,
                 Artist = video.Author.ChannelTitle,
                 Duration = video.Duration.GetValueOrDefault(TimeSpan.Zero),
-                ThumbnailUrl = video.Thumbnails[0].Url,
+                ThumbnailUrl = video.Thumbnails[0].Url.Split('?')[0],
                 Downloaders = ContentDownloaders
             }));
         }

@@ -1,6 +1,12 @@
+using AudioManager.Platforms.Errors;
+using AudioManager.Platforms.Local.Getters;
+using AudioManager.Platforms.Local.Search_Providers;
+using AudioManager.Platforms.Optional.Supports;
+using Result;
+
 namespace AudioManager.Platforms.Local;
 
-public class MusicDatabase : Platform
+public class MusicDatabase : Platform, ISupportsSearch
 {
     public override HashSet<string> SearchIDIdentifiers { get; } = ["audio://"];
     public override HashSet<string> PlatformDomains { get; } = [];
@@ -15,4 +21,16 @@ public class MusicDatabase : Platform
     protected override List<ContentGetter> ContentDownloaders { get; set; } = [
         new MusicGetter()
     ];
+
+    public override Task<Result<PlatformResult, SearchError>> TryID(string id, CancellationToken cancellation_token = default)
+    {
+        var provider = (MusicSearchProvider)SearchProviders[0];
+        return provider.TryID(id, cancellation_token);
+    }
+
+    public Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchKeywords(string keywords, CancellationToken cancellation_token = default)
+    {
+        var provider = (MusicSearchProvider)SearchProviders[0];
+        return provider.TrySearchKeywords(keywords, cancellation_token);
+    }
 }
