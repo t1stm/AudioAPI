@@ -34,7 +34,7 @@ public class CoverExtractor
         var json = reader.ReadToEnd();
         var items = JsonConvert.DeserializeObject<List<MusicInfo>>(json) ?? [];
 
-        foreach (var info in items)
+        foreach (var info in items.Where(m => string.IsNullOrWhiteSpace(m.CoverLocation)))
         {
             var location = info.ToMusicResult([]).Path;
             var image = Flac.GetImageFromFile(location);
