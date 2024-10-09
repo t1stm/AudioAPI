@@ -55,6 +55,7 @@ public class CoverExtractor
         }
 
         file_stream.Position = 0;
+        file_stream.SetLength(0);
 
         using var writer = new StreamWriter(file_stream, Encoding.UTF8);
         serializer.Serialize(writer, items);
