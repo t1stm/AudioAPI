@@ -9,42 +9,42 @@ namespace AudioManager.Platforms.Local.Manager;
 
 public class MusicManager
 {
+    public static string Domain =>Environment.GetEnvironmentVariable("DOMAIN", EnvironmentVariableTarget.Process) ?? string.Empty;
+    public static string StorageDirectory => Environment.GetEnvironmentVariable("STORAGE", EnvironmentVariableTarget.Process) ?? "./";
+    public static string AlbumCoverLocation => Domain + "/Album_Covers";
+    
     protected readonly CoverExtractor CoverExtractor = new();
-    protected string Domain = string.Empty;
-    protected string StorageDirectory = string.Empty;
-    protected string AlbumCoverLocation = string.Empty;
     protected readonly List<MusicInfo> Songs = [];
     
     public void Initialize()
     {
-        Domain = Environment.GetEnvironmentVariable("DOMAIN", EnvironmentVariableTarget.Process) ?? string.Empty;
-        StorageDirectory = Environment.GetEnvironmentVariable("STORAGE", EnvironmentVariableTarget.Process) ?? "./";
-        AlbumCoverLocation = Domain + "/Album_Covers";
-        
         Load();
         CoverExtractor.Extract(StorageDirectory);
     }
 
     protected void Load()
     {
-        var genres = Directory.EnumerateDirectories(StorageDirectory, "*", SearchOption.TopDirectoryOnly);
-
-        foreach (var genre in genres)
+        lock (Songs)
         {
-            var artists = Directory.EnumerateDirectories(genre, "*", SearchOption.TopDirectoryOnly);
-            foreach (var artist in artists)
+            var genres = Directory.EnumerateDirectories(StorageDirectory, "*", SearchOption.TopDirectoryOnly);
+
+            foreach (var genre in genres)
             {
-                Songs.AddRange(ParseArtistFolder(artist));
+                var artists = Directory.EnumerateDirectories(genre, "*", SearchOption.TopDirectoryOnly);
+                foreach (var artist in artists)
+                {
+                    Songs.AddRange(ParseArtistFolder(artist));
+                }
             }
-        }
         
-        foreach (var info in Songs) info.CoverLocation = info.CoverLocation?.Replace("$[DOMAIN]", AlbumCoverLocation);
+            foreach (var info in Songs) info.CoverLocation = info.CoverLocation?.Replace("$[DOMAIN]", AlbumCoverLocation);
+        }
     }
 
     private static IEnumerable<MusicInfo> ParseArtistFolder(string artist)
     {
         var artist_name = artist.Split(Path.PathSeparator)[^1];
-        var json_file = Path.Combine(artist, $"{artist_name}.json");
+        var json_file = Path.Combine(artist, "Info.json");
 
         var songs = Directory.GetFiles($"{artist}", "*", SearchOption.TopDirectoryOnly)
             .Where(IsAudioBasedOnFileExtension).ToList();
@@ -55,7 +55,7 @@ public class MusicManager
             StringEscapeHandling = StringEscapeHandling.EscapeHtml
         };
         
-        using var file_stream = File.Open(json_file, FileMode.OpenOrCreate, FileAccess.Read, FileShare.None);
+        using var file_stream = File.Open(json_file, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
 
         if (File.Exists(json_file))
         {
@@ -64,8 +64,9 @@ public class MusicManager
             
             var items = JsonConvert.DeserializeObject<List<MusicInfo>>(json) ?? Enumerable.Empty<MusicInfo>().ToList();
             if (items.Count == songs.Count) return items;
-
+            
             var update = UpdateData(items, songs);
+            file_stream.SetLength(0);
             file_stream.Seek(0, SeekOrigin.Begin);
             
             using var writer = new StreamWriter(file_stream, Encoding.UTF8);
@@ -116,8 +117,8 @@ public class MusicManager
         var entry = MediaInfo.GetInformation(location).GetAwaiter().GetResult();
         entry.OriginalTitle ??= title.Trim();
         entry.OriginalAuthor ??= author.Trim();
-        entry.Title ??= Romanize.FromCyrillic(title).Trim();
-        entry.Artist ??= romanized_author.Trim();
+        entry.RomanizedTitle ??= Romanize.FromCyrillic(title).Trim();
+        entry.RomanizedAuthor ??= romanized_author.Trim();
         entry.RelativeLocation ??= string.Join('/', split[^3..]);
         entry.UpdateRandomId();
         
@@ -129,7 +130,7 @@ public class MusicManager
         return file_name.EndsWith(".flac") || file_name.EndsWith(".ogg") ||
                file_name.EndsWith(".mp3") || file_name.EndsWith(".wav") || 
                file_name.EndsWith(".mka") || file_name.EndsWith(".adts") ||
-               file_name.EndsWith(".wma");
+               file_name.EndsWith(".wma") || file_name.EndsWith(".wv");
     }
     
     public Result<MusicInfo, Empty> SearchOneByTerm(string term)
@@ -144,18 +145,18 @@ public class MusicManager
 
     private static bool ScoreSingleTerm(string term, MusicInfo r)
     {
-        return LevenshteinDistance.ComputeLean(r.Title, term) < 2 ||
-               LevenshteinDistance.ComputeLean($"{r.Title} - {r.Artist}", term) < 3 ||
-               LevenshteinDistance.ComputeLean($"{r.Title} {r.Artist}", term) < 3 ||
-               LevenshteinDistance.ComputeLean($"{r.Artist} {r.Title}", term) < 3 ||
-               LevenshteinDistance.ComputeLean($"{r.Artist} - {r.Title}", term) < 3 ||
+        return LevenshteinDistance.ComputeLean(r.RomanizedTitle, term) < 2 ||
+               LevenshteinDistance.ComputeLean($"{r.RomanizedTitle} - {r.RomanizedAuthor}", term) < 3 ||
+               LevenshteinDistance.ComputeLean($"{r.RomanizedTitle} {r.RomanizedAuthor}", term) < 3 ||
+               LevenshteinDistance.ComputeLean($"{r.RomanizedAuthor} {r.RomanizedTitle}", term) < 3 ||
+               LevenshteinDistance.ComputeLean($"{r.RomanizedAuthor} - {r.RomanizedTitle}", term) < 3 ||
                LevenshteinDistance.ComputeLean(r.OriginalTitle, term) < 2 ||
                LevenshteinDistance.ComputeLean($"{r.OriginalTitle} - {r.OriginalAuthor}", term) < 3 ||
                LevenshteinDistance.ComputeLean($"{r.OriginalTitle} {r.OriginalAuthor}", term) < 3 ||
                LevenshteinDistance.ComputeLean($"{r.OriginalAuthor} {r.OriginalTitle}", term) < 3 ||
                LevenshteinDistance.ComputeLean($"{r.OriginalAuthor} - {r.OriginalTitle}", term) < 3 ||
-               LevenshteinDistance.ComputeLean($"{r.OriginalTitle} - {r.Artist}", term) < 3 ||
-               LevenshteinDistance.ComputeLean($"{r.Title} - {r.OriginalAuthor}", term) < 3;
+               LevenshteinDistance.ComputeLean($"{r.OriginalTitle} - {r.RomanizedAuthor}", term) < 3 ||
+               LevenshteinDistance.ComputeLean($"{r.RomanizedTitle} - {r.OriginalAuthor}", term) < 3;
     }
     
     public IEnumerable<MusicInfo> OrderByTerm(string term)
@@ -166,11 +167,11 @@ public class MusicManager
             orderby
                 Min(
                     // Romanized data pass.
-                    LevenshteinDistance.ComputeLean(r.Title, term),
-                    LevenshteinDistance.ComputeLean($"{r.Title} - {r.Artist}", term),
-                    LevenshteinDistance.ComputeLean($"{r.Title} {r.Artist}", term),
-                    LevenshteinDistance.ComputeLean($"{r.Artist} {r.Title}", term),
-                    LevenshteinDistance.ComputeLean($"{r.Artist} - {r.Title}", term),
+                    LevenshteinDistance.ComputeLean(r.RomanizedTitle, term),
+                    LevenshteinDistance.ComputeLean($"{r.RomanizedTitle} - {r.RomanizedAuthor}", term),
+                    LevenshteinDistance.ComputeLean($"{r.RomanizedTitle} {r.RomanizedAuthor}", term),
+                    LevenshteinDistance.ComputeLean($"{r.RomanizedAuthor} {r.RomanizedTitle}", term),
+                    LevenshteinDistance.ComputeLean($"{r.RomanizedAuthor} - {r.RomanizedTitle}", term),
                     // Original data pass.
                     LevenshteinDistance.ComputeLean(r.OriginalTitle, term),
                     LevenshteinDistance.ComputeLean($"{r.OriginalTitle} - {r.OriginalAuthor}", term),
@@ -178,7 +179,7 @@ public class MusicManager
                     LevenshteinDistance.ComputeLean($"{r.OriginalAuthor} {r.OriginalTitle}", term),
                     LevenshteinDistance.ComputeLean($"{r.OriginalAuthor} - {r.OriginalTitle}", term),
                     // Added step to help me find songs. I hope this doesn't break anything.
-                    LevenshteinDistance.ComputeLean(r.Artist, term),
+                    LevenshteinDistance.ComputeLean(r.RomanizedAuthor, term),
                     LevenshteinDistance.ComputeLean(r.OriginalAuthor, term))
             select r;
 

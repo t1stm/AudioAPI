@@ -1,3 +1,5 @@
+using WebApplication3;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -23,6 +25,9 @@ if (Environment.GetEnvironmentVariable("STORAGE") == null)
 
 if (Environment.GetEnvironmentVariable("ALBUM_COVERS") == null) 
     Environment.SetEnvironmentVariable("ALBUM_COVERS", "./Music Database/Album_Covers");
+
+// initialize manager.
+_ = Globals.AudioManager;
 
 app.UseAuthorization();
 app.MapControllers();

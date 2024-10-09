@@ -10,6 +10,7 @@ public abstract class SearchProvider
     public virtual void RegisterContentDownloaders(List<ContentGetter> content_downloaders)
     {
         ContentDownloaders = content_downloaders;
+        Initialize();
     }
 
     protected virtual void Initialize() { }

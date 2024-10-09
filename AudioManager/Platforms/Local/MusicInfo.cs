@@ -1,30 +1,52 @@
 using System.Text.Json.Serialization;
 using Audio.Utils;
+using AudioManager.Platforms.Local.Manager;
 
 namespace AudioManager.Platforms.Local;
 
 public class MusicInfo
 {
-    [JsonInclude]
+    [JsonInclude] [JsonPropertyName("id")] 
     public string? ID { get; set; }
-    [JsonInclude]
-    public string? Title { get; set; }
-    [JsonInclude]
-    public string? Artist { get; set; }
-    [JsonInclude]
+    
+    [JsonInclude] [JsonPropertyName("titleRomanized")]
+    public string? RomanizedTitle { get; set; }
+    
+    [JsonInclude] [JsonPropertyName("authorRomanized")]
+    public string? RomanizedAuthor { get; set; }
+    
+    [JsonInclude] 
     public string? Album { get; set; }
+    
     [JsonInclude]
     public TimeSpan Duration { get; set; }
-    [JsonInclude]
+    
+    [JsonInclude] [JsonPropertyName("coverUrl")]
     public string? CoverLocation { get; set; }
-    [JsonInclude]
+    
+    [JsonInclude] [JsonPropertyName("location")]
     public string? RelativeLocation { get; set; }
     
     [JsonInclude] [JsonPropertyName("authorOriginal")]
     public string? OriginalAuthor { get; set; }
 
     [JsonInclude] [JsonPropertyName("titleOriginal")]
-    public string? OriginalTitle {get; set;}
+    public string? OriginalTitle { get; set; }
+    
+    [JsonInclude] [JsonPropertyName("length")]
+    public double Length { get => Duration.TotalMilliseconds; set => Duration = TimeSpan.FromMilliseconds(value); }
+    
+    [JsonInclude] [JsonPropertyName("romanizedGuestArtists")]
+    public string[]? RomanizedGuestArtists;
+    
+    [JsonInclude] [JsonPropertyName("romanizedGuestArtists")]
+    public string[]? OriginalGuestArtists;
+    
+    [JsonInclude] [JsonPropertyName("romanizedGuestArtists")]
+    public string[]? RomanizedOtherTitles;
+    
+    [JsonInclude] [JsonPropertyName("romanizedGuestArtists")]
+    public string[]? OriginalOtherTitles;
 
     public MusicResult ToMusicResult(IReadOnlyList<ContentGetter> getters)
     {
@@ -32,19 +54,19 @@ public class MusicInfo
         {
             ID = ID ??= UpdateRandomId(),
             Downloaders = getters,
-            Name = Title,
-            Artist = Artist,
+            Name = RomanizedTitle,
+            Artist = RomanizedAuthor,
             Album = Album,
             Duration = Duration,
-            Path = RelativeLocation ?? string.Empty,
+            Path = MusicManager.StorageDirectory + "/" + RelativeLocation,
             ThumbnailUrl = CoverLocation
         };
     }
 
     public string UpdateRandomId()
     {
-        var artist_part = (Artist?.Length > 2 ? Artist?[..2] : Artist)?.ToLower();
-        var title_part = (Title?.Length > 6 ? Title?[..6] : Title + new string('0', 6 - Title?.Length ?? 0))?.ToLower()
+        var artist_part = (RomanizedAuthor?.Length > 2 ? RomanizedAuthor?[..2] : RomanizedAuthor)?.ToLower();
+        var title_part = (RomanizedTitle?.Length > 6 ? RomanizedTitle?[..6] : RomanizedTitle + new string('0', 6 - RomanizedTitle?.Length ?? 0))?.ToLower()
             .Replace(' ', '-');
         return $"{artist_part}{title_part}-{Generation.RandomString(2)}";
     }
