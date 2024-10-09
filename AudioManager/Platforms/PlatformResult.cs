@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using AudioManager.Platforms.Errors;
 using AudioManager.Streams;
@@ -41,5 +42,10 @@ public abstract class PlatformResult
         }
         
         return Result<StreamSpreader, DownloadError>.Error(default);
+    }
+
+    public virtual string SerializeSelf()
+    {
+        return JsonSerializer.Serialize(this);
     }
 }

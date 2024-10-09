@@ -7,4 +7,6 @@ public sealed class YouTubeResult : PlatformResult
         var pure_id = ID.Split("://")[1];
         return $"https://www.youtube.com/watch?v={pure_id}";
     }
+    
+    
 }

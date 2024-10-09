@@ -52,14 +52,16 @@ public class MusicInfo
     {
         return new MusicResult
         {
-            ID = ID ??= UpdateRandomId(),
+            ID = "audio://" + (ID ??= UpdateRandomId()),
             Downloaders = getters,
             Name = RomanizedTitle,
             Artist = RomanizedAuthor,
             Album = Album,
             Duration = Duration,
             Path = MusicManager.StorageDirectory + "/" + RelativeLocation,
-            ThumbnailUrl = CoverLocation
+            ThumbnailUrl = CoverLocation,
+            OriginalTitle = OriginalTitle,
+            OriginalArtist = OriginalAuthor 
         };
     }
 

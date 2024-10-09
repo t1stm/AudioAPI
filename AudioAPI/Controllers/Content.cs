@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
+using System.Net.Mime;
 using Audio;
 using Audio.FFmpeg;
+using AudioManager.Platforms;
 using AudioManager.Streams;
 using Microsoft.AspNetCore.Mvc;
 using Result.Objects;
@@ -25,6 +27,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
         logger.LogInformation("Searching for {Query}", query);
         
         var query_type = AudioManager.FindQueryType(query);
+        
         switch (query_type)
         {
             case QueryType.ID:
@@ -35,7 +38,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
                 
                 var found = await AudioManager.SearchID(pure_id);
                 if (found == Status.Error) return NotFound();
-                return new JsonResult(found.GetOK());
+                return Content(found.GetOK().SerializeSelf(), "application/json");
             }
 
             case QueryType.Playlist:
@@ -43,15 +46,17 @@ public class Content(ILogger<Content> logger) : ControllerBase
                 var search = await AudioManager.SearchPlaylist(query);
                 if (search == Status.Error) return NotFound();
                 
-                return new JsonResult(search.GetOK());
+                var found = search.GetOK();
+                return Content(found.ToJSON(), "application/json");
             }
 
             case QueryType.Keywords:
             {
                 var search = await AudioManager.SearchKeywords(query);
                 if (search == Status.Error) return NotFound();
-                
-                return new JsonResult(search.GetOK());
+
+                var found = search.GetOK();
+                return Content(found.ToJSON(), "application/json");
             }
             
             default: 

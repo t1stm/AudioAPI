@@ -9,9 +9,9 @@
       "applicationUrl": "http://localhost:5226",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "STORAGE": "/nvme0/DiscordBot/Music Database",
-        "DOMAIN": "gergov.bg/",
-        "ALBUM_COVERS": "/srv/http/gergov.bg/Album_Covers"
+        "STORAGE": "/home/kris/Music/Music Database",
+        "DOMAIN": "localhost",
+        "ALBUM_COVERS": "/srv/http/Album_Covers"
       }
     }
   }

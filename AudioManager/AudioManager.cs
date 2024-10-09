@@ -86,9 +86,8 @@ public class AudioManager
     {
         var results = new List<PlatformResult>();
         foreach (var platform in Platforms
-                     .Where(p => p is ISupportsPlaylist)
-                     .Cast<ISupportsPlaylist>()
-                     .Where(p => p.IsPlaylistUrl(query)))
+                     .Where(p => p is ISupportsPlaylist pl && pl.IsPlaylistUrl(query))
+                     .Cast<ISupportsPlaylist>())
         {
             var search = await platform.TrySearchPlaylist(query);
             if (search == Status.Error) continue;

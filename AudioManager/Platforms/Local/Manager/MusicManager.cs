@@ -9,7 +9,7 @@ namespace AudioManager.Platforms.Local.Manager;
 
 public class MusicManager
 {
-    public static string Domain =>Environment.GetEnvironmentVariable("DOMAIN", EnvironmentVariableTarget.Process) ?? string.Empty;
+    public static string Domain => Environment.GetEnvironmentVariable("DOMAIN", EnvironmentVariableTarget.Process) ?? string.Empty;
     public static string StorageDirectory => Environment.GetEnvironmentVariable("STORAGE", EnvironmentVariableTarget.Process) ?? "./";
     public static string AlbumCoverLocation => Domain + "/Album_Covers";
     
@@ -43,6 +43,7 @@ public class MusicManager
 
     private static IEnumerable<MusicInfo> ParseArtistFolder(string artist)
     {
+        Console.WriteLine($"Loading artist: \'{artist}\'");
         var artist_name = artist.Split(Path.PathSeparator)[^1];
         var json_file = Path.Combine(artist, "Info.json");
 
@@ -62,17 +63,27 @@ public class MusicManager
             using var sr = new StreamReader(file_stream, Encoding.UTF8, true, 4096, true);
             var json = sr.ReadToEnd();
             
-            var items = JsonConvert.DeserializeObject<List<MusicInfo>>(json) ?? Enumerable.Empty<MusicInfo>().ToList();
-            if (items.Count == songs.Count) return items;
-            
-            var update = UpdateData(items, songs);
-            file_stream.SetLength(0);
-            file_stream.Seek(0, SeekOrigin.Begin);
-            
-            using var writer = new StreamWriter(file_stream, Encoding.UTF8);
-            serializer.Serialize(writer, update);
-            
-            return update;
+            try
+            {
+                var items = JsonConvert.DeserializeObject<List<MusicInfo>>(json) ??
+                            Enumerable.Empty<MusicInfo>().ToList();
+                if (items.Count == songs.Count) return items;
+
+                var update = UpdateData(items, songs);
+                file_stream.SetLength(0);
+                file_stream.Flush();
+                file_stream.Seek(0, SeekOrigin.Begin);
+
+                using var writer = new StreamWriter(file_stream, Encoding.UTF8);
+                serializer.Serialize(writer, update);
+
+                return update;
+            }
+            catch (Exception e)
+            {
+                // TODO: log with logger
+                Console.WriteLine($"Error thrown for \'{artist}\': \'{e}\'");
+            }
         }
 
         {
@@ -120,7 +131,7 @@ public class MusicManager
         entry.RomanizedTitle ??= Romanize.FromCyrillic(title).Trim();
         entry.RomanizedAuthor ??= romanized_author.Trim();
         entry.RelativeLocation ??= string.Join('/', split[^3..]);
-        entry.UpdateRandomId();
+        entry.ID = entry.UpdateRandomId();
         
         return entry;
     }
