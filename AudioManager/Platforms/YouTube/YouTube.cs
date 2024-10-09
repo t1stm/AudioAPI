@@ -25,6 +25,7 @@ public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlayli
     ];
 
     protected override List<ContentGetter> ContentDownloaders { get; set; } = [
+        new Getter_LocalCache(),
         new Getter_YouTubeExplode(),
         new Getter_YtDLP(),
         new Getter_VideoLibrary()

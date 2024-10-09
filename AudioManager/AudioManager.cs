@@ -118,6 +118,11 @@ public class AudioManager
             stream_spreader = downloader.GetOK();
             CachedResults.Add(result.ID, stream_spreader);
             ExpireTimestamps.Add(result.ID, DateTime.UtcNow.Add(ExpireTimeSpan));
+
+            if (result is YouTubeResult youtube_result)
+            {
+                await YouTubeCacheProvider.UpdateCache(youtube_result, stream_spreader);
+            }
         
             return Result<StreamSpreader, DownloadError>.Success(stream_spreader);
         }

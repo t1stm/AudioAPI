@@ -18,6 +18,18 @@ public class MusicManager
     
     public void Initialize()
     {
+        var storage = Environment.GetEnvironmentVariable("STORAGE", EnvironmentVariableTarget.Process);
+        if (storage is not null)
+        {
+            Directory.CreateDirectory(storage);
+        }
+        
+        var album_covers = Environment.GetEnvironmentVariable("ALBUM_COVERS", EnvironmentVariableTarget.Process);
+        if (album_covers is not null)
+        {
+            Directory.CreateDirectory(album_covers);
+        }
+        
         Load();
         CoverExtractor.Extract(StorageDirectory);
     }

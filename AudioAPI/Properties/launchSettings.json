@@ -11,7 +11,8 @@
         "ASPNETCORE_ENVIRONMENT": "Development",
         "STORAGE": "/home/kris/Music/Music Database",
         "DOMAIN": "localhost",
-        "ALBUM_COVERS": "/srv/http/Album_Covers"
+        "ALBUM_COVERS": "/srv/http/Album_Covers",
+        "YOUTUBE_CACHE": "./YouTube Cache"
       }
     }
   }
