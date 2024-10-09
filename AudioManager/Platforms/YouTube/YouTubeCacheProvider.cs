@@ -14,6 +14,8 @@ public static class YouTubeCacheProvider
             Environment.GetEnvironmentVariable("YOUTUBE_CACHE", EnvironmentVariableTarget.Process);
 
         if (export_directory is null) return;
+        
+        Directory.CreateDirectory(export_directory);
         var file_path = Path.Combine(export_directory, youtube_result.GetPureID());
         
         if (File.Exists(file_path)) return;

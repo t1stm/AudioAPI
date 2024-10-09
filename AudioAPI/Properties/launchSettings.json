@@ -12,7 +12,7 @@
         "STORAGE": "/home/kris/Music/Music Database",
         "DOMAIN": "localhost",
         "ALBUM_COVERS": "/srv/http/Album_Covers",
-        "YOUTUBE_CACHE": "./YouTube Cache"
+        "YOUTUBE_CACHE": "/home/kris/YouTube Cache"
       }
     }
   }

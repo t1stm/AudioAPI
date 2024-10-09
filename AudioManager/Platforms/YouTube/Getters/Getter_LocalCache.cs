@@ -18,7 +18,6 @@ public class Getter_LocalCache : ContentGetter
             Environment.SetEnvironmentVariable("YOUTUBE_CACHE", CacheLocation);
         } 
         CacheLocation = env ?? CacheLocation;
-        Directory.CreateDirectory(CacheLocation);
         
         base.Initialize();
     }
@@ -29,6 +28,7 @@ public class Getter_LocalCache : ContentGetter
         if (result is not YouTubeResult youtube_result) 
             return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(DownloadError.GenericError));
         
+        Directory.CreateDirectory(CacheLocation);
         var path = Path.Combine(CacheLocation, youtube_result.GetPureID());
         if (!File.Exists(path)) return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(
             DownloadError.GenericError));
