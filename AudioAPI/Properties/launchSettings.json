@@ -12,7 +12,9 @@
         "STORAGE": "/home/kris/Music/Music Database",
         "DOMAIN": "localhost",
         "ALBUM_COVERS": "/srv/http/Album_Covers",
-        "YOUTUBE_CACHE": "/home/kris/YouTube Cache"
+        "YOUTUBE_CACHE": "/home/kris/YouTube Cache",
+        "SPOTIFY_ID": "e90ef778e6e14879a9355acd51a78c2d",
+        "SPOTIFY_SECRET": "2538249a5e68467e8b3e997c3a1774d2"
       }
     }
   }
