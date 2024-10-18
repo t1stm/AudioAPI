@@ -17,6 +17,12 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseCors(b => b
+    .AllowAnyHeader()
+    .AllowAnyMethod()
+    .AllowAnyOrigin()
+);
+
 if (Environment.GetEnvironmentVariable("DOMAIN") == null) 
     Environment.SetEnvironmentVariable("DOMAIN", "gergov.bg/");
 
