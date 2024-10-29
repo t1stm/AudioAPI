@@ -33,8 +33,9 @@ public class CoverExtractor
 
         var json = reader.ReadToEnd();
         var items = JsonConvert.DeserializeObject<List<MusicInfo>>(json) ?? [];
+        var change = false;
 
-        foreach (var info in items.Where(m => string.IsNullOrWhiteSpace(m.CoverLocation)))
+        foreach (var info in items.Where(m => string.IsNullOrWhiteSpace(m.CoverUrl)))
         {
             var location = info.ToMusicResult([]).Path;
             var image = Flac.GetImageFromFile(location);
@@ -49,11 +50,13 @@ public class CoverExtractor
             var extension = Flac.GetImageFiletype(image.Data!);
 
             var filename = $"{ExportLocation}/{hash}.{extension}";
-            info.CoverLocation = $"$[DOMAIN]/{hash}.{extension}";
+            info.CoverUrl = $"$[DOMAIN]/{hash}.{extension}";
             if (File.Exists(filename)) continue;
+            change = true;
             File.WriteAllBytes(filename, image.Data!);
         }
 
+        if (!change) return;
         file_stream.Position = 0;
         file_stream.SetLength(0);
 

@@ -48,8 +48,8 @@ public class MusicManager
                     Songs.AddRange(ParseArtistFolder(artist));
                 }
             }
-        
-            foreach (var info in Songs) info.CoverLocation = info.CoverLocation?.Replace("$[DOMAIN]", AlbumCoverLocation);
+
+            Songs.ForEach(s => s.CoverUrl = s.CoverUrl?.Replace("$[DOMAIN]", AlbumCoverLocation));
         }
     }
 

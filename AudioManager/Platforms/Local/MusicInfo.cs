@@ -22,7 +22,7 @@ public class MusicInfo
     public TimeSpan Duration { get; set; }
     
     [JsonInclude] [JsonPropertyName("coverUrl")]
-    public string? CoverLocation { get; set; }
+    public string? CoverUrl { get; set; }
     
     [JsonInclude] [JsonPropertyName("location")]
     public string? RelativeLocation { get; set; }
@@ -59,7 +59,7 @@ public class MusicInfo
             Album = Album,
             Duration = Duration,
             Path = MusicManager.StorageDirectory + "/" + RelativeLocation,
-            ThumbnailUrl = CoverLocation,
+            ThumbnailUrl = CoverUrl,
             OriginalTitle = OriginalTitle,
             OriginalArtist = OriginalAuthor 
         };
