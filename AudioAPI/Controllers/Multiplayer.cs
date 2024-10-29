@@ -5,12 +5,12 @@ using WebApplication3.Multiplayer;
 
 namespace AudioAPI.Controllers;
 
-public class Multiplayer(ILogger logger) : ControllerBase
+public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
 {
     private static readonly SemaphoreSlim Semaphore = new(1);
     private static readonly MultiplayerManager Manager = new();
 
-    [HttpPost("/Multiplayer/CreateRoom")]
+    [HttpPost("/Audio/Multiplayer/CreateRoom")]
     public async Task<IActionResult> CreateRoom()
     {
         var room = await Manager.CreateNewRoom();
@@ -21,16 +21,27 @@ public class Multiplayer(ILogger logger) : ControllerBase
         });
     }
     
-    [Route("/Multiplayer/Join")]
-    public async Task<IActionResult> Get(Guid roomId)
+    [HttpGet("/WebSocket/Multiplayer/Join")]
+    public async Task Join(string room)
     {
-        if (!HttpContext.WebSockets.IsWebSocketRequest) return BadRequest();
-        
-        using var web_socket = await HttpContext.WebSockets.AcceptWebSocketAsync();
-        logger.LogInformation("WebSocket \'{ID}\' connected, with IP: {IP}", HttpContext.TraceIdentifier, HttpContext.Connection.RemoteIpAddress);
-        await HandleRoomWebSocket(web_socket, roomId, HttpContext.TraceIdentifier);
-        
-        return Ok();
+        try
+        {
+            if (!HttpContext.WebSockets.IsWebSocketRequest || !Guid.TryParse(room, out var guid))
+            {
+                HttpContext.Response.StatusCode = 400;
+                return;
+            }
+
+            using var web_socket = await HttpContext.WebSockets.AcceptWebSocketAsync();
+            logger.LogInformation("WebSocket \'{ID}\' connected, with IP: {IP}", HttpContext.TraceIdentifier,
+                HttpContext.Connection.RemoteIpAddress);
+            await HandleRoomWebSocket(web_socket, guid, HttpContext.TraceIdentifier);
+        }
+        catch (Exception e)
+        {
+            logger.LogError(e, "WebSocket \'{ID}\' encountered error", HttpContext.TraceIdentifier);
+            throw;
+        }
     }
 
     private async Task HandleRoomWebSocket(WebSocket web_socket, Guid room_id, string id)

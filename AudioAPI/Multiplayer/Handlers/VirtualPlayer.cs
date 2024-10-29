@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using AudioManager.Platforms;
 
@@ -14,6 +15,11 @@ public class VirtualPlayer(MessageQueue messageQueue)
     protected DateTime? StartTime;
     protected TimeSpan? PauseTime;
     protected bool Playing = true;
+
+    protected JsonSerializerOptions SerializerOptions = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
     
     public async Task Next()
     {
@@ -84,11 +90,14 @@ public class VirtualPlayer(MessageQueue messageQueue)
         await Sync.WaitAsync();
         Items.Add(result);
         Sync.Release();
+
+        await BroadcastQueue();
     }
 
     protected async Task BroadcastQueue()
     {
-        var serialized = JsonSerializer.Serialize(Items);
+        var serialized = JsonSerializer.Serialize(Items, SerializerOptions);
+        
         await BroadcastMessage($"queue {serialized}");
     }
 

@@ -1,4 +1,5 @@
 using System.Net.WebSockets;
+using Microsoft.Extensions.Logging.Abstractions;
 using Result.Objects;
 
 namespace WebApplication3.Multiplayer;
@@ -12,6 +13,7 @@ public class Room
     protected readonly UserStore Store;
     protected readonly MessageQueue Queue;
     protected readonly VirtualPlayer Player;
+    protected readonly System.Timers.Timer Timer;
 
     public Room(Guid guid)
     {
@@ -21,6 +23,19 @@ public class Room
         Store = new UserStore();
         Queue = new MessageQueue(Store);
         Player = new VirtualPlayer(Queue);
+        
+        Timer = new System.Timers.Timer
+        {
+            Enabled = true,
+            Interval = 133
+        };
+
+        Timer.Elapsed += Timer_Tick;
+    }
+
+    protected async void Timer_Tick(object? sender, EventArgs e)
+    { 
+        await Queue.Update();
     }
     
     public async Task<User> GetOrAddUser(string id, WebSocket web_socket)
@@ -55,7 +70,7 @@ public class Room
                 var result = await Globals.AudioManager.SearchID(value);
                 if (result == Status.Error) return;
                 
-                Player.Items.Add(result.GetOK());
+                Player.Enqueue(result.GetOK());
                 break;
             
             case "seek":

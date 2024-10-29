@@ -40,5 +40,7 @@ public class MessageQueue(UserStore store)
         await Sync.WaitAsync();
         Messages.Enqueue(message);
         Sync.Release();
+
+        await Update();
     }
 }

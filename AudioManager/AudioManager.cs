@@ -55,7 +55,7 @@ public class AudioManager
 
     public Task<Result<PlatformResult, SearchError>> SearchID(string id, CancellationToken cancellation_token = default)
     {
-        var split_id = id.Split("://");
+        var split_id = id.Trim().Split("://");
         var identifier = split_id[0] + "://";
         var pure_id = split_id.Length > 1 ? string.Join("://", split_id[1..]) : id;
         
