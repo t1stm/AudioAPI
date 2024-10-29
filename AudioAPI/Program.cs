@@ -23,6 +23,11 @@ app.UseCors(b => b
     .AllowAnyOrigin()
 );
 
+app.UseWebSockets(new WebSocketOptions
+{
+    KeepAliveInterval = TimeSpan.FromSeconds(5)
+});
+
 if (Environment.GetEnvironmentVariable("DOMAIN") == null) 
     Environment.SetEnvironmentVariable("DOMAIN", "gergov.bg/");
 
