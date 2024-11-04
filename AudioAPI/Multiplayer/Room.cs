@@ -1,18 +1,26 @@
 using System.Net.WebSockets;
-using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json.Serialization;
 using Result.Objects;
 
 namespace WebApplication3.Multiplayer;
 
 public class Room
 {
+    [JsonInclude, JsonPropertyName("roomID")]
     public Guid RoomID { get; init; }
+    [JsonInclude, JsonPropertyName("name")]
     public string RoomName { get; set; }
+    
+    [JsonInclude, JsonPropertyName("description")]
     public string RoomDescription { get; set; } = "";
 
+    [JsonIgnore]
     protected readonly UserStore Store;
+    [JsonIgnore]
     protected readonly MessageQueue Queue;
+    [JsonIgnore]
     protected readonly VirtualPlayer Player;
+    [JsonIgnore]
     protected readonly System.Timers.Timer Timer;
 
     public Room(Guid guid)
@@ -40,7 +48,7 @@ public class Room
     
     public async Task<User> GetOrAddUser(string id, WebSocket web_socket)
     {
-       return await Store.GetOrAddUser(id, web_socket);
+       return await Store.GetOrAddUser(id, web_socket, user => Player.Joined(user));
     }
     
     public async Task RemoveUser(string id)
@@ -59,7 +67,7 @@ public class Room
             return;
         }
         
-        await HandleParameterlessMessages(message[..split_index], user);
+        await HandleParameterlessMessages(message, user);
     }
 
     protected async Task HandleParameterMessages(string name, string value, User user)
@@ -70,7 +78,7 @@ public class Room
                 var result = await Globals.AudioManager.SearchID(value);
                 if (result == Status.Error) return;
                 
-                Player.Enqueue(result.GetOK());
+                await Player.Enqueue(result.GetOK());
                 break;
             
             case "seek":
@@ -111,6 +119,11 @@ public class Room
             case "shuffle":
                 await Player.Shuffle();
                 return;
+            
+            case "sync":
+                var time = await Player.GetCurrentTime();
+                await MessageQueue.SendNow($"sync {time}", user);
+                break;
         }
     }
 }

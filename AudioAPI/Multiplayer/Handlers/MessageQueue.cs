@@ -38,9 +38,15 @@ public class MessageQueue(UserStore store)
     public async Task Add(string message)
     {
         await Sync.WaitAsync();
+        
         Messages.Enqueue(message);
         Sync.Release();
 
         await Update();
+    }
+    
+    public static async Task SendNow(string message, User user)
+    {
+        await SendMessage(Encoding.UTF8.GetBytes(message), user);
     }
 }

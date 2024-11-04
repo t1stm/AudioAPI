@@ -9,12 +9,10 @@
       "applicationUrl": "http://localhost:5226",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "STORAGE": "/home/kris/Music/Music Database",
-        "DOMAIN": "localhost",
-        "ALBUM_COVERS": "/srv/http/Album_Covers",
-        "YOUTUBE_CACHE": "/home/kris/YouTube Cache",
-        "SPOTIFY_ID": "e90ef778e6e14879a9355acd51a78c2d",
-        "SPOTIFY_SECRET": "2538249a5e68467e8b3e997c3a1774d2"
+        "STORAGE": "/nvme0/DiscordBot/Music Database",
+        "DOMAIN": "https://gergov.bg",
+        "ALBUM_COVERS": "/srv/http/gergov.bg/Album_Covers",
+        "YOUTUBE_CACHE": "/nvme0/DiscordBot/dll/audio"
       }
     }
   }

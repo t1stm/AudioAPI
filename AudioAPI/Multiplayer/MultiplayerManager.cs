@@ -19,4 +19,9 @@ public class MultiplayerManager
     {
         return Rooms.GetValueOrDefault(room_id);
     }
+
+    public ICollection<Room> GetRooms()
+    {
+        return Rooms.Values;
+    }
 }

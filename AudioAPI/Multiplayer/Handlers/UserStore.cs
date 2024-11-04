@@ -9,15 +9,18 @@ public class UserStore
 
     public ICollection<User> GetUsers() => Users.Values;
     public int Count => Users.Count;
-    public async Task<User> GetOrAddUser(string id, WebSocket web_socket, Func<Task>? onAdd = default)
+    public async Task<User> GetOrAddUser(string id, WebSocket web_socket, Func<User, Task>? onAdd = default)
     {
         await Sync.WaitAsync();
         if (!Users.TryGetValue(id, out var user))
         {
             Users.Add(id, user = new User { ID = id, WebSocket = web_socket });
-            var task = onAdd?.Invoke();
+            Sync.Release();
+            var task = onAdd?.Invoke(user);
             if (task != null)
                 await task;
+
+            return user;
         }
 
         Sync.Release();

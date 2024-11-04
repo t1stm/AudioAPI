@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using AudioManager.Platforms;
@@ -12,11 +13,11 @@ public class VirtualPlayer(MessageQueue messageQueue)
     protected readonly SemaphoreSlim Sync = new(1);
     protected int CurrentIndex;
     
-    protected DateTime? StartTime;
+    protected long StartTime;
     protected TimeSpan? PauseTime;
     protected bool Playing = true;
 
-    protected JsonSerializerOptions SerializerOptions = new()
+    protected readonly JsonSerializerOptions SerializerOptions = new()
     {
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
@@ -73,7 +74,7 @@ public class VirtualPlayer(MessageQueue messageQueue)
         
         PauseTime = Playing switch
         {
-            false => DateTime.Now - StartTime,
+            false => Stopwatch.GetElapsedTime(StartTime),
             true => null
         };
     }
@@ -93,6 +94,26 @@ public class VirtualPlayer(MessageQueue messageQueue)
 
         await BroadcastQueue();
     }
+    
+    public async Task Joined(User user)
+    {
+        await BroadcastQueue();
+        await BroadcastCurrent();
+        await BroadcastPauseTime();
+
+        await BroadcastMessage($"chat [System] User \'{user.ChatUsername}\' joined the session.");
+    }
+    
+    public async Task<double> GetCurrentTime()
+    {
+        await Sync.WaitAsync();
+        
+        var time = Stopwatch.GetElapsedTime(StartTime);
+        
+        Sync.Release();
+        
+        return time.TotalSeconds;
+    }
 
     protected async Task BroadcastQueue()
     {
@@ -103,8 +124,14 @@ public class VirtualPlayer(MessageQueue messageQueue)
 
     protected async Task BroadcastCurrent()
     {
-        StartTime = DateTime.Now;
+        StartTime = Stopwatch.GetTimestamp();
         await BroadcastMessage($"current {CurrentIndex}");
+    }
+
+    protected async Task BroadcastPauseTime()
+    {
+        if (PauseTime == null) return;
+        await BroadcastMessage($"seek {PauseTime}");
     }
 
     protected async Task BroadcastMessage(string message)

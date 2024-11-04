@@ -14,14 +14,23 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
     public async Task<IActionResult> CreateRoom()
     {
         var room = await Manager.CreateNewRoom();
-
+        logger.LogInformation("Room created: {Room}", room);
+        
         return new JsonResult(new
         {
             Room = room
         });
     }
+
+    [HttpGet("/Audio/Multiplayer/Rooms")]
+    public Task<IActionResult> Rooms()
+    {
+        var rooms = Manager.GetRooms();
+        
+        return Task.FromResult<IActionResult>(new JsonResult(rooms));
+    }
     
-    [HttpGet("/WebSocket/Multiplayer/Join")]
+    [HttpGet("/Audio/Multiplayer/Join")]
     public async Task Join(string room)
     {
         try
@@ -49,7 +58,8 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
         var buffer = new byte[1024 * 32];
         ValueWebSocketReceiveResult receive_result;
         var cached_string = string.Empty;
-        
+
+        await HandleUserMessage(id, room_id, web_socket, cached_string);
         do
         {
             receive_result = await web_socket.ReceiveAsync(buffer.AsMemory(), CancellationToken.None);
