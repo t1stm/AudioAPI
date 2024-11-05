@@ -10,17 +10,17 @@ public static class LevenshteinDistance
     private static string? RemoveFormatting(string? str)
     {
         return str?
-            .FastRemove('.')
-            .FastRemove('@')
-            .FastRemove('\\')
-            .FastRemove('\'')
-            .FastRemove('\"')
+            .FastRemove(".")
+            .FastRemove("@")
+            .FastRemove("\\")
+            .FastRemove("\'")
+            .FastRemove("\"")
             .ToLower();
     }
 
-    public static string FastRemove(this string source, char remove)
+    public static string FastRemove(this string source, string remove)
     {
-        return string.Join(string.Empty, source.Split(remove));
+        return source.Replace(remove, null);
     }
 
     public static int ComputeStrict(string? s, string? t)
