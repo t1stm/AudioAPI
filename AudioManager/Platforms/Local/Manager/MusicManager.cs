@@ -156,14 +156,10 @@ public class MusicManager
                file_name.EndsWith(".wma") || file_name.EndsWith(".wv");
     }
     
-    public Result<MusicInfo, Empty> SearchOneByTerm(string term)
+    public Result<IEnumerable<MusicInfo>, Empty> SearchOneByTerm(string term)
     {
-        var found = Songs.AsParallel()
-            .FirstOrDefault(r => ScoreSingleTerm(term, r));
-        
-        return found != null ? 
-            Result<MusicInfo, Empty>.Success(found) : 
-            Result<MusicInfo, Empty>.Error(default);
+        var found = Songs.Where(r => ScoreSingleTerm(term, r));
+        return Result<IEnumerable<MusicInfo>, Empty>.Success(found);
     }
 
     private static bool ScoreSingleTerm(string term, MusicInfo r)

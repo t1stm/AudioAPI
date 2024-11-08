@@ -34,9 +34,7 @@ public class MusicSearchProvider : SearchProvider, ISupportsID, ISupportsSearch
         var search = MusicManager.SearchOneByTerm(keywords);
         if (search == Status.Error) return Task.FromResult(Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.NotFound));
         
-        var result = search.GetOK();
-        return Task.FromResult(Result<IEnumerable<PlatformResult>, SearchError>.Success([
-            result.ToMusicResult(ContentDownloaders)
-        ]));
+        var results = search.GetOK();
+        return Task.FromResult(Result<IEnumerable<PlatformResult>, SearchError>.Success(results.Select(r => r.ToMusicResult(ContentDownloaders))));
     }
 }
