@@ -10,10 +10,11 @@ public class Room
     public Guid RoomID { get; init; }
     [JsonInclude, JsonPropertyName("name")]
     public string RoomName { get; set; }
-    
     [JsonInclude, JsonPropertyName("description")]
     public string RoomDescription { get; set; } = "";
-
+    [JsonIgnore] 
+    public Action? OnInfoModified { get; init; }
+    
     [JsonIgnore]
     protected readonly UserStore Store;
     [JsonIgnore]
@@ -86,11 +87,46 @@ public class Room
                 await Queue.Add($"seek {seek_seconds}");
                 break;
             
+            case "remove":
+                if (!int.TryParse(value, out var remove_index)) return;
+                await Player.Remove(remove_index);
+                break;
+            
             case "chat":
                 await Queue.Add($"chat [{user.ChatUsername}]: {value}");
                 break;
+            
+            case "updateroom":
+                await HandleUpdateRoom(value, user);
+                break;
         }
     }
+
+    protected async Task HandleUpdateRoom(string value, User user)
+    {
+        var split_index = value.IndexOf(' ');
+        if (split_index == -1 || split_index + 1 >= value.Length) return;
+                
+        var parameter_key = value[..split_index];
+        var parameter_value = value[split_index..];
+
+        switch (parameter_key)
+        {
+            case "name":
+                RoomName = parameter_value;
+                OnInfoModified?.Invoke();
+
+                await user.SendMessageAsync($"room name {RoomName}");
+                break;
+                    
+            case "description":
+                RoomDescription = parameter_value;
+                OnInfoModified?.Invoke();
+                
+                await user.SendMessageAsync($"room description {RoomDescription}");
+                break;
+        }
+    } 
     
     protected async Task HandleParameterlessMessages(string name, User user)
     {
@@ -122,7 +158,7 @@ public class Room
             
             case "sync":
                 var time = await Player.GetCurrentTime();
-                await MessageQueue.SendNow($"sync {time}", user);
+                await user.SendMessageAsync($"sync {time}");
                 break;
         }
     }

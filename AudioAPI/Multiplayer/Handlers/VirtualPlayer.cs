@@ -5,7 +5,7 @@ using AudioManager.Platforms;
 
 namespace WebApplication3.Multiplayer;
 
-public class VirtualPlayer(MessageQueue messageQueue)
+public class VirtualPlayer(MessageQueue MessageQueue)
 {
     public List<PlatformResult> Items { get; set; } = [];
     
@@ -26,8 +26,9 @@ public class VirtualPlayer(MessageQueue messageQueue)
     {
         if (CurrentIndex == Items.Count) return;
         CurrentIndex++;
-        
-        await BroadcastCurrent();
+
+        UpdateStart();
+        await Broadcast(Current());
     }
 
     public async Task Previous()
@@ -35,7 +36,8 @@ public class VirtualPlayer(MessageQueue messageQueue)
         if (CurrentIndex == 0) return;
         CurrentIndex--;
 
-        await BroadcastCurrent();
+        UpdateStart();
+        await Broadcast(Current());
     }
 
     public async Task Remove(int index)
@@ -47,13 +49,13 @@ public class VirtualPlayer(MessageQueue messageQueue)
         if (old_current > index)
             CurrentIndex--;
 
-        await BroadcastQueue();
+        await Broadcast(Queue());
     }
     
     public async Task SetFinished(User user)
     {
         await Finished.Add(user);
-        if (!Finished.Fulfilled(messageQueue)) return;
+        if (!Finished.Fulfilled(MessageQueue)) return;
         
         await Next();
     }
@@ -64,13 +66,13 @@ public class VirtualPlayer(MessageQueue messageQueue)
         var count = Items.Count;
         
         Items = Items.OrderBy(_ => random.Next(count)).ToList();
-        await BroadcastQueue();
+        await Broadcast(Queue());
     }
 
     public async Task TogglePlaying()
     {
         Playing = !Playing;
-        await BroadcastMessage($"playing {Playing}");
+        await Broadcast($"playing {Playing}");
         
         PauseTime = Playing switch
         {
@@ -83,7 +85,7 @@ public class VirtualPlayer(MessageQueue messageQueue)
     {
         Playing = false;
         PauseTime = null;
-        await BroadcastMessage("stop");
+        await Broadcast("stop");
     }
 
     public async Task Enqueue(PlatformResult result)
@@ -92,51 +94,53 @@ public class VirtualPlayer(MessageQueue messageQueue)
         Items.Add(result);
         Sync.Release();
 
-        await BroadcastQueue();
+        await Broadcast(Queue());
     }
     
     public async Task Joined(User user)
     {
-        await BroadcastQueue();
-        await BroadcastCurrent();
-        await BroadcastPauseTime();
+        await user.SendMessageAsync(Queue());
+        await user.SendMessageAsync(Current());
+        await SyncTime(user);
 
-        await BroadcastMessage($"chat [System] User \'{user.ChatUsername}\' joined the session.");
+        await Broadcast($"chat [System] User \'{user.ChatUsername}\' joined the session.");
+    }
+
+    public async Task SyncTime(User user)
+    {
+        var time = await GetCurrentTime();
+        await user.SendMessageAsync($"seek {time}");
     }
     
     public async Task<double> GetCurrentTime()
     {
         await Sync.WaitAsync();
         
-        var time = Stopwatch.GetElapsedTime(StartTime);
+        var time = PauseTime ?? Stopwatch.GetElapsedTime(StartTime);
         
         Sync.Release();
         
         return time.TotalSeconds;
     }
 
-    protected async Task BroadcastQueue()
-    {
-        var serialized = JsonSerializer.Serialize(Items, SerializerOptions);
-        
-        await BroadcastMessage($"queue {serialized}");
-    }
-
-    protected async Task BroadcastCurrent()
+    protected void UpdateStart()
     {
         StartTime = Stopwatch.GetTimestamp();
-        await BroadcastMessage($"current {CurrentIndex}");
     }
 
-    protected async Task BroadcastPauseTime()
+    protected string Queue()
     {
-        if (PauseTime == null) return;
-        await BroadcastMessage($"seek {PauseTime}");
+        return $"queue {JsonSerializer.Serialize(Items, SerializerOptions)}";
     }
 
-    protected async Task BroadcastMessage(string message)
+    protected string Current()
     {
-        await messageQueue.Add(message);
-        await messageQueue.Update();
+        return $"current {CurrentIndex}";
+    }
+
+    protected async Task Broadcast(string message)
+    {
+        await MessageQueue.Add(message);
+        await MessageQueue.Update();
     }
 }

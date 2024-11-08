@@ -1,4 +1,3 @@
-using System.Net.WebSockets;
 using System.Text;
 
 namespace WebApplication3.Multiplayer;
@@ -22,17 +21,11 @@ public class MessageQueue(UserStore store)
 
             await Parallel.ForEachAsync(store.GetUsers(), async(user, _) =>
             {
-                await SendMessage(bytes_memory, user);
+                await user.SendMessageAsync(bytes_memory);
             });
         }
         
         Sync.Release();
-    }
-
-    private static async Task SendMessage(ReadOnlyMemory<byte> bytes, User user)
-    {
-        if (user.WebSocket.State != WebSocketState.Open) return;
-        await user.WebSocket.SendAsync(bytes, WebSocketMessageType.Text, true, CancellationToken.None);
     }
 
     public async Task Add(string message)
@@ -43,10 +36,5 @@ public class MessageQueue(UserStore store)
         Sync.Release();
 
         await Update();
-    }
-    
-    public static async Task SendNow(string message, User user)
-    {
-        await SendMessage(Encoding.UTF8.GetBytes(message), user);
     }
 }

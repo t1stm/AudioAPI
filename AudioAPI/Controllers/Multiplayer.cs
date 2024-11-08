@@ -1,6 +1,10 @@
 using System.Net.WebSockets;
 using System.Text;
+using System.Text.Json;
+using AudioAPI.Controllers.Helpers;
 using Microsoft.AspNetCore.Mvc;
+using Result;
+using Result.Objects;
 using WebApplication3.Multiplayer;
 
 namespace AudioAPI.Controllers;
@@ -13,80 +17,124 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
     [HttpPost("/Audio/Multiplayer/CreateRoom")]
     public async Task<IActionResult> CreateRoom()
     {
-        var room = await Manager.CreateNewRoom();
-        logger.LogInformation("Room created: {Room}", room);
+        var room_id = await Manager.CreateNewRoom();
+        logger.LogInformation("Room created: {Room}", room_id);
         
-        return new JsonResult(new
-        {
-            Room = room
-        });
+        var room = Manager.GetRoom(room_id);
+        return new JsonResult(room);
     }
 
     [HttpGet("/Audio/Multiplayer/Rooms")]
-    public Task<IActionResult> Rooms()
-    {
-        var rooms = Manager.GetRooms();
-        
-        return Task.FromResult<IActionResult>(new JsonResult(rooms));
-    }
-    
-    [HttpGet("/Audio/Multiplayer/Join")]
-    public async Task Join(string room)
+    public async Task<IActionResult> Rooms()
     {
         try
         {
-            if (!HttpContext.WebSockets.IsWebSocketRequest || !Guid.TryParse(room, out var guid))
+            if (!HttpContext.WebSockets.IsWebSocketRequest)
             {
-                HttpContext.Response.StatusCode = 400;
-                return;
+                return new BadRequestResult();
             }
 
             using var web_socket = await HttpContext.WebSockets.AcceptWebSocketAsync();
-            logger.LogInformation("WebSocket \'{ID}\' connected, with IP: {IP}", HttpContext.TraceIdentifier,
+            logger.LogDebug("Room update websocket \'{ID}\' connected, with IP: {IP}", HttpContext.TraceIdentifier,
                 HttpContext.Connection.RemoteIpAddress);
-            await HandleRoomWebSocket(web_socket, guid, HttpContext.TraceIdentifier);
+            
+            await HandleRoomUpdateWebSocket(web_socket);
         }
         catch (Exception e)
         {
             logger.LogError(e, "WebSocket \'{ID}\' encountered error", HttpContext.TraceIdentifier);
             throw;
         }
+
+        return Ok();
+    }
+    
+    [HttpGet("/Audio/Multiplayer/Join")]
+    public async Task<IActionResult> Join(string room)
+    {
+        try
+        {
+            if (!HttpContext.WebSockets.IsWebSocketRequest || !Guid.TryParse(room, out var guid))
+            {
+                return BadRequest();
+            }
+
+            using var web_socket = await HttpContext.WebSockets.AcceptWebSocketAsync();
+            logger.LogDebug("WebSocket \'{ID}\' connected, with IP: {IP}", HttpContext.TraceIdentifier,
+                HttpContext.Connection.RemoteIpAddress);
+            await HandleRoomJoinWebSocket(web_socket, guid, HttpContext.TraceIdentifier);
+        }
+        catch (Exception e)
+        {
+            logger.LogError(e, "WebSocket \'{ID}\' encountered error", HttpContext.TraceIdentifier);
+            throw;
+        }
+        
+        return Ok();
     }
 
-    private async Task HandleRoomWebSocket(WebSocket web_socket, Guid room_id, string id)
+    private static async Task HandleRoomUpdateWebSocket(WebSocket web_socket)
     {
-        var buffer = new byte[1024 * 32];
-        ValueWebSocketReceiveResult receive_result;
-        var cached_string = string.Empty;
+        var change_id = Manager.GetChangeId();
+        var user = new User
+        {
+            ID = "dummy user",
+            WebSocket = web_socket
+        };
 
-        await HandleUserMessage(id, room_id, web_socket, cached_string);
+        await SendRooms();
         do
         {
-            receive_result = await web_socket.ReceiveAsync(buffer.AsMemory(), CancellationToken.None);
-            if (receive_result.MessageType != WebSocketMessageType.Text) continue;
+            var new_id = Manager.GetChangeId();
+            if (change_id == new_id)
+            {
+                await Task.Delay(33);
+                continue;
+            }
+            change_id = new_id;
+
+            await SendRooms();
+        }
+        while (web_socket.State == WebSocketState.Open);
+
+        
+        await web_socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
+        return;
+
+        async Task SendRooms()
+        {
+            var rooms = Manager.GetRooms();
+            var serialized = JsonSerializer.Serialize(rooms);
             
-            var data_slice = buffer.AsMemory(0, receive_result.Count);
-            cached_string += Encoding.UTF8.GetString(data_slice.Span);
+            await user.SendMessageAsync(serialized);
+        }
+    }
+
+    private async Task HandleRoomJoinWebSocket(WebSocket web_socket, Guid room_id, string id)
+    {
+        var reader = new WebSocketTextReader();
+        await HandleUserMessage(id, room_id, web_socket, string.Empty);
+        Result<string, WebSocketReadStatus> response;
+        do
+        {
+            response = await reader.ReadWholeMessageAsync(web_socket);
+            if (response == Status.Error) break;
             
-            if (!receive_result.EndOfMessage) continue;
+            var handle = await HandleUserMessage(id, room_id, web_socket, response.GetOK());
+            if (handle != HandleEvent.None) break;
             
-            if (await HandleUserMessage(id, room_id, web_socket, cached_string) != HandleEvent.None)
-                break;
-            cached_string = string.Empty;
-            
-        } while (receive_result.MessageType != WebSocketMessageType.Close);
+        } while (response == Status.OK);
         
         var room = Manager.GetRoom(room_id);
         await (room?.RemoveUser(id) ?? Task.CompletedTask);
         
         await web_socket.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
-        logger.LogInformation("WebSocket \'{ID}\' disconnected", id);
+        logger.LogDebug("WebSocket \'{ID}\' disconnected", id);
     }
 
     private async Task<HandleEvent> HandleUserMessage(string id, Guid room_id, WebSocket web_socket, string message)
     {
-        if (logger.IsEnabled(LogLevel.Debug))
-            logger.LogDebug("WebSocket \'{ID}\' received: \'{Message}\'", id, message);
+        logger.LogDebug("WebSocket \'{ID}\' received: \'{Message}\'", id, message);
         
         await Semaphore.WaitAsync();
         var room = Manager.GetRoom(room_id);
