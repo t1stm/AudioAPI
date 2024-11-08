@@ -88,7 +88,7 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
             var new_id = Manager.GetChangeId();
             if (change_id == new_id)
             {
-                await Task.Delay(33);
+                await Task.Delay(166);
                 continue;
             }
             change_id = new_id;
