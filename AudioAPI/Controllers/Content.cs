@@ -93,7 +93,8 @@ public class Content(ILogger<Content> logger) : ControllerBase
         var cache = new ConcurrentQueue<(byte[], int, int)>();
         
         Response.Headers.Append("Content-Disposition", $"attachment; filename={pure_id}");
-        Response.Headers.Append("Cache-Control", "no-cache; no-store; must-revalidate");
+        Response.Headers.Append("Cache-Control", "public, max-age=31536000, immutable");
+        Response.Headers.ETag = $"yt-raw-{pure_id}";
         
         var waiting_semaphore = new SemaphoreSlim(0, 1);
         var sync_semaphore = new SemaphoreSlim(1, 1);
@@ -213,7 +214,8 @@ public class Content(ILogger<Content> logger) : ControllerBase
             string.Join("://", split_query[1..]) : split_query[0];
         
         Response.Headers.Append("Content-Disposition", $"attachment; filename={pure_id}.{extension}");
-        Response.Headers.Append("Cache-Control", "no-cache; no-store; must-revalidate");
+        Response.Headers.Append("Cache-Control", "public, max-age=31536000, immutable");
+        Response.Headers.ETag = $"{type}-{bitrate}-{id}";
 
         var stream_subscriber = new StreamSubscriber
         {
