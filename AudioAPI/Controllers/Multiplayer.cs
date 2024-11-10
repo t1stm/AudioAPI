@@ -1,5 +1,4 @@
 using System.Net.WebSockets;
-using System.Text;
 using System.Text.Json;
 using AudioAPI.Controllers.Helpers;
 using Microsoft.AspNetCore.Mvc;
@@ -46,7 +45,7 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
             throw;
         }
 
-        return Ok();
+        return new EmptyResult();
     }
     
     [HttpGet("/Audio/Multiplayer/Join")]
@@ -69,8 +68,8 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
             logger.LogError(e, "WebSocket \'{ID}\' encountered error", HttpContext.TraceIdentifier);
             throw;
         }
-        
-        return Ok();
+
+        return new EmptyResult();
     }
 
     private static async Task HandleRoomUpdateWebSocket(WebSocket web_socket)

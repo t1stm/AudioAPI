@@ -24,7 +24,7 @@ public class VirtualPlayer(MessageQueue MessageQueue)
     
     public async Task Next()
     {
-        if (CurrentIndex == Items.Count) return;
+        if (CurrentIndex >= Items.Count -1) return;
         CurrentIndex++;
 
         UpdateStart();
@@ -79,6 +79,11 @@ public class VirtualPlayer(MessageQueue MessageQueue)
             false => Stopwatch.GetElapsedTime(StartTime),
             true => null
         };
+
+        if (!Playing)
+        {
+            await Broadcast(Time(Stopwatch.GetElapsedTime(StartTime).TotalSeconds));
+        }
     }
     
     public async Task Stop()
@@ -101,9 +106,26 @@ public class VirtualPlayer(MessageQueue MessageQueue)
     {
         await user.SendMessageAsync(Queue());
         await user.SendMessageAsync(Current());
-        await SyncTime(user);
+        await user.SendMessageAsync($"playing {Playing}");
+        
+        if (Items.Count > 0) 
+            await SyncTime(user);
 
-        await Broadcast($"chat [System] User \'{user.ChatUsername}\' joined the session.");
+        await Broadcast($"chat System %% User \'{user.ChatUsername}\' joined the session.");
+    }
+
+    public async Task SeekTo(double seconds)
+    {
+        await Sync.WaitAsync();
+        
+        var wanted_time = TimeSpan.FromSeconds(seconds);
+        var current_time = Stopwatch.GetTimestamp();
+        var delta_time = current_time - wanted_time.Ticks * Stopwatch.Frequency / 10000000;
+        
+        StartTime = delta_time;
+        Sync.Release();
+        
+        await Broadcast(Time(Stopwatch.GetElapsedTime(StartTime).TotalSeconds));
     }
 
     public async Task SyncTime(User user)
@@ -136,6 +158,11 @@ public class VirtualPlayer(MessageQueue MessageQueue)
     protected string Current()
     {
         return $"current {CurrentIndex}";
+    }
+
+    protected static string Time(double time)
+    {
+        return $"seek {time}";
     }
 
     protected async Task Broadcast(string message)

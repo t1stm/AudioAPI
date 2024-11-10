@@ -56,7 +56,7 @@ public class Room
     {
         var user = await Store.GetUser(id);
         await Store.RemoveUser(id);
-        await Queue.Add($"chat User \'{user.ChatUsername}\' was removed from the room.");
+        await Queue.Add($"chat System %% User \'{user.ChatUsername}\' was removed from the session.");
     }
 
     public async Task HandleUserMessage(User user, string message)
@@ -84,7 +84,7 @@ public class Room
             
             case "seek":
                 if (!double.TryParse(value, out var seek_seconds)) return;
-                await Queue.Add($"seek {seek_seconds}");
+                await Player.SeekTo(seek_seconds);
                 break;
             
             case "remove":
@@ -93,7 +93,7 @@ public class Room
                 break;
             
             case "chat":
-                await Queue.Add($"chat [{user.ChatUsername}]: {value}");
+                await Queue.Add($"chat {user.ChatUsername} %% {value}");
                 break;
             
             case "updateroom":
