@@ -1,9 +1,11 @@
 namespace WebApplication3.Multiplayer;
 
-public class FinishedUserHandler
+public class AddedUserHandler
 {
     protected readonly Queue<User> Users = new();
     protected readonly SemaphoreSlim Sync = new(1);
+    
+    public void Clear() => Users.Clear();
 
     public async Task Add(User user)
     {
@@ -14,7 +16,7 @@ public class FinishedUserHandler
     
     public bool Fulfilled(MessageQueue queue)
     {
-        if (Users.Count != queue.CurrentStore.Count) return false;
+        if (Users.Count < queue.CurrentStore.Count) return false;
         Users.Clear();
         return true;
     }

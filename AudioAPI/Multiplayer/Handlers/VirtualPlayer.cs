@@ -9,11 +9,12 @@ public class VirtualPlayer(MessageQueue MessageQueue)
 {
     public List<PlatformResult> Items { get; set; } = [];
     
-    protected readonly FinishedUserHandler Finished = new();
+    protected readonly AddedUserHandler Loaded = new();
+    protected readonly AddedUserHandler Finished = new();
     protected readonly SemaphoreSlim Sync = new(1);
     protected int CurrentIndex;
     
-    protected long StartTime;
+    protected long? StartTime;
     protected TimeSpan? PauseTime;
     protected bool Playing = true;
 
@@ -24,19 +25,21 @@ public class VirtualPlayer(MessageQueue MessageQueue)
     
     public async Task Next()
     {
-        if (CurrentIndex >= Items.Count -1) return;
-        CurrentIndex++;
-
+        if (CurrentIndex < Items.Count)
+            CurrentIndex++;
+        
         UpdateStart();
+        await SetPlaying(false);
         await Broadcast(Current());
     }
 
     public async Task Previous()
     {
-        if (CurrentIndex == 0) return;
-        CurrentIndex--;
+        if (CurrentIndex > 0)
+            CurrentIndex--;
 
         UpdateStart();
+        await SetPlaying(false);
         await Broadcast(Current());
     }
 
@@ -55,8 +58,12 @@ public class VirtualPlayer(MessageQueue MessageQueue)
     public async Task SetFinished(User user)
     {
         await Finished.Add(user);
+        await HandleFinished();
+    }
+
+    public async Task HandleFinished()
+    {
         if (!Finished.Fulfilled(MessageQueue)) return;
-        
         await Next();
     }
     
@@ -69,15 +76,22 @@ public class VirtualPlayer(MessageQueue MessageQueue)
         await Broadcast(Queue());
     }
 
+    public async Task SetPlaying(bool state)
+    {
+        Playing = state;
+        await Broadcast($"playing {Playing}");
+    }
+    
     public async Task TogglePlaying()
     {
-        Playing = !Playing;
-        await Broadcast($"playing {Playing}");
+        if (!StartTime.HasValue) return;
+
+        await SetPlaying(!Playing);
 
         switch (Playing)
         {
             case false:
-                PauseTime = Stopwatch.GetElapsedTime(StartTime);
+                PauseTime = Stopwatch.GetElapsedTime(StartTime.Value);
                 break;
             case true:
                 if (PauseTime.HasValue) 
@@ -88,7 +102,8 @@ public class VirtualPlayer(MessageQueue MessageQueue)
         
         if (!Playing)
         {
-            await Broadcast(Time(Stopwatch.GetElapsedTime(StartTime).TotalSeconds));
+            var seconds = Stopwatch.GetElapsedTime(StartTime.Value).TotalSeconds;
+            await Broadcast(Time(seconds));
         }
     }
     
@@ -130,8 +145,24 @@ public class VirtualPlayer(MessageQueue MessageQueue)
         
         StartTime = delta_time;
         Sync.Release();
+
+        var seconds_broadcast = Stopwatch.GetElapsedTime(StartTime.Value).TotalSeconds;
+        await Broadcast(Time(seconds_broadcast));
+    }
+    
+    public async Task SetLoaded(User user)
+    {
+        await Loaded.Add(user);
+        await HandleLoaded();
+    }
+
+    public async Task HandleLoaded()
+    {
+        if (!Loaded.Fulfilled(MessageQueue)) return;
+        StartTime = Stopwatch.GetTimestamp();
         
-        await Broadcast(Time(Stopwatch.GetElapsedTime(StartTime).TotalSeconds));
+        await Broadcast(Time(0));
+        await SetPlaying(true);
     }
 
     public async Task SyncTime(User user)
@@ -142,12 +173,14 @@ public class VirtualPlayer(MessageQueue MessageQueue)
     
     public async Task<double> GetCurrentTime()
     {
+        if (!StartTime.HasValue) return 0;
+        
         await Sync.WaitAsync();
         
         if (PauseTime.HasValue) 
             StartTime = Stopwatch.GetTimestamp() - TimeSpanToTimestamp(PauseTime.Value);
         
-        var time = Stopwatch.GetElapsedTime(StartTime);
+        var time = Stopwatch.GetElapsedTime(StartTime.Value);
         
         Sync.Release();
         
@@ -156,7 +189,9 @@ public class VirtualPlayer(MessageQueue MessageQueue)
 
     protected void UpdateStart()
     {
-        StartTime = Stopwatch.GetTimestamp();
+        Loaded.Clear();
+        StartTime = null;
+        PauseTime = null;
     }
 
     protected string Queue()

@@ -57,6 +57,8 @@ public class Room
         var user = await Store.GetUser(id);
         await Store.RemoveUser(id);
         await Queue.Add($"chat System %% User \'{user.ChatUsername}\' left from the session.");
+        await Player.HandleLoaded();
+        await Player.HandleFinished();
     }
 
     public async Task HandleUserMessage(User user, string message)
@@ -156,10 +158,14 @@ public class Room
                 await Player.Shuffle();
                 return;
             
+            case "loaded":
+                await Player.SetLoaded(user);
+                break;
+            
             case "sync":
                 var time = await Player.GetCurrentTime();
                 await user.SendMessageAsync($"sync {time}");
-                break;
+                return;
         }
     }
 }
