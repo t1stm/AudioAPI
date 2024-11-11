@@ -61,7 +61,7 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
             using var web_socket = await HttpContext.WebSockets.AcceptWebSocketAsync();
             logger.LogDebug("WebSocket \'{ID}\' connected, with IP: {IP}", HttpContext.TraceIdentifier,
                 HttpContext.Connection.RemoteIpAddress);
-            await HandleRoomJoinWebSocket(web_socket, guid, HttpContext.TraceIdentifier);
+            await HandleRoomJoinWebSocket(web_socket, guid, HttpContext.TraceIdentifier, HttpContext.RequestAborted);
         }
         catch (Exception e)
         {
@@ -72,8 +72,9 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
         return new EmptyResult();
     }
 
-    private static async Task HandleRoomUpdateWebSocket(WebSocket web_socket)
+    private static async Task HandleRoomUpdateWebSocket(WebSocket web_socket, CancellationToken? cancellation_token = default)
     {
+        cancellation_token ??= CancellationToken.None;
         var change_id = Manager.GetChangeId();
         var user = new User
         {
@@ -94,7 +95,7 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
 
             await SendRooms();
         }
-        while (web_socket.State == WebSocketState.Open);
+        while (web_socket.State == WebSocketState.Open && !cancellation_token.Value.IsCancellationRequested);
 
         
         await web_socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
@@ -109,14 +110,15 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
         }
     }
 
-    private async Task HandleRoomJoinWebSocket(WebSocket web_socket, Guid room_id, string id)
+    private async Task HandleRoomJoinWebSocket(WebSocket web_socket, Guid room_id, string id,
+        CancellationToken cancellation_token)
     {
         var reader = new WebSocketTextReader();
         await HandleUserMessage(id, room_id, web_socket, string.Empty);
         Result<string, WebSocketReadStatus> response;
         do
         {
-            response = await reader.ReadWholeMessageAsync(web_socket);
+            response = await reader.ReadWholeMessageAsync(web_socket, cancellation_token);
             if (response == Status.Error) break;
             
             var handle = await HandleUserMessage(id, room_id, web_socket, response.GetOK());
