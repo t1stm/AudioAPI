@@ -56,7 +56,7 @@ public class Room
     {
         var user = await Store.GetUser(id);
         await Store.RemoveUser(id);
-        await Queue.Add($"chat System %% User \'{user.ChatUsername}\' was removed from the session.");
+        await Queue.Add($"chat System %% User \'{user.ChatUsername}\' left from the session.");
     }
 
     public async Task HandleUserMessage(User user, string message)
