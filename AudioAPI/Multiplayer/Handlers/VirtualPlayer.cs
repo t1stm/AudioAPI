@@ -144,7 +144,10 @@ public class VirtualPlayer(MessageQueue MessageQueue)
     {
         await Sync.WaitAsync();
         
-        var time = PauseTime ?? Stopwatch.GetElapsedTime(StartTime);
+        if (PauseTime.HasValue) 
+            StartTime = Stopwatch.GetTimestamp() - TimeSpanToTimestamp(PauseTime.Value);
+        
+        var time = Stopwatch.GetElapsedTime(StartTime);
         
         Sync.Release();
         
