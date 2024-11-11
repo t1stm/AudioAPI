@@ -152,6 +152,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
         var type = codec switch
         {
             "Opus" or "Vorbis" => "audio/ogg",
+            "FLAC" => "audio/flac",
             "AAC" => "audio/aac",
             _ => "audio/mp3"
         };
@@ -161,6 +162,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
         {
             "Vorbis" => "-c:a libvorbis",
             "AAC" => "-c:a aac",
+            "FLAC" => "-c:a flac",
             "MP3" => "-c:a libmp3lame",
             _ => "-c:a libopus"
         };
@@ -170,6 +172,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
             "Opus" or "Vorbis" => "-f ogg",
             "AAC" => "-f adts",
             "MP3" => "-f mp3",
+            "FLAC" => "-f flac",
             _ => "-f mka"
         };
 
