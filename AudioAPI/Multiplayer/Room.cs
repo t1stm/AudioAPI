@@ -84,6 +84,16 @@ public class Room
                 await Player.Enqueue(result.GetOK());
                 break;
             
+            case "setnext":
+                if (!int.TryParse(value, out var next_index)) return;
+                await Player.SetNext(next_index);
+                break;
+            
+            case "skipto":
+                if (!int.TryParse(value, out var skip_index)) return;
+                await Player.SkipTo(skip_index);
+                break;
+            
             case "seek":
                 if (!double.TryParse(value, out var seek_seconds)) return;
                 await Player.SeekTo(seek_seconds);

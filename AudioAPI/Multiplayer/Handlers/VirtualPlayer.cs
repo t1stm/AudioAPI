@@ -55,6 +55,29 @@ public class VirtualPlayer(MessageQueue MessageQueue)
         await Broadcast(Queue());
     }
     
+    public async Task SetNext(int index)
+    {
+        if (index < 0 || index >= Items.Count || index == CurrentIndex) return;
+        if (index < CurrentIndex)
+            CurrentIndex--;
+        
+        var item = Items[index];
+        Items.RemoveAt(index);
+        Items.Insert(CurrentIndex + 1, item);
+        
+        await Broadcast(Queue());
+    }
+    
+    public async Task SkipTo(int index)
+    {
+        if (index < 0 || index >= Items.Count || index == CurrentIndex) return;
+        CurrentIndex = index;
+        
+        UpdateStart();
+        await SetPlaying(false);
+        await Broadcast(Current());
+    }
+    
     public async Task SetFinished(User user)
     {
         await Finished.Add(user);
