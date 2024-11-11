@@ -81,7 +81,7 @@ public class VirtualPlayer(MessageQueue MessageQueue)
                 break;
             case true:
                 if (PauseTime.HasValue) 
-                    StartTime = TimeSpanToTimestamp(PauseTime.Value);
+                    StartTime = Stopwatch.GetTimestamp() - TimeSpanToTimestamp(PauseTime.Value);
                 PauseTime = null;
                 break;
         }
