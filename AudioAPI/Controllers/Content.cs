@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Net;
 using System.Net.Mime;
 using Audio;
 using Audio.FFmpeg;
@@ -92,9 +93,10 @@ public class Content(ILogger<Content> logger) : ControllerBase
         var stream_spreader = content_downloader_request.GetOK();
         var cache = new ConcurrentQueue<(byte[], int, int)>();
         
-        Response.Headers.Append("Content-Disposition", $"attachment; filename={pure_id}");
+        var file_id = WebUtility.UrlEncode(pure_id);
+        Response.Headers.Append("Content-Disposition", $"attachment; filename={file_id}");
         Response.Headers.Append("Cache-Control", "public, max-age=31536000, immutable");
-        Response.Headers.ETag = $"yt-raw-{pure_id}";
+        Response.Headers.ETag = $"yt-raw-{file_id}";
         
         var waiting_semaphore = new SemaphoreSlim(0, 1);
         var sync_semaphore = new SemaphoreSlim(1, 1);
@@ -216,9 +218,10 @@ public class Content(ILogger<Content> logger) : ControllerBase
         var pure_id = split_query.Length > 1 ? 
             string.Join("://", split_query[1..]) : split_query[0];
         
-        Response.Headers.Append("Content-Disposition", $"attachment; filename={pure_id}.{extension}");
+        var file_id = WebUtility.UrlEncode(pure_id);
+        Response.Headers.Append("Content-Disposition", $"attachment; filename={WebUtility.HtmlEncode(file_id)}.{extension}");
         Response.Headers.Append("Cache-Control", "public, max-age=31536000, immutable");
-        Response.Headers.ETag = $"{type}-{bitrate}-{id}";
+        Response.Headers.ETag = $"{type}-{bitrate}-{file_id}";
 
         var stream_subscriber = new StreamSubscriber
         {
