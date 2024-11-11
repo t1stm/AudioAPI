@@ -37,7 +37,7 @@ public sealed class Getter_YtDLP : ContentGetter
             RedirectStandardOutput = true,
             RedirectStandardError = false,
             UseShellExecute = false,
-            Arguments = $"-q --no-warnings -u None -p None -r 4.0M -f bestaudio \"{result.GetDownloadUrl()}\" -o -"
+            Arguments = $"-q --no-warnings -r 4.0M -f bestaudio \"{result.GetDownloadUrl()}\" -o -"
         };
     }
 }
