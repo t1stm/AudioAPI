@@ -46,6 +46,6 @@ public abstract class PlatformResult
 
     public virtual string SerializeSelf()
     {
-        return JsonSerializer.Serialize(this);
+        return JsonSerializer.Serialize(this, CustomSerializer.SerializerOptions);
     }
 }

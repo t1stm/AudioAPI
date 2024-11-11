@@ -20,6 +20,6 @@ public class MusicResult : PlatformResult
 
     public override string SerializeSelf()
     {
-        return JsonSerializer.Serialize(this);
+        return JsonSerializer.Serialize(this, CustomSerializer.SerializerOptions);
     }
 }
