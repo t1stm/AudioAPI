@@ -73,16 +73,17 @@ public class VirtualPlayer(MessageQueue MessageQueue)
     {
         Playing = !Playing;
         await Broadcast($"playing {Playing}");
-        
-        PauseTime = Playing switch
-        {
-            false => Stopwatch.GetElapsedTime(StartTime),
-            true => null
-        };
 
-        if (!Playing)
+        switch (Playing)
         {
-            await Broadcast(Time(Stopwatch.GetElapsedTime(StartTime).TotalSeconds));
+            case false:
+                PauseTime = Stopwatch.GetElapsedTime(StartTime);
+                break;
+            case true:
+                if (PauseTime.HasValue) 
+                    StartTime = TimeSpanToTimestamp(PauseTime.Value);
+                PauseTime = null;
+                break;
         }
     }
     
@@ -120,7 +121,7 @@ public class VirtualPlayer(MessageQueue MessageQueue)
         
         var wanted_time = TimeSpan.FromSeconds(seconds);
         var current_time = Stopwatch.GetTimestamp();
-        var delta_time = current_time - wanted_time.Ticks * Stopwatch.Frequency / 10000000;
+        var delta_time = current_time - TimeSpanToTimestamp(wanted_time);
         
         StartTime = delta_time;
         Sync.Release();
@@ -152,7 +153,7 @@ public class VirtualPlayer(MessageQueue MessageQueue)
 
     protected string Queue()
     {
-        return $"queue {JsonSerializer.Serialize(Items, SerializerOptions)}";
+        return $"queue {Items.ToJSON()}";
     }
 
     protected string Current()
@@ -170,4 +171,7 @@ public class VirtualPlayer(MessageQueue MessageQueue)
         await MessageQueue.Add(message);
         await MessageQueue.Update();
     }
+
+    private static long TimeSpanToTimestamp(TimeSpan time_span) => TicksToStopwatchTimestamp(time_span.Ticks);
+    private static long TicksToStopwatchTimestamp(long ticks) => ticks * Stopwatch.Frequency / 10000000;
 }
