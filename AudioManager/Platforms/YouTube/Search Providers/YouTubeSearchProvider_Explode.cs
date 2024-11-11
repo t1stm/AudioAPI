@@ -14,12 +14,21 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider,
     public override string PlatformIdentifier => "yt://";
     public override int Priority => 40;
 
+    private static string RemoveTracking(string thumbnailUrl)
+    {
+        var tracking_index = thumbnailUrl.IndexOf('?');
+        return tracking_index != -1 ? 
+            thumbnailUrl[..tracking_index] : 
+            thumbnailUrl;
+    }
+
     public async Task<Result<PlatformResult, SearchError>> TryID(string id, CancellationToken token)
     {
         try
         {
             var youtube_client = Client;
             var video = await youtube_client.Videos.GetAsync(id, token);
+            
         
             return Result<PlatformResult, SearchError>.Success(new YouTubeResult
             {
@@ -27,6 +36,7 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider,
                 Artist = video.Author.ChannelTitle,
                 Duration = video.Duration.GetValueOrDefault(TimeSpan.Zero),
                 ID = PlatformIdentifier + id,
+                ThumbnailUrl = RemoveTracking(video.Thumbnails[0].Url),
                 Downloaders = ContentDownloaders
             });
         }
@@ -50,7 +60,7 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider,
                 Name = video.Title,
                 Artist = video.Author.ChannelTitle,
                 Duration = video.Duration.GetValueOrDefault(TimeSpan.Zero),
-                ThumbnailUrl = video.Thumbnails[0].Url.Split('?')[0],
+                ThumbnailUrl = RemoveTracking(video.Thumbnails[0].Url),
                 Downloaders = ContentDownloaders
             }));
         }
@@ -80,7 +90,7 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider,
                     Artist = v.Author.ChannelTitle,
                     Duration = v.Duration.GetValueOrDefault(TimeSpan.Zero),
                     Downloaders = ContentDownloaders,
-                    ThumbnailUrl = v.Thumbnails[0].Url
+                    ThumbnailUrl = RemoveTracking(v.Thumbnails[0].Url)
                 }));
             }
 
