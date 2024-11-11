@@ -219,7 +219,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
             string.Join("://", split_query[1..]) : split_query[0];
         
         var file_id = WebUtility.UrlEncode(pure_id);
-        Response.Headers.Append("Content-Disposition", $"attachment; filename={WebUtility.HtmlEncode(file_id)}.{extension}");
+        Response.Headers.Append("Content-Disposition", $"attachment; filename={file_id}.{extension}");
         Response.Headers.Append("Cache-Control", "public, max-age=31536000, immutable");
         Response.Headers.ETag = $"{type}-{bitrate}-{file_id}";
 
