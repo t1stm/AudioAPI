@@ -85,6 +85,11 @@ public class VirtualPlayer(MessageQueue MessageQueue)
                 PauseTime = null;
                 break;
         }
+        
+        if (!Playing)
+        {
+            await Broadcast(Time(Stopwatch.GetElapsedTime(StartTime).TotalSeconds));
+        }
     }
     
     public async Task Stop()
