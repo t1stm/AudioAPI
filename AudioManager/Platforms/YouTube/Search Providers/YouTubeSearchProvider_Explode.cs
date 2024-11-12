@@ -36,7 +36,7 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider,
                 Artist = video.Author.ChannelTitle,
                 Duration = video.Duration.GetValueOrDefault(TimeSpan.Zero),
                 ID = PlatformIdentifier + id,
-                ThumbnailUrl = RemoveTracking(video.Thumbnails[0].Url),
+                ThumbnailUrl = RemoveTracking(video.Thumbnails.OrderByDescending(t => t.Resolution).First().Url),
                 Downloaders = ContentDownloaders
             });
         }
@@ -60,7 +60,7 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider,
                 Name = video.Title,
                 Artist = video.Author.ChannelTitle,
                 Duration = video.Duration.GetValueOrDefault(TimeSpan.Zero),
-                ThumbnailUrl = RemoveTracking(video.Thumbnails[0].Url),
+                ThumbnailUrl = RemoveTracking(video.Thumbnails.OrderByDescending(t => t.Resolution).First().Url),
                 Downloaders = ContentDownloaders
             }));
         }
@@ -90,7 +90,7 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider,
                     Artist = v.Author.ChannelTitle,
                     Duration = v.Duration.GetValueOrDefault(TimeSpan.Zero),
                     Downloaders = ContentDownloaders,
-                    ThumbnailUrl = RemoveTracking(v.Thumbnails[0].Url)
+                    ThumbnailUrl = RemoveTracking(v.Thumbnails.OrderByDescending(t => t.Resolution).First().Url)
                 }));
             }
 
