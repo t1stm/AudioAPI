@@ -96,7 +96,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
         var file_id = WebUtility.UrlEncode(pure_id);
         Response.Headers.Append("Content-Disposition", $"attachment; filename={file_id}");
         Response.Headers.Append("Cache-Control", "public, max-age=31536000, immutable");
-        Response.Headers.ETag = $"yt-raw-{file_id}";
+        Response.Headers.ETag = $"raw-{file_id}";
         
         var waiting_semaphore = new SemaphoreSlim(0, 1);
         var sync_semaphore = new SemaphoreSlim(1, 1);
