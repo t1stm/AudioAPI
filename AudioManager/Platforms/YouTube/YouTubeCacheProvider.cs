@@ -16,7 +16,7 @@ public static class YouTubeCacheProvider
         if (export_directory is null) return;
         
         Directory.CreateDirectory(export_directory);
-        var file_path = Path.Combine(export_directory, youtube_result.GetPureID());
+        var file_path = Path.Combine(export_directory, $"{youtube_result.GetPureID()}.webm");
         
         if (File.Exists(file_path)) return;
 
