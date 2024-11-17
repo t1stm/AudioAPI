@@ -116,11 +116,12 @@ public class Room
 
     protected async Task HandleUpdateRoom(string value, User user)
     {
-        var split_index = value.IndexOf(' ');
+        var action = value.Trim();
+        var split_index = action.IndexOf(' ');
         if (split_index == -1 || split_index + 1 >= value.Length) return;
                 
-        var parameter_key = value[..split_index];
-        var parameter_value = value[split_index..];
+        var parameter_key = action[..split_index];
+        var parameter_value = action[split_index..];
 
         switch (parameter_key)
         {
