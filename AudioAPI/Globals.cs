@@ -11,12 +11,13 @@ public static class Globals
     public static readonly Dictionary<(string codec, int bitrate, string id), DateTime> ExpireTimes = new();
     
     public static readonly System.Timers.Timer ExpireTimer;
-    public static readonly SemaphoreSlim CacheSemaphore = new(1,1);
+    public static readonly SemaphoreSlim CacheSemaphore = new(1);
     
     static Globals()
     {
         AudioManager = new Audio.AudioManager();
         AudioManager.Initialize();
+        
         ExpireTimer = new System.Timers.Timer();
         ExpireTimer.Interval = 60 * 1000;
         ExpireTimer.Elapsed += ExpireFFmpegSessions;

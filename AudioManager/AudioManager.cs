@@ -18,7 +18,10 @@ public class AudioManager
     
     protected readonly SemaphoreSlim Semaphore = new(1, 1);
     protected readonly TimeSpan ExpireTimeSpan = TimeSpan.FromMinutes(45);
-    protected System.Timers.Timer? ExpireTimer;
+    protected readonly System.Timers.Timer ExpireTimer = new()
+    {
+        Interval = 60 * 1000
+    };
     
     public List<Platform> Platforms { get; } = [
         new MusicDatabase(),
@@ -29,11 +32,7 @@ public class AudioManager
     {
         Platforms.ForEach(MapPlatformIdentifiers);
         Platforms.ForEach(p => p.Initialize());
-        ExpireTimer = new System.Timers.Timer
-        {
-            Interval = 60 * 1000
-        };
-
+        
         ExpireTimer.Elapsed += HandleStreamSpreaders;
         ExpireTimer.Start();
     }
@@ -181,5 +180,13 @@ public class AudioManager
             let protocol = $"{split_query[0]}://" 
             where platform.SearchPlaylistIdentifiers.Contains(protocol) 
             select platform).Any() ? QueryType.Playlist : QueryType.Keywords;
+    }
+
+    ~AudioManager()
+    {
+        ExpireTimer.Stop();
+        CachedResults.Clear();
+        ExpireTimestamps.Clear();
+        SearchIDMap.Clear();
     }
 }
