@@ -31,7 +31,7 @@ public class MusicSearchProvider : SearchProvider, ISupportsID, ISupportsSearch
     
     public Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchKeywords(string keywords, CancellationToken cancellation_token = default)
     {
-        var search = MusicManager.SearchOneByTerm(keywords);
+        var search = MusicManager.SearchByTerm(keywords);
         if (search == Status.Error) return Task.FromResult(Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.NotFound));
         
         var results = search.GetOK();

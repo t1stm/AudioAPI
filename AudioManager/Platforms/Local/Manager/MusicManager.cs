@@ -7,7 +7,7 @@ using Result.Objects;
 
 namespace AudioManager.Platforms.Local.Manager;
 
-public class MusicManager
+public partial class MusicManager
 {
     public static string Domain => Environment.GetEnvironmentVariable("DOMAIN", EnvironmentVariableTarget.Process) ?? string.Empty;
     public static string StorageDirectory => Environment.GetEnvironmentVariable("STORAGE", EnvironmentVariableTarget.Process) ?? "./";
@@ -156,7 +156,7 @@ public class MusicManager
                file_name.EndsWith(".wma") || file_name.EndsWith(".wv");
     }
     
-    public Result<IEnumerable<MusicInfo>, Empty> SearchOneByTerm(string term)
+    public Result<IEnumerable<MusicInfo>, Empty> SearchByTerm(string term)
     {
         var found = Songs.Where(r => ScoreSingleTerm(term, r));
         return Result<IEnumerable<MusicInfo>, Empty>.Success(found);
@@ -164,65 +164,31 @@ public class MusicManager
 
     private static bool ScoreSingleTerm(string term, MusicInfo r)
     {
-        return LevenshteinDistance.ComputeLean(r.RomanizedTitle, term) < 2 ||
-               LevenshteinDistance.ComputeLean($"{r.RomanizedTitle} - {r.RomanizedAuthor}", term) < 3 ||
-               LevenshteinDistance.ComputeLean($"{r.RomanizedTitle} {r.RomanizedAuthor}", term) < 3 ||
-               LevenshteinDistance.ComputeLean($"{r.RomanizedAuthor} {r.RomanizedTitle}", term) < 3 ||
-               LevenshteinDistance.ComputeLean($"{r.RomanizedAuthor} - {r.RomanizedTitle}", term) < 3 ||
-               LevenshteinDistance.ComputeLean(r.OriginalTitle, term) < 2 ||
-               LevenshteinDistance.ComputeLean($"{r.OriginalTitle} - {r.OriginalAuthor}", term) < 3 ||
-               LevenshteinDistance.ComputeLean($"{r.OriginalTitle} {r.OriginalAuthor}", term) < 3 ||
-               LevenshteinDistance.ComputeLean($"{r.OriginalAuthor} {r.OriginalTitle}", term) < 3 ||
-               LevenshteinDistance.ComputeLean($"{r.OriginalAuthor} - {r.OriginalTitle}", term) < 3 ||
-               LevenshteinDistance.ComputeLean($"{r.OriginalTitle} - {r.RomanizedAuthor}", term) < 3 ||
-               LevenshteinDistance.ComputeLean($"{r.RomanizedTitle} - {r.OriginalAuthor}", term) < 3;
-    }
-    
-    public IEnumerable<MusicInfo> OrderByTerm(string term)
-    {
-        if (string.IsNullOrEmpty(term)) return GetAll();
-
-        var ordered = from r in Songs.AsParallel()
-            orderby
-                Min(
-                    // Romanized data pass.
-                    LevenshteinDistance.ComputeLean(r.RomanizedTitle, term),
-                    LevenshteinDistance.ComputeLean($"{r.RomanizedTitle} - {r.RomanizedAuthor}", term),
-                    LevenshteinDistance.ComputeLean($"{r.RomanizedTitle} {r.RomanizedAuthor}", term),
-                    LevenshteinDistance.ComputeLean($"{r.RomanizedAuthor} {r.RomanizedTitle}", term),
-                    LevenshteinDistance.ComputeLean($"{r.RomanizedAuthor} - {r.RomanizedTitle}", term),
-                    // Original data pass.
-                    LevenshteinDistance.ComputeLean(r.OriginalTitle, term),
-                    LevenshteinDistance.ComputeLean($"{r.OriginalTitle} - {r.OriginalAuthor}", term),
-                    LevenshteinDistance.ComputeLean($"{r.OriginalTitle} {r.OriginalAuthor}", term),
-                    LevenshteinDistance.ComputeLean($"{r.OriginalAuthor} {r.OriginalTitle}", term),
-                    LevenshteinDistance.ComputeLean($"{r.OriginalAuthor} - {r.OriginalTitle}", term),
-                    // Added step to help me find songs. I hope this doesn't break anything.
-                    LevenshteinDistance.ComputeLean(r.RomanizedAuthor, term),
-                    LevenshteinDistance.ComputeLean(r.OriginalAuthor, term))
-            select r;
-
-        return ordered;
-    }
-
-    private static int Min(params int[] values)
-    {
-        return values.Min();
-    }
-    
-    public IEnumerable<MusicInfo> SearchByPattern(string search)
-    {
-        try
-        {
-            var pattern = search;
-            if (pattern.Length == 0) return [];
-            pattern = pattern.Replace("*", ".*");
-            return Songs.AsParallel().Where(r => Regex.IsMatch(r.RelativeLocation ?? "", $"^{pattern}"));
-        }
-        catch (Exception)
-        {
-            return [];
-        }
+        var term_clean = ParentesisRegex()
+            .Replace(term, string.Empty);
+        
+        var romanized_clean = r.RomanizedTitle is null ? null : 
+            ParentesisRegex().Replace(r.RomanizedTitle, string.Empty);
+        
+        var original_clean = r.OriginalTitle is null ? null : 
+            ParentesisRegex().Replace(r.OriginalTitle, string.Empty);
+        
+        var eval = 
+                    romanized_clean != null && 
+                    (LevenshteinDistance.ComputeLean(romanized_clean, term_clean) < 2 ||
+                    LevenshteinDistance.ComputeLean($"{romanized_clean}{r.RomanizedAuthor}", term_clean) < 3 ||
+                    LevenshteinDistance.ComputeLean($"{r.RomanizedAuthor}{romanized_clean}", term_clean) < 3 ||
+                    LevenshteinDistance.ComputeLean($"{romanized_clean}{r.OriginalAuthor}", term_clean) < 3) 
+                    
+                    || 
+                    
+                    original_clean != null && 
+                   (LevenshteinDistance.ComputeLean(original_clean, term_clean) < 2 ||
+                    LevenshteinDistance.ComputeLean($"{original_clean}{r.OriginalAuthor}", term_clean) < 3 ||
+                    LevenshteinDistance.ComputeLean($"{r.OriginalAuthor}{original_clean}", term_clean) < 3 ||
+               
+                    LevenshteinDistance.ComputeLean($"{original_clean}{r.RomanizedAuthor}", term_clean) < 3);
+        return eval;
     }
 
     public Result<MusicInfo, Empty> SearchById(string id)
@@ -236,9 +202,6 @@ public class MusicManager
             Result<MusicInfo, Empty>.Error(default);
     }
 
-    public IEnumerable<MusicInfo> GetAll()
-    {
-        var copy = Songs.ToArray();
-        return copy;
-    }
+    [GeneratedRegex(@"\(.*?\)")]
+    private static partial Regex ParentesisRegex();
 }

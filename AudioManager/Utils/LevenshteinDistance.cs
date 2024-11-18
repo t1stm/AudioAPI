@@ -9,13 +9,9 @@ public static class LevenshteinDistance
 
     private static string? RemoveFormatting(string? str)
     {
-        return str?
-            .FastRemove(".")
-            .FastRemove("@")
-            .FastRemove("\\")
-            .FastRemove("\'")
-            .FastRemove("\"")
-            .ToLower();
+        return 
+            str is null ? null :
+            string.Concat(str.Where(char.IsLetterOrDigit)).ToLower();
     }
 
     public static string FastRemove(this string source, string remove)
