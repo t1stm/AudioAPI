@@ -18,62 +18,77 @@ public class YouTubeCacher
     private const string CacheFolder = "./cache";
     private const string FileName = "YouTube.json";
     private const string CachePath = $"{CacheFolder}/{FileName}";
+    
+    private readonly byte[] start_bytes = "["u8.ToArray();
+    private readonly byte[] end_bytes = "]"u8.ToArray();
+    private readonly byte[] comma_bytes = ","u8.ToArray();
 
-    protected async Task SaveAsync()
+    protected async Task SaveAsync(IEnumerable<YouTubeResult>? delta = null)
     {
         await Sync.WaitAsync();
         Directory.CreateDirectory(CacheFolder);
         
-        await using var file = File.Open(CachePath, FileMode.Create);
-        await JsonSerializer.SerializeAsync(file, Cache.Values, JsonSerializerOptions);
+        var file_info = new FileInfo(CachePath);
+        if (delta is not null && file_info is { Exists: true, Length: > 32 })
+        {
+            await using var file = File.Open(CachePath, FileMode.Open);
+            file.SetLength(file.Length - end_bytes.Length);
+            file.Seek(0, SeekOrigin.End);
+            await file.WriteAsync(comma_bytes);
+            
+            var json_bytes = JsonSerializer.SerializeToUtf8Bytes(delta, JsonSerializerOptions);
+            await file.WriteAsync(json_bytes.AsMemory()[start_bytes.Length..]);
+            await file.FlushAsync();
+        }
+        else
+        {
+            await using var file = File.Open(CachePath, FileMode.Create);
+            await JsonSerializer.SerializeAsync(file, Cache.Values, JsonSerializerOptions);
+            await file.FlushAsync();
+        }
         Sync.Release();
     }
 
     public async Task InitializeAsync()
     {
-        try
-        {
-            await Sync.WaitAsync();
-            if (!File.Exists(CachePath))
-                return;
-        
-            await using var file = File.Open(CachePath, FileMode.Open);
-            var deserialized = await JsonSerializer.DeserializeAsync<YouTubeResult[]>(file, JsonSerializerOptions);
-            Cache.Clear();
-
-            if (deserialized is null)
-                return;
-        
-            foreach (var result in deserialized)
-            {
-                Cache.Add(result.GetPureID(), result);
-            }
-        }
-        finally
-        {
-            Sync.Release();
-        }
-    }
-    
-    public async Task AddToCacheAsync(YouTubeResult result)
-    {
+        var duplicate = false;
         await Sync.WaitAsync();
-        Cache.TryAdd(result.GetPureID(), result);
+        if (!File.Exists(CachePath))
+            return;
+        
+        await using var file = File.Open(CachePath, FileMode.Open);
+        var deserialized = await JsonSerializer.DeserializeAsync<YouTubeResult[]>(file, JsonSerializerOptions);
+        Cache.Clear();
+
+        if (deserialized is null)
+            return;
+            
+        foreach (var result in deserialized)
+        {
+            if (!Cache.TryAdd(result.GetPureID(), result)) 
+                duplicate = true;
+        }
+
         Sync.Release();
         
-        await SaveAsync();
+        if (duplicate)
+        {
+            await SaveAsync();
+        }
     }
 
     public async Task AddToCacheAsync(IEnumerable<YouTubeResult> results)
     {
         await Sync.WaitAsync();
-        foreach (var result in results)
+        var youtube_results = results.Where(r => !Cache.ContainsKey(r.GetPureID())).ToArray();
+        foreach (var result in youtube_results)
         {
             Cache.TryAdd(result.GetPureID(), result);
         }
         Sync.Release();
         
-        await SaveAsync();
+        if (youtube_results.Length > 0)
+            await SaveAsync(youtube_results);
     }
 
     public async Task<Result<YouTubeResult, SearchError>> GetFromCacheAsync(string id)

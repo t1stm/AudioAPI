@@ -22,8 +22,10 @@ public class YouTubeSearchProvider_Cached(YouTubeCacher cacher) : SearchProvider
     public async Task<Result<PlatformResult, SearchError>> TryID(string id, CancellationToken cancellation_token = default)
     {
         var result = await YouTubeCacher.GetFromCacheAsync(id);
-        return result != Status.Error ? 
-            Result<PlatformResult, SearchError>.Success(result.GetOK()) :
-            Result<PlatformResult, SearchError>.Error(SearchError.NotFound);
+        if (result == Status.Error) return Result<PlatformResult, SearchError>.Error(SearchError.NotFound);
+        
+        var ok_result = result.GetOK();
+        ok_result.Downloaders = ContentDownloaders;
+        return Result<PlatformResult, SearchError>.Success(ok_result);
     }
 }

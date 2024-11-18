@@ -13,5 +13,8 @@ public abstract class SearchProvider
         Initialize();
     }
 
-    protected virtual void Initialize() { }
+    protected virtual void Initialize()
+    {
+        ContentDownloaders.ForEach(downloader => downloader.Initialize());
+    }
 }

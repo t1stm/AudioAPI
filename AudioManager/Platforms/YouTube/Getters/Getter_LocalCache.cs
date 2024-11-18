@@ -30,6 +30,7 @@ public class Getter_LocalCache : ContentGetter
 
         var file = youtube_result.GetPureID() + ".webm";
         Directory.CreateDirectory(CacheLocation);
+        
         var path = Path.Combine(CacheLocation, file);
         if (!File.Exists(path)) return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(
             DownloadError.GenericError));
