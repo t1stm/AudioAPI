@@ -66,11 +66,14 @@ public class AudioManager
     public async Task<Result<IEnumerable<PlatformResult>, SearchError>> SearchKeywords(string query)
     {
         var results = new List<PlatformResult>();
-        foreach (var platform in Platforms
-                     .Where(p => p is ISupportsSearch)
-                     .Cast<ISupportsSearch>())
+        var search_tasks = Platforms
+            .Where(p => p is ISupportsSearch)
+            .Cast<ISupportsSearch>()
+            .Select(platform => platform.TrySearchKeywords(query));
+        
+        foreach (var task in search_tasks)
         {
-            var search = await platform.TrySearchKeywords(query);
+            var search = await task;
             if (search == Status.Error) continue;
 
             results.AddRange(search.GetOK());
@@ -84,11 +87,14 @@ public class AudioManager
     public async Task<Result<IEnumerable<PlatformResult>, SearchError>> SearchPlaylist(string query)
     {
         var results = new List<PlatformResult>();
-        foreach (var platform in Platforms
-                     .Where(p => p is ISupportsPlaylist pl && pl.IsPlaylistUrl(query))
-                     .Cast<ISupportsPlaylist>())
+        var search_tasks = Platforms
+            .Where(p => p is ISupportsPlaylist pl && pl.IsPlaylistUrl(query))
+            .Cast<ISupportsPlaylist>()
+            .Select(platform => platform.TrySearchPlaylist(query));
+        
+        foreach (var task in search_tasks)
         {
-            var search = await platform.TrySearchPlaylist(query);
+            var search = await task;
             if (search == Status.Error) continue;
 
             results.AddRange(search.GetOK());
