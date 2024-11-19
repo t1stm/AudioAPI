@@ -164,30 +164,35 @@ public partial class MusicManager
 
     private static bool ScoreSingleTerm(string term, MusicInfo r)
     {
-        var term_clean = ParentesisRegex()
-            .Replace(term, string.Empty);
+        var term_clean = LevenshteinDistance.RemoveFormatting(
+            ParentesisRegex().Replace(term, string.Empty));
         
-        var romanized_clean = r.RomanizedTitle is null ? null : 
-            ParentesisRegex().Replace(r.RomanizedTitle, string.Empty);
+        var romanized_title_clean = r.RomanizedTitle is null ? null : 
+            LevenshteinDistance.RemoveFormatting(ParentesisRegex().Replace(r.RomanizedTitle, string.Empty));
         
-        var original_clean = r.OriginalTitle is null ? null : 
-            ParentesisRegex().Replace(r.OriginalTitle, string.Empty);
+        var original_title_clean = r.OriginalTitle is null ? null : 
+            LevenshteinDistance.RemoveFormatting(ParentesisRegex().Replace(r.OriginalTitle, string.Empty));
+        
+        var romanized_artist_clean = r.RomanizedAuthor is null ? null :
+            LevenshteinDistance.RemoveFormatting(r.RomanizedAuthor);
+        
+        var original_artist_clean = r.OriginalAuthor is null ? null : 
+            LevenshteinDistance.RemoveFormatting(r.OriginalAuthor);
         
         var eval = 
-                    romanized_clean != null && 
-                    (LevenshteinDistance.ComputeLean(romanized_clean, term_clean) < 2 ||
-                    LevenshteinDistance.ComputeLean($"{romanized_clean}{r.RomanizedAuthor}", term_clean) < 3 ||
-                    LevenshteinDistance.ComputeLean($"{r.RomanizedAuthor}{romanized_clean}", term_clean) < 3 ||
-                    LevenshteinDistance.ComputeLean($"{romanized_clean}{r.OriginalAuthor}", term_clean) < 3) 
+                    romanized_title_clean != null && 
+                    (LevenshteinDistance.ComputeStrict(romanized_title_clean, term_clean) < 2 ||
+                    LevenshteinDistance.ComputeStrict($"{romanized_title_clean}{romanized_artist_clean}", term_clean) < 3 ||
+                    LevenshteinDistance.ComputeStrict($"{romanized_artist_clean}{romanized_title_clean}", term_clean) < 3 ||
+                    LevenshteinDistance.ComputeStrict($"{romanized_title_clean}{original_artist_clean}", term_clean) < 3) 
                     
                     || 
                     
-                    original_clean != null && 
-                   (LevenshteinDistance.ComputeLean(original_clean, term_clean) < 2 ||
-                    LevenshteinDistance.ComputeLean($"{original_clean}{r.OriginalAuthor}", term_clean) < 3 ||
-                    LevenshteinDistance.ComputeLean($"{r.OriginalAuthor}{original_clean}", term_clean) < 3 ||
-               
-                    LevenshteinDistance.ComputeLean($"{original_clean}{r.RomanizedAuthor}", term_clean) < 3);
+                    original_title_clean != null && 
+                   (LevenshteinDistance.ComputeStrict(original_title_clean, term_clean) < 2 ||
+                    LevenshteinDistance.ComputeStrict($"{original_title_clean}{original_artist_clean}", term_clean) < 3 ||
+                    LevenshteinDistance.ComputeStrict($"{original_artist_clean}{original_title_clean}", term_clean) < 3 ||
+                    LevenshteinDistance.ComputeStrict($"{original_title_clean}{romanized_artist_clean}", term_clean) < 3);
         return eval;
     }
 

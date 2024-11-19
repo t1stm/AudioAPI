@@ -2,21 +2,11 @@ namespace Audio.Utils;
 
 public static class LevenshteinDistance
 {
-    public static int ComputeLean(string? s, string? t)
-    {
-        return ComputeStrict(RemoveFormatting(s), RemoveFormatting(t)); // I know. No need to kill me over it.
-    }
-
-    private static string? RemoveFormatting(string? str)
+    public static string? RemoveFormatting(string? str)
     {
         return 
             str is null ? null :
             string.Concat(str.Where(char.IsLetterOrDigit)).ToLower();
-    }
-
-    public static string FastRemove(this string source, string remove)
-    {
-        return source.Replace(remove, null);
     }
 
     public static int ComputeStrict(string? s, string? t)
