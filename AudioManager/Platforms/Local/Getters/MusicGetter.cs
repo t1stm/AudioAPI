@@ -12,10 +12,10 @@ public class MusicGetter : ContentGetter
         PlatformResult result, CancellationToken cancellation_token)
     {
         if (result is not MusicResult local_result) 
-            return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(DownloadError.GenericError));
+            return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(DownloadError.WrongType));
         
         if (!File.Exists(local_result.Path)) return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(
-            DownloadError.GenericError));
+            DownloadError.FileReadFailure));
             
         var stream_spreader = new StreamSpreader();
         _ = Task.Run(async () =>

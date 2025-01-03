@@ -25,7 +25,7 @@ public class Getter_YouTubeExplode : ContentGetter
 
             var chosen_audio_only_stream = audio_only_streams.FirstOrDefault();
             if (chosen_audio_only_stream is null)
-                return Result<StreamSpreader, DownloadError>.Error(DownloadError.GenericError);
+                return Result<StreamSpreader, DownloadError>.Error(DownloadError.NotFound);
 
             var stream_spreader = new StreamSpreader();
             _ = Task.Run(DownloadFunction, cancellation_token);
@@ -48,7 +48,7 @@ public class Getter_YouTubeExplode : ContentGetter
         catch (Exception e)
         {
             Console.WriteLine(e);
-            return Result<StreamSpreader, DownloadError>.Error(DownloadError.GenericError);
+            return Result<StreamSpreader, DownloadError>.Error(DownloadError.Generic);
         }
     }
 }

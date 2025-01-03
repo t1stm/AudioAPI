@@ -23,7 +23,7 @@ public class Getter_VideoLibrary : ContentGetter
 
             if (best_audio is null)
                 return Result<StreamSpreader, DownloadError>
-                    .Error(DownloadError.GenericError);
+                    .Error(DownloadError.NotFound);
 
             var stream_spreader = new StreamSpreader();
 
@@ -39,7 +39,7 @@ public class Getter_VideoLibrary : ContentGetter
         catch (Exception e)
         {
             Console.WriteLine(e);
-            return Result<StreamSpreader, DownloadError>.Error(DownloadError.GenericError);
+            return Result<StreamSpreader, DownloadError>.Error(DownloadError.Generic);
         }
     }
 }

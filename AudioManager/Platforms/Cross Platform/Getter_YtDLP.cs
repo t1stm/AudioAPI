@@ -16,7 +16,7 @@ public sealed class Getter_YtDLP : ContentGetter
         
         if (process is null)
         {
-            return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(DownloadError.GenericError));
+            return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(DownloadError.Generic));
         }
         
         var stream_spreader = new StreamSpreader();

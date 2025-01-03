@@ -1,4 +1,5 @@
 using Audio;
+using Audio.Utils;
 using AudioManager.Platforms.Errors;
 using AudioManager.Platforms.Optional.Supports;
 using Result;
@@ -31,7 +32,7 @@ public class YouTubeSearchProvider_Madeyoga : SearchProvider,
                     Name = v.Title,
                     Artist = v.Author,
                     Duration = TimeSpan.ParseExact(v.Duration, [@"h\:m\:s", @"m\:s", "s"], null),
-                    ThumbnailUrl = v.ThumbnailUrl.Split('?')[0] // remove tracking data
+                    ThumbnailUrl = v.ThumbnailUrl.SliceTo("?")// remove tracking data
                 }));
     }
 }

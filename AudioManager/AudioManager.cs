@@ -118,7 +118,7 @@ public class AudioManager
 
             var downloader = await result.TryGetContentData(cancellation_token);
             if (downloader == Status.Error) 
-                return Result<StreamSpreader, DownloadError>.Error(DownloadError.GenericError);
+                return Result<StreamSpreader, DownloadError>.Error(DownloadError.Generic);
         
             stream_spreader = downloader.GetOK();
             CachedResults.Add(result.ID, stream_spreader);

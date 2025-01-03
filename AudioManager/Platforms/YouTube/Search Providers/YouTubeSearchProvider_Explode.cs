@@ -1,3 +1,4 @@
+using Audio.Utils;
 using AudioManager.Platforms.Errors;
 using AudioManager.Platforms.Optional.Supports;
 using Result;
@@ -16,10 +17,7 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider,
 
     private static string RemoveTracking(string thumbnailUrl)
     {
-        var tracking_index = thumbnailUrl.IndexOf('?');
-        return tracking_index != -1 ? 
-            thumbnailUrl[..tracking_index] : 
-            thumbnailUrl;
+        return thumbnailUrl.SliceTo("?");
     }
 
     public async Task<Result<PlatformResult, SearchError>> TryID(string id, CancellationToken token)
@@ -76,8 +74,8 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider,
         {
             var youtube_client = new YoutubeClient();
             var playlist_id = playlist_url
-                .Split("list=").Last()
-                .Split("&").First();
+                .SliceAfter("list=")
+                .SliceTo("&");
 
             var playlist_results = new List<PlatformResult>();
             await foreach (var video in youtube_client.Playlists.GetVideoBatchesAsync(playlist_id, cancellation_token))
