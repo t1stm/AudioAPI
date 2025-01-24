@@ -1,10 +1,10 @@
 using AudioManager.Platforms.Errors;
-using AudioManager.Platforms.Local.Getters;
-using AudioManager.Platforms.Local.Search_Providers;
+using AudioManager.Platforms.MusicDatabase.Getters;
+using AudioManager.Platforms.MusicDatabase.Search_Providers;
 using AudioManager.Platforms.Optional.Supports;
 using Result;
 
-namespace AudioManager.Platforms.Local;
+namespace AudioManager.Platforms.MusicDatabase;
 
 public class MusicDatabase : Platform, ISupportsSearch
 {

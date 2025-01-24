@@ -5,7 +5,7 @@ using Newtonsoft.Json;
 using Result;
 using Result.Objects;
 
-namespace AudioManager.Platforms.Local.Manager;
+namespace AudioManager.Platforms.MusicDatabase.Manager;
 
 public partial class MusicManager
 {

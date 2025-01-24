@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Newtonsoft.Json;
 
-namespace AudioManager.Platforms.Local.Manager;
+namespace AudioManager.Platforms.MusicDatabase.Manager;
 
 public class CoverExtractor
 {

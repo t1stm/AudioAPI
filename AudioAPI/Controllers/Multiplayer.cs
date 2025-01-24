@@ -49,7 +49,7 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
     }
     
     [HttpGet("/Audio/Multiplayer/Join")]
-    public async Task<IActionResult> Join(string room)
+    public async Task<IActionResult> Join(string room, string? username)
     {
         try
         {
@@ -61,7 +61,7 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
             using var web_socket = await HttpContext.WebSockets.AcceptWebSocketAsync();
             logger.LogDebug("WebSocket \'{ID}\' connected, with IP: {IP}", HttpContext.TraceIdentifier,
                 HttpContext.Connection.RemoteIpAddress);
-            await HandleRoomJoinWebSocket(web_socket, guid, HttpContext.TraceIdentifier, HttpContext.RequestAborted);
+            await HandleRoomJoinWebSocket(web_socket, guid, username, HttpContext.TraceIdentifier, HttpContext.RequestAborted);
         }
         catch (Exception e)
         {
@@ -110,11 +110,11 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
         }
     }
 
-    private async Task HandleRoomJoinWebSocket(WebSocket web_socket, Guid room_id, string id,
+    private async Task HandleRoomJoinWebSocket(WebSocket web_socket, Guid room_id, string? username, string id,
         CancellationToken cancellation_token)
     {
         var reader = new WebSocketTextReader();
-        await HandleUserMessage(id, room_id, web_socket, string.Empty);
+        await HandleUserMessage(id, room_id, web_socket, string.Empty, username);
         Result<string, WebSocketReadStatus> response;
         do
         {
@@ -133,7 +133,7 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
         logger.LogDebug("WebSocket \'{ID}\' disconnected", id);
     }
 
-    private async Task<HandleEvent> HandleUserMessage(string id, Guid room_id, WebSocket web_socket, string message)
+    private async Task<HandleEvent> HandleUserMessage(string id, Guid room_id, WebSocket web_socket, string message, string? initial_username = null)
     {
         logger.LogDebug("WebSocket \'{ID}\' received: \'{Message}\'", id, message);
         
@@ -143,7 +143,7 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
         
         if (room is null) return HandleEvent.RoomClosed;
         
-        var user = await room.GetOrAddUser(id, web_socket);
+        var user = await room.GetOrAddUser(id, web_socket, initial_username);
         await room.HandleUserMessage(user, message);
 
         return HandleEvent.None;

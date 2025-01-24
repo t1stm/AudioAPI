@@ -1,4 +1,4 @@
-namespace AudioManager.Platforms.Local.Manager.Objects;
+namespace AudioManager.Platforms.MusicDatabase.Manager.Objects;
 
 public class EmbeddedImage
 {

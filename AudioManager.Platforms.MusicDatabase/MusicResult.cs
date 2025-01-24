@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace AudioManager.Platforms.Local;
+namespace AudioManager.Platforms.MusicDatabase;
 
 public class MusicResult : PlatformResult
 {

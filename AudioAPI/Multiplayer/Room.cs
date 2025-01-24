@@ -47,9 +47,13 @@ public class Room
         await Queue.Update();
     }
     
-    public async Task<User> GetOrAddUser(string id, WebSocket web_socket)
+    public async Task<User> GetOrAddUser(string id, WebSocket web_socket, string? initial_username)
     {
-       return await Store.GetOrAddUser(id, web_socket, user => Player.Joined(user));
+       return await Store.GetOrAddUser(id, web_socket, user =>
+       {
+           user.Username = initial_username;
+           return Player.Joined(user);
+       });
     }
     
     public async Task RemoveUser(string id)

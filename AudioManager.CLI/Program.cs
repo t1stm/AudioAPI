@@ -1,9 +1,14 @@
 ﻿using System.Text.Json;
+using AudioManager.Platforms.MusicDatabase;
+using AudioManager.Platforms.YouTube;
 using AudioManager.Streams;
 using Result.Objects;
 
 var audio_manager = new Audio.AudioManager();
 audio_manager.Initialize();
+
+audio_manager.RegisterPlatform<YouTube>();
+audio_manager.RegisterPlatform<MusicDatabase>();
 
 // https://www.youtube.com/watch?v=dQw4w9WgXcQ
 var found = await audio_manager.SearchID("yt://dQw4w9WgXcQ");

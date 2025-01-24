@@ -2,13 +2,15 @@
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
-        <TargetFramework>net8.0</TargetFramework>
+        <TargetFramework>net9.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\AudioManager\AudioManager.csproj" />
+        <ProjectReference Include="..\AudioManager.Platforms.YouTube\AudioManager.Platforms.YouTube.csproj" />
+        <ProjectReference Include="..\AudioManager.Platforms.MusicDatabase\AudioManager.Platforms.MusicDatabase.csproj" />
     </ItemGroup>
     
 </Project>

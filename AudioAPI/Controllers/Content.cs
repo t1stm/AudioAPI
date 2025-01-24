@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Net;
-using System.Net.Mime;
 using Audio;
 using Audio.FFmpeg;
 using AudioManager.Platforms;

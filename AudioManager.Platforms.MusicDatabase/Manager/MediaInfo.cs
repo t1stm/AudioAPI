@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 
-namespace AudioManager.Platforms.Local.Manager;
+namespace AudioManager.Platforms.MusicDatabase.Manager;
 
 public static class MediaInfo
 {

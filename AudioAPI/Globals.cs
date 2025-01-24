@@ -1,5 +1,7 @@
 using System.Timers;
 using Audio.FFmpeg;
+using AudioManager.Platforms.MusicDatabase;
+using AudioManager.Platforms.YouTube;
 
 namespace WebApplication3;
 
@@ -17,6 +19,9 @@ public static class Globals
     {
         AudioManager = new Audio.AudioManager();
         AudioManager.Initialize();
+        
+        AudioManager.RegisterPlatform<YouTube>();
+        AudioManager.RegisterPlatform<MusicDatabase>();
         
         ExpireTimer = new System.Timers.Timer();
         ExpireTimer.Interval = 60 * 1000;

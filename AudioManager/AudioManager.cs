@@ -1,9 +1,7 @@
 ﻿using System.Timers;
 using AudioManager.Platforms;
 using AudioManager.Platforms.Errors;
-using AudioManager.Platforms.Local;
 using AudioManager.Platforms.Optional.Supports;
-using AudioManager.Platforms.YouTube;
 using AudioManager.Streams;
 using Result;
 using Result.Objects;
@@ -23,10 +21,7 @@ public class AudioManager
         Interval = 60 * 1000
     };
     
-    public List<Platform> Platforms { get; } = [
-        new MusicDatabase(),
-        new YouTube()
-    ];
+    public List<Platform> Platforms { get; } = [];
 
     public void Initialize()
     {
@@ -37,9 +32,11 @@ public class AudioManager
         ExpireTimer.Start();
     }
 
-    public void RegisterPlatform(Platform platform)
+    public void RegisterPlatform<T>() where T : Platform, new()
     {
+        var platform = new T();
         platform.Initialize();
+        
         Platforms.Add(platform);
         MapPlatformIdentifiers(platform);
     }
@@ -124,9 +121,9 @@ public class AudioManager
             CachedResults.Add(result.ID, stream_spreader);
             ExpireTimestamps.Add(result.ID, DateTime.UtcNow.Add(ExpireTimeSpan));
 
-            if (result is YouTubeResult youtube_result)
+            if (result is ISupportsCaching caching)
             {
-                await YouTubeCacheProvider.UpdateCache(youtube_result, stream_spreader);
+                await caching.RunCacheProcess(stream_spreader);
             }
         
             return Result<StreamSpreader, DownloadError>.Success(stream_spreader);
