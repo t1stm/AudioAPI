@@ -5,16 +5,16 @@ using Result;
 
 namespace AudioAPI.Controllers.Helpers;
 
-public class WebSocketTextReader
+public class WebSocketTextReader(ILogger<Multiplayer> logger)
 {
     protected readonly StringBuilder _builder = new();
     
     public async Task<Result<string, WebSocketReadStatus>> ReadWholeMessageAsync(WebSocket web_socket,
-        CancellationToken? cancellation_token = default)
+        CancellationToken? cancellation_token = null)
     {
         try
         {
-            cancellation_token ??= new CancellationToken();
+            cancellation_token ??= CancellationToken.None;
             _builder.Clear();
             if (web_socket.State != WebSocketState.Open)
                 return Result<string, WebSocketReadStatus>.Error(WebSocketReadStatus.Closed);

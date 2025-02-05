@@ -19,10 +19,10 @@ public static class Globals
     {
         AudioManager = new Audio.AudioManager();
         AudioManager.Initialize();
-        
-        AudioManager.RegisterPlatform<YouTube>();
+
         AudioManager.RegisterPlatform<MusicDatabase>();
-        
+        AudioManager.RegisterPlatform<YouTube>();
+
         ExpireTimer = new System.Timers.Timer();
         ExpireTimer.Interval = 60 * 1000;
         ExpireTimer.Elapsed += ExpireFFmpegSessions;

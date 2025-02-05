@@ -45,7 +45,7 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
             throw;
         }
 
-        return new EmptyResult();
+        return Ok();
     }
     
     [HttpGet("/Audio/Multiplayer/Join")]
@@ -69,10 +69,10 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
             throw;
         }
 
-        return new EmptyResult();
+        return Ok();
     }
 
-    private static async Task HandleRoomUpdateWebSocket(WebSocket web_socket, CancellationToken? cancellation_token = default)
+    private static async Task HandleRoomUpdateWebSocket(WebSocket web_socket, CancellationToken? cancellation_token = null)
     {
         cancellation_token ??= CancellationToken.None;
         var change_id = Manager.GetChangeId();
@@ -113,7 +113,7 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
     private async Task HandleRoomJoinWebSocket(WebSocket web_socket, Guid room_id, string? username, string id,
         CancellationToken cancellation_token)
     {
-        var reader = new WebSocketTextReader();
+        var reader = new WebSocketTextReader(logger);
         await HandleUserMessage(id, room_id, web_socket, string.Empty, username);
         Result<string, WebSocketReadStatus> response;
         do

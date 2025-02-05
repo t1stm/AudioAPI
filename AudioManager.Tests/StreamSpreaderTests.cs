@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using AudioManager.Platforms.YouTube;
 using Result.Objects;
 using Xunit.Abstractions;
 
@@ -73,7 +74,9 @@ public class StreamSpreaderTests(ITestOutputHelper output)
         const int stream_count = 16;
         output.WriteLine("Starting download test.");
         var audio_manager = new Audio.AudioManager();
+        
         audio_manager.Initialize();
+        audio_manager.RegisterPlatform<YouTube>();
         
         var found = await audio_manager.SearchID("yt://dQw4w9WgXcQ");
         Assert.True(found == Status.OK, "YouTube search for \'dQw4w9WgXcQ\' failed.");

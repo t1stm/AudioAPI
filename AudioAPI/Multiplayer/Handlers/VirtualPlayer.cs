@@ -17,11 +17,6 @@ public class VirtualPlayer(MessageQueue MessageQueue)
     protected long? StartTime;
     protected TimeSpan? PauseTime;
     protected bool Playing = true;
-
-    protected readonly JsonSerializerOptions SerializerOptions = new()
-    {
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-    };
     
     public async Task Next()
     {
