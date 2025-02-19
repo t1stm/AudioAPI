@@ -10,4 +10,4 @@
 
 * A better README :P
 * Examples on how to add more APIs without modifying the base.
-* Separating different platforms into their own projects.
+* ~~Separating different platforms into their own projects.~~
