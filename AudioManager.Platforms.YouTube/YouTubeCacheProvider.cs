@@ -4,20 +4,20 @@ namespace AudioManager.Platforms.YouTube;
 
 public static class YouTubeCacheProvider
 {
-    public static readonly SemaphoreSlim CacheLock = new(1,1);
+    public static readonly SemaphoreSlim CacheLock = new(1, 1);
     public static readonly Dictionary<string, StreamSpreader> CurrentCache = new();
-    
+
     public static async Task UpdateCache(PlatformResult result, StreamSpreader stream_spreader)
     {
         if (result is not YouTubeResult youtube_result) return;
-        var export_directory = 
+        var export_directory =
             Environment.GetEnvironmentVariable("YOUTUBE_CACHE", EnvironmentVariableTarget.Process);
 
         if (export_directory is null) return;
-        
+
         Directory.CreateDirectory(export_directory);
         var file_path = Path.Combine(export_directory, $"{youtube_result.GetPureID()}.webm");
-        
+
         if (File.Exists(file_path)) return;
 
         await CacheLock.WaitAsync();
@@ -27,9 +27,9 @@ public static class YouTubeCacheProvider
             return;
         }
         CacheLock.Release();
-        
+
         var new_file = File.Create(file_path);
-        
+
         var queue = new Queue<(byte[], int, int)>();
         var sync_semaphore = new SemaphoreSlim(1, 1);
 
@@ -46,13 +46,13 @@ public static class YouTubeCacheProvider
                 await SyncCall();
                 await new_file.FlushAsync();
                 await new_file.DisposeAsync();
-                
+
                 await CacheLock.WaitAsync();
                 CurrentCache.Remove(file_path);
                 CacheLock.Release();
             }
         };
-        
+
         stream_spreader.Subscribe(stream_subscriber);
         return;
 

@@ -40,7 +40,7 @@ var stream_subscriber = new StreamSubscriber
     WriteCall = async (bytes, offset, length) =>
     {
         total += length;
-        
+
         await stream.WriteAsync(bytes.AsMemory(offset, length));
         return StreamStatus.Open;
     },

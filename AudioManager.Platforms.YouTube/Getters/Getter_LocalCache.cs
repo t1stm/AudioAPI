@@ -16,25 +16,25 @@ public class Getter_LocalCache : ContentGetter
         if (env is null)
         {
             Environment.SetEnvironmentVariable("YOUTUBE_CACHE", CacheLocation);
-        } 
+        }
         CacheLocation = env ?? CacheLocation;
-        
+
         base.Initialize();
     }
 
     public override Task<Result<StreamSpreader, DownloadError>> TryGetContentData(
         PlatformResult result, CancellationToken cancellation_token)
     {
-        if (result is not YouTubeResult youtube_result) 
+        if (result is not YouTubeResult youtube_result)
             return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(DownloadError.WrongType));
 
         var file = youtube_result.GetPureID() + ".webm";
         Directory.CreateDirectory(CacheLocation);
-        
+
         var path = Path.Combine(CacheLocation, file);
         if (!File.Exists(path)) return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(
             DownloadError.FileReadFailure));
-            
+
         var stream_spreader = new StreamSpreader();
         _ = Task.Run(async () =>
         {
@@ -42,7 +42,7 @@ public class Getter_LocalCache : ContentGetter
             await stream.CopyToAsync(stream_spreader, cancellation_token);
             await stream_spreader.CloseAsync();
         }, cancellation_token);
-        
+
         return Task.FromResult(Result<StreamSpreader, DownloadError>.Success(stream_spreader));
     }
 }

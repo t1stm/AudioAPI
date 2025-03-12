@@ -63,7 +63,7 @@ public static class Flac
     private static bool HasHeader(Span<byte> header, IReadOnlyList<byte> source)
     {
         if (header.Length > source.Count) return false;
-        
+
         for (var i = 0; i < header.Length; i++)
         {
             if (header[i] != source[i]) return false;

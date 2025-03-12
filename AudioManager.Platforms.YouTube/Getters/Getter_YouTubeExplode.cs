@@ -10,7 +10,7 @@ public class Getter_YouTubeExplode : ContentGetter
 {
     public override int Priority => 40;
     protected static YoutubeClient Client => YouTubeSearchProvider_Explode.Client;
-    
+
     public override async Task<Result<StreamSpreader, DownloadError>> TryGetContentData(PlatformResult result, CancellationToken cancellation_token)
     {
         try
@@ -30,13 +30,13 @@ public class Getter_YouTubeExplode : ContentGetter
             var stream_spreader = new StreamSpreader();
             _ = Task.Run(DownloadFunction, cancellation_token);
             return Result<StreamSpreader, DownloadError>.Success(stream_spreader);
-            
+
             async Task DownloadFunction()
             {
                 try
                 {
                     await youtube_client.Videos.Streams.CopyToAsync(
-                        chosen_audio_only_stream, stream_spreader, 
+                        chosen_audio_only_stream, stream_spreader,
                         cancellationToken: cancellation_token);
                 }
                 finally

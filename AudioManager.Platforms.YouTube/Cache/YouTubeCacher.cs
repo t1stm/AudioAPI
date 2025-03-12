@@ -18,7 +18,7 @@ public class YouTubeCacher
     private const string CacheFolder = "./cache";
     private const string FileName = "YouTube.json";
     private const string CachePath = $"{CacheFolder}/{FileName}";
-    
+
     private readonly byte[] start_bytes = "["u8.ToArray();
     private readonly byte[] end_bytes = "]"u8.ToArray();
     private readonly byte[] comma_bytes = ","u8.ToArray();
@@ -27,7 +27,7 @@ public class YouTubeCacher
     {
         await Sync.WaitAsync();
         Directory.CreateDirectory(CacheFolder);
-        
+
         var file_info = new FileInfo(CachePath);
         if (delta is not null && file_info is { Exists: true, Length: > 32 })
         {
@@ -35,7 +35,7 @@ public class YouTubeCacher
             file.SetLength(file.Length - end_bytes.Length);
             file.Seek(0, SeekOrigin.End);
             await file.WriteAsync(comma_bytes);
-            
+
             var json_bytes = JsonSerializer.SerializeToUtf8Bytes(delta, JsonSerializerOptions);
             await file.WriteAsync(json_bytes.AsMemory()[start_bytes.Length..]);
             await file.FlushAsync();
@@ -55,22 +55,22 @@ public class YouTubeCacher
         await Sync.WaitAsync();
         if (!File.Exists(CachePath))
             return;
-        
+
         await using var file = File.Open(CachePath, FileMode.Open);
         var deserialized = await JsonSerializer.DeserializeAsync<YouTubeResult[]>(file, JsonSerializerOptions);
         Cache.Clear();
 
         if (deserialized is null)
             return;
-            
+
         foreach (var result in deserialized)
         {
-            if (!Cache.TryAdd(result.GetPureID(), result)) 
+            if (!Cache.TryAdd(result.GetPureID(), result))
                 duplicate = true;
         }
 
         Sync.Release();
-        
+
         if (duplicate)
         {
             await SaveAsync();
@@ -86,7 +86,7 @@ public class YouTubeCacher
             Cache.TryAdd(result.GetPureID(), result);
         }
         Sync.Release();
-        
+
         if (youtube_results.Length > 0)
             await SaveAsync(youtube_results);
     }
@@ -96,8 +96,8 @@ public class YouTubeCacher
         await Sync.WaitAsync();
         var found = Cache.TryGetValue(id, out var result);
         Sync.Release();
-        
-        return found && result is not null ? Result<YouTubeResult, SearchError>.Success(result) :  
+
+        return found && result is not null ? Result<YouTubeResult, SearchError>.Success(result) :
             Result<YouTubeResult, SearchError>.Error(default);
     }
 }

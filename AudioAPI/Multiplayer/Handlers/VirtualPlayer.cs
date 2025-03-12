@@ -8,21 +8,21 @@ namespace WebApplication3.Multiplayer;
 public class VirtualPlayer(MessageQueue MessageQueue)
 {
     public List<PlatformResult> Items { get; set; } = [];
-    
+
     protected readonly AddedUserHandler Loaded = new();
     protected readonly AddedUserHandler Finished = new();
     protected readonly SemaphoreSlim Sync = new(1);
     protected int CurrentIndex;
-    
+
     protected long? StartTime;
     protected TimeSpan? PauseTime;
     protected bool Playing = true;
-    
+
     public async Task Next()
     {
         if (CurrentIndex < Items.Count)
             CurrentIndex++;
-        
+
         UpdateStart();
         await SetPlaying(false);
         await Broadcast(Current());
@@ -43,36 +43,36 @@ public class VirtualPlayer(MessageQueue MessageQueue)
         if (index < 0 || index >= Items.Count) return;
         var old_current = CurrentIndex;
         Items.RemoveAt(index);
-        
+
         if (old_current > index)
             CurrentIndex--;
 
         await Broadcast(Queue());
     }
-    
+
     public async Task SetNext(int index)
     {
         if (index < 0 || index >= Items.Count || index == CurrentIndex) return;
         if (index < CurrentIndex)
             CurrentIndex--;
-        
+
         var item = Items[index];
         Items.RemoveAt(index);
         Items.Insert(CurrentIndex + 1, item);
-        
+
         await Broadcast(Queue());
     }
-    
+
     public async Task SkipTo(int index)
     {
         if (index < 0 || index >= Items.Count || index == CurrentIndex) return;
         CurrentIndex = index;
-        
+
         UpdateStart();
         await SetPlaying(false);
         await Broadcast(Current());
     }
-    
+
     public async Task SetFinished(User user)
     {
         await Finished.Add(user);
@@ -84,12 +84,12 @@ public class VirtualPlayer(MessageQueue MessageQueue)
         if (!Finished.Fulfilled(MessageQueue)) return;
         await Next();
     }
-    
+
     public async Task Shuffle()
     {
         var random = new Random();
         var count = Items.Count;
-        
+
         Items = Items.OrderBy(_ => random.Next(count)).ToList();
         await Broadcast(Queue());
     }
@@ -99,7 +99,7 @@ public class VirtualPlayer(MessageQueue MessageQueue)
         Playing = state;
         await Broadcast($"playing {Playing}");
     }
-    
+
     public async Task TogglePlaying()
     {
         if (!StartTime.HasValue) return;
@@ -112,19 +112,19 @@ public class VirtualPlayer(MessageQueue MessageQueue)
                 PauseTime = Stopwatch.GetElapsedTime(StartTime.Value);
                 break;
             case true:
-                if (PauseTime.HasValue) 
+                if (PauseTime.HasValue)
                     StartTime = Stopwatch.GetTimestamp() - TimeSpanToTimestamp(PauseTime.Value);
                 PauseTime = null;
                 break;
         }
-        
+
         if (!Playing)
         {
             var seconds = Stopwatch.GetElapsedTime(StartTime.Value).TotalSeconds;
             await Broadcast(Time(seconds));
         }
     }
-    
+
     public async Task Stop()
     {
         Playing = false;
@@ -140,14 +140,14 @@ public class VirtualPlayer(MessageQueue MessageQueue)
 
         await Broadcast(Queue());
     }
-    
+
     public async Task Joined(User user)
     {
         await user.SendMessageAsync(Queue());
         await user.SendMessageAsync(Current());
         await user.SendMessageAsync($"playing {Playing}");
-        
-        if (Items.Count > 0) 
+
+        if (Items.Count > 0)
             await SyncTime(user);
 
         await Broadcast($"chat System %% User \'{user.ChatUsername}\' joined the session.");
@@ -156,18 +156,18 @@ public class VirtualPlayer(MessageQueue MessageQueue)
     public async Task SeekTo(double seconds)
     {
         await Sync.WaitAsync();
-        
+
         var wanted_time = TimeSpan.FromSeconds(seconds);
         var current_time = Stopwatch.GetTimestamp();
         var delta_time = current_time - TimeSpanToTimestamp(wanted_time);
-        
+
         StartTime = delta_time;
         Sync.Release();
 
         var seconds_broadcast = Stopwatch.GetElapsedTime(StartTime.Value).TotalSeconds;
         await Broadcast(Time(seconds_broadcast));
     }
-    
+
     public async Task SetLoaded(User user)
     {
         await Loaded.Add(user);
@@ -178,7 +178,7 @@ public class VirtualPlayer(MessageQueue MessageQueue)
     {
         if (!Loaded.Fulfilled(MessageQueue)) return;
         StartTime = Stopwatch.GetTimestamp();
-        
+
         await Broadcast(Time(0));
         await SetPlaying(true);
     }
@@ -188,20 +188,20 @@ public class VirtualPlayer(MessageQueue MessageQueue)
         var time = await GetCurrentTime();
         await user.SendMessageAsync($"seek {time}");
     }
-    
+
     public async Task<double> GetCurrentTime()
     {
         if (!StartTime.HasValue) return 0;
-        
+
         await Sync.WaitAsync();
-        
-        if (PauseTime.HasValue) 
+
+        if (PauseTime.HasValue)
             StartTime = Stopwatch.GetTimestamp() - TimeSpanToTimestamp(PauseTime.Value);
-        
+
         var time = Stopwatch.GetElapsedTime(StartTime.Value);
-        
+
         Sync.Release();
-        
+
         return time.TotalSeconds;
     }
 

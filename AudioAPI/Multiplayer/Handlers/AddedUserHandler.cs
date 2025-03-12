@@ -4,7 +4,7 @@ public class AddedUserHandler
 {
     protected readonly Queue<User> Users = new();
     protected readonly SemaphoreSlim Sync = new(1);
-    
+
     public void Clear() => Users.Clear();
 
     public async Task Add(User user)
@@ -13,7 +13,7 @@ public class AddedUserHandler
         Users.Enqueue(user);
         Sync.Release();
     }
-    
+
     public bool Fulfilled(MessageQueue queue)
     {
         if (Users.Count < queue.CurrentStore.Count) return false;

@@ -15,7 +15,7 @@ public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlayli
     public static readonly YouTubeCacher YouTubeCacher = new();
     public override HashSet<string> SearchIDIdentifiers => ["yt://"];
     public override HashSet<string> SearchPlaylistIdentifiers => ["yt-playlist://"];
-    public override HashSet<string> PlatformDomains => ["youtube.com", "youtu.be", 
+    public override HashSet<string> PlatformDomains => ["youtube.com", "youtu.be",
         "m.youtube.com", "music.youtube.com"];
     public override string Name => "YouTube";
     public override string Description => "The YouTube video and music platform.";
@@ -45,7 +45,7 @@ public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlayli
     public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchKeywords(string keywords,
         CancellationToken cancellation_token = default)
     {
-        foreach (var search_provider in 
+        foreach (var search_provider in
                  SearchProviders.Where(search_provider => search_provider is ISupportsSearch)
                      .Cast<ISupportsSearch>())
         {
@@ -56,11 +56,11 @@ public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlayli
 
         return Result<IEnumerable<PlatformResult>, SearchError>.Error(default);
     }
-    
+
     public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchPlaylist(string playlist,
         CancellationToken cancellation_token = default)
     {
-        foreach (var search_provider in 
+        foreach (var search_provider in
                  SearchProviders.Where(search_provider => search_provider is ISupportsPlaylist)
                      .Cast<ISupportsPlaylist>())
         {
@@ -87,7 +87,7 @@ public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlayli
                 .Cast<YouTubeResult>());
         });
     }
-    
+
     [GeneratedRegex(@"\/playlist\?list=[a-zA-Z0-9_-]+")]
     private static partial Regex PlaylistRegex();
 }

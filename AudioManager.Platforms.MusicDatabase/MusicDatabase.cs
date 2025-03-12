@@ -6,12 +6,12 @@ using Result;
 
 namespace AudioManager.Platforms.MusicDatabase;
 
-public class MusicDatabase : Platform, ISupportsSearch
+public class MusicDatabase : Platform, ISupportsSearch, ISupportsRandomResults
 {
     public override HashSet<string> SearchIDIdentifiers { get; } = ["audio://"];
     public override HashSet<string> PlatformDomains { get; } = [];
     public override HashSet<string> SearchPlaylistIdentifiers { get; } = [];
-    
+
     public override string Name => "Music Database";
     public override string Description => "Locally stored music";
     public override int Priority => 99;
@@ -32,5 +32,11 @@ public class MusicDatabase : Platform, ISupportsSearch
     {
         var provider = (MusicSearchProvider)SearchProviders[0];
         return provider.TrySearchKeywords(keywords, cancellation_token);
+    }
+
+    public Task<Result<IEnumerable<PlatformResult>, SearchError>> GetRandomResults(int count)
+    {
+        var provider = (MusicSearchProvider)SearchProviders[0];
+        return provider.GetRandomResults(count);
     }
 }

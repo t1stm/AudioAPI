@@ -8,7 +8,7 @@ namespace AudioAPI.Controllers.Helpers;
 public class WebSocketTextReader(ILogger<Multiplayer> logger)
 {
     protected readonly StringBuilder _builder = new();
-    
+
     public async Task<Result<string, WebSocketReadStatus>> ReadWholeMessageAsync(WebSocket web_socket,
         CancellationToken? cancellation_token = null)
     {

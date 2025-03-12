@@ -23,7 +23,7 @@ public class YouTubeSearchProvider_Cached(YouTubeCacher cacher) : SearchProvider
     {
         var result = await YouTubeCacher.GetFromCacheAsync(id);
         if (result == Status.Error) return Result<PlatformResult, SearchError>.Error(SearchError.NotFound);
-        
+
         var ok_result = result.GetOK();
         ok_result.Downloaders = ContentDownloaders;
         return Result<PlatformResult, SearchError>.Success(ok_result);

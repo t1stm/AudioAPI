@@ -4,7 +4,7 @@ public static class LevenshteinDistance
 {
     public static string? RemoveFormatting(string? str)
     {
-        return 
+        return
             str is null ? null :
             string.Concat(str.Where(char.IsLetterOrDigit)).ToLower();
     }
@@ -28,14 +28,14 @@ public static class LevenshteinDistance
         }
 
         for (var i = 1; i <= n; i++)
-        for (var j = 1; j <= m; j++)
-        {
-            var cost = t[j - 1] == s[i - 1] ? 0 : 1;
-            var min1 = d[i - 1, j] + 1;
-            var min2 = d[i, j - 1] + 1;
-            var min3 = d[i - 1, j - 1] + cost;
-            d[i, j] = Math.Min(Math.Min(min1, min2), min3);
-        }
+            for (var j = 1; j <= m; j++)
+            {
+                var cost = t[j - 1] == s[i - 1] ? 0 : 1;
+                var min1 = d[i - 1, j] + 1;
+                var min2 = d[i, j - 1] + 1;
+                var min3 = d[i - 1, j - 1] + cost;
+                d[i, j] = Math.Min(Math.Min(min1, min2), min3);
+            }
 
         return d[n, m];
     }

@@ -13,7 +13,7 @@ public abstract class Platform : ISupportsID
     public abstract string Name { get; }
     public abstract string Description { get; }
     public abstract int Priority { get; }
-    
+
     protected abstract List<SearchProvider> SearchProviders { get; set; }
     protected abstract List<ContentGetter> ContentDownloaders { get; set; }
 
@@ -33,11 +33,11 @@ public abstract class Platform : ISupportsID
     {
         SearchProviders.ForEach(s => s.RegisterContentDownloaders(ContentDownloaders));
     }
-    
+
     public virtual async Task<Result<PlatformResult, SearchError>> TryID(string id,
         CancellationToken cancellation_token = default)
     {
-        foreach (var search_provider in 
+        foreach (var search_provider in
                  SearchProviders.Where(search_provider => search_provider is ISupportsID)
                      .Cast<ISupportsID>())
         {

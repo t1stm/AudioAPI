@@ -28,13 +28,13 @@ app.UseWebSockets(new WebSocketOptions
     KeepAliveInterval = TimeSpan.FromSeconds(5)
 });
 
-if (Environment.GetEnvironmentVariable("DOMAIN") == null) 
+if (Environment.GetEnvironmentVariable("DOMAIN") == null)
     Environment.SetEnvironmentVariable("DOMAIN", "gergov.bg/");
 
-if (Environment.GetEnvironmentVariable("STORAGE") == null) 
+if (Environment.GetEnvironmentVariable("STORAGE") == null)
     Environment.SetEnvironmentVariable("STORAGE", "./Music Database");
 
-if (Environment.GetEnvironmentVariable("ALBUM_COVERS") == null) 
+if (Environment.GetEnvironmentVariable("ALBUM_COVERS") == null)
     Environment.SetEnvironmentVariable("ALBUM_COVERS", "./Music Database/Album_Covers");
 
 // initialize manager.

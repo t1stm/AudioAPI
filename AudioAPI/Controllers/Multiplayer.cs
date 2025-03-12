@@ -18,7 +18,7 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
     {
         var room_id = await Manager.CreateNewRoom();
         logger.LogInformation("Room created: {Room}", room_id);
-        
+
         var room = Manager.GetRoom(room_id);
         return new JsonResult(room);
     }
@@ -36,7 +36,7 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
             using var web_socket = await HttpContext.WebSockets.AcceptWebSocketAsync();
             logger.LogDebug("Room update websocket \'{ID}\' connected, with IP: {IP}", HttpContext.TraceIdentifier,
                 HttpContext.Connection.RemoteIpAddress);
-            
+
             await HandleRoomUpdateWebSocket(web_socket);
         }
         catch (Exception e)
@@ -47,7 +47,7 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
 
         return Ok();
     }
-    
+
     [HttpGet("/Audio/Multiplayer/Join")]
     public async Task<IActionResult> Join(string room, string? username)
     {
@@ -97,7 +97,7 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
         }
         while (web_socket.State == WebSocketState.Open && !cancellation_token.Value.IsCancellationRequested);
 
-        
+
         await web_socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
         return;
 
@@ -105,7 +105,7 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
         {
             var rooms = Manager.GetRooms();
             var serialized = JsonSerializer.Serialize(rooms);
-            
+
             await user.SendMessageAsync(serialized);
         }
     }
@@ -120,15 +120,15 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
         {
             response = await reader.ReadWholeMessageAsync(web_socket, cancellation_token);
             if (response == Status.Error) break;
-            
+
             var handle = await HandleUserMessage(id, room_id, web_socket, response.GetOK());
             if (handle != HandleEvent.None) break;
-            
+
         } while (response == Status.OK);
-        
+
         var room = Manager.GetRoom(room_id);
         await (room?.RemoveUser(id) ?? Task.CompletedTask);
-        
+
         await web_socket.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
         logger.LogDebug("WebSocket \'{ID}\' disconnected", id);
     }
@@ -136,13 +136,13 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
     private async Task<HandleEvent> HandleUserMessage(string id, Guid room_id, WebSocket web_socket, string message, string? initial_username = null)
     {
         logger.LogDebug("WebSocket \'{ID}\' received: \'{Message}\'", id, message);
-        
+
         await Semaphore.WaitAsync();
         var room = Manager.GetRoom(room_id);
         Semaphore.Release();
-        
+
         if (room is null) return HandleEvent.RoomClosed;
-        
+
         var user = await room.GetOrAddUser(id, web_socket, initial_username);
         await room.HandleUserMessage(user, message);
 

@@ -9,13 +9,13 @@ public class FFmpegEncoder
 {
     protected readonly StreamSpreader InnerStreamSpreader = new();
     protected Process? Process;
-    
+
     public Result<StreamSubscriber, FFmpegError> Convert(int bitrate, string codec = "-c:a libopus",
         string output_format = "-f mka")
     {
         var queue = new ConcurrentQueue<(byte[], int, int)>();
         var update_semaphore = new SemaphoreSlim(1, 1);
-        
+
         var process_start_info = new ProcessStartInfo
         {
             FileName = "ffmpeg",
@@ -25,16 +25,16 @@ public class FFmpegEncoder
             RedirectStandardError = false,
             UseShellExecute = false
         };
-        
+
         Process = Process.Start(process_start_info);
         if (Process == null) return Result<StreamSubscriber, FFmpegError>
             .Error(FFmpegError.UnableToOpen);
 
         var stream_subscriber = new StreamSubscriber
         {
-            WriteCall = (bytes,offset, length) =>
+            WriteCall = (bytes, offset, length) =>
             {
-                queue.Enqueue((bytes,offset, length));
+                queue.Enqueue((bytes, offset, length));
                 return Task.FromResult(StreamStatus.Open);
             },
             SyncCall = SyncCall,
@@ -46,7 +46,7 @@ public class FFmpegEncoder
             await Process.StandardOutput.BaseStream.CopyToAsync(InnerStreamSpreader);
             await InnerStreamSpreader.CloseAsync();
         });
-        
+
         return Result<StreamSubscriber, FFmpegError>.Success(
             stream_subscriber);
 
@@ -70,7 +70,7 @@ public class FFmpegEncoder
             update_semaphore.Release();
         }
     }
-    
+
     public StreamSpreader GetStreamSpreader() => InnerStreamSpreader;
 
     public void Cleanup()
