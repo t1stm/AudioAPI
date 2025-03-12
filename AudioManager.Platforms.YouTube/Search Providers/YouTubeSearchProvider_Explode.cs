@@ -7,7 +7,7 @@ using YoutubeExplode.Common;
 
 namespace AudioManager.Platforms.YouTube.Search_Providers;
 
-public sealed class YouTubeSearchProvider_Explode : SearchProvider, 
+public sealed class YouTubeSearchProvider_Explode : SearchProvider,
     ISupportsID, ISupportsPlaylist, ISupportsSearch
 {
     public static YoutubeClient Client { get; } = new();
@@ -26,8 +26,8 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider,
         {
             var youtube_client = Client;
             var video = await youtube_client.Videos.GetAsync(id, token);
-            
-        
+
+
             return Result<PlatformResult, SearchError>.Success(new YouTubeResult
             {
                 Name = video.Title,
@@ -53,14 +53,14 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider,
             var results = await youtube_client.Search.GetVideosAsync(keywords, token).CollectAsync(15);
             return Result<IEnumerable<PlatformResult>, SearchError>.Success(
                 results.Select(video => new YouTubeResult
-            {
-                ID = PlatformIdentifier + video.Id,
-                Name = video.Title,
-                Artist = video.Author.ChannelTitle,
-                Duration = video.Duration.GetValueOrDefault(TimeSpan.Zero),
-                ThumbnailUrl = RemoveTracking(video.Thumbnails.OrderByDescending(t => t.Resolution.Area).First().Url),
-                Downloaders = ContentDownloaders
-            }));
+                {
+                    ID = PlatformIdentifier + video.Id,
+                    Name = video.Title,
+                    Artist = video.Author.ChannelTitle,
+                    Duration = video.Duration.GetValueOrDefault(TimeSpan.Zero),
+                    ThumbnailUrl = RemoveTracking(video.Thumbnails.OrderByDescending(t => t.Resolution.Area).First().Url),
+                    Downloaders = ContentDownloaders
+                }));
         }
         catch
         {
@@ -99,7 +99,7 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider,
             return Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.GenericError);
         }
     }
-    
+
     public bool IsPlaylistUrl(string query)
     {
         throw new NotSupportedException();

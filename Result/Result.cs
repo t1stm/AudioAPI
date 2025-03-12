@@ -7,7 +7,7 @@ public readonly struct Result<T_OK, T_Error> : IEquatable<Result<T_OK, T_Error>>
     public readonly T_Error? ErrorValue;
     public readonly T_OK? OkValue;
     public readonly Status Status;
-    
+
     /// <summary>
     /// Creates a result object.
     /// </summary>
@@ -33,7 +33,7 @@ public readonly struct Result<T_OK, T_Error> : IEquatable<Result<T_OK, T_Error>>
             ? OkValue ?? throw new NullReferenceException("OK value is null.")
             : throw new InvalidResultAccessException("Tried to get OK result when status is \'Error\'.");
     }
-    
+
     /// <summary>
     /// Gets the Error object when the status is Error.
     /// </summary>
@@ -77,7 +77,7 @@ public readonly struct Result<T_OK, T_Error> : IEquatable<Result<T_OK, T_Error>>
     {
         return source.Status == status;
     }
-    
+
     /// <summary>
     /// Compare the current result with a status code.
     /// </summary>
@@ -92,8 +92,8 @@ public readonly struct Result<T_OK, T_Error> : IEquatable<Result<T_OK, T_Error>>
 
     public bool Equals(Result<T_OK, T_Error> other)
     {
-        return 
-            EqualityComparer<T_Error?>.Default.Equals(ErrorValue, other.ErrorValue) && 
+        return
+            EqualityComparer<T_Error?>.Default.Equals(ErrorValue, other.ErrorValue) &&
             EqualityComparer<T_OK?>.Default.Equals(OkValue, other.OkValue) && Status == other.Status;
     }
 

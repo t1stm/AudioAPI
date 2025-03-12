@@ -6,46 +6,58 @@ namespace AudioManager.Platforms.MusicDatabase;
 
 public class MusicInfo
 {
-    [JsonInclude] [JsonPropertyName("id")] 
+    [JsonInclude]
+    [JsonPropertyName("id")]
     public string? ID { get; set; }
-    
-    [JsonInclude] [JsonPropertyName("titleRomanized")]
+
+    [JsonInclude]
+    [JsonPropertyName("titleRomanized")]
     public string? RomanizedTitle { get; set; }
-    
-    [JsonInclude] [JsonPropertyName("authorRomanized")]
+
+    [JsonInclude]
+    [JsonPropertyName("authorRomanized")]
     public string? RomanizedAuthor { get; set; }
-    
-    [JsonInclude] 
+
+    [JsonInclude]
     public string? Album { get; set; }
-    
+
     [JsonInclude]
     public TimeSpan Duration { get; set; }
-    
-    [JsonInclude] [JsonPropertyName("coverUrl")]
+
+    [JsonInclude]
+    [JsonPropertyName("coverUrl")]
     public string? CoverUrl { get; set; }
-    
-    [JsonInclude] [JsonPropertyName("location")]
+
+    [JsonInclude]
+    [JsonPropertyName("location")]
     public string? RelativeLocation { get; set; }
-    
-    [JsonInclude] [JsonPropertyName("authorOriginal")]
+
+    [JsonInclude]
+    [JsonPropertyName("authorOriginal")]
     public string? OriginalAuthor { get; set; }
 
-    [JsonInclude] [JsonPropertyName("titleOriginal")]
+    [JsonInclude]
+    [JsonPropertyName("titleOriginal")]
     public string? OriginalTitle { get; set; }
-    
-    [JsonInclude] [JsonPropertyName("length")]
+
+    [JsonInclude]
+    [JsonPropertyName("length")]
     public double Length { get => Duration.TotalMilliseconds; set => Duration = TimeSpan.FromMilliseconds(value); }
-    
-    [JsonInclude] [JsonPropertyName("romanizedGuestArtists")]
+
+    [JsonInclude]
+    [JsonPropertyName("romanizedGuestArtists")]
     public string[]? RomanizedGuestArtists;
-    
-    [JsonInclude] [JsonPropertyName("romanizedGuestArtists")]
+
+    [JsonInclude]
+    [JsonPropertyName("romanizedGuestArtists")]
     public string[]? OriginalGuestArtists;
-    
-    [JsonInclude] [JsonPropertyName("romanizedGuestArtists")]
+
+    [JsonInclude]
+    [JsonPropertyName("romanizedGuestArtists")]
     public string[]? RomanizedOtherTitles;
-    
-    [JsonInclude] [JsonPropertyName("romanizedGuestArtists")]
+
+    [JsonInclude]
+    [JsonPropertyName("romanizedGuestArtists")]
     public string[]? OriginalOtherTitles;
 
     public MusicResult ToMusicResult(IReadOnlyList<ContentGetter> getters)
@@ -61,7 +73,7 @@ public class MusicInfo
             Path = MusicManager.StorageDirectory + "/" + RelativeLocation,
             ThumbnailUrl = CoverUrl,
             OriginalTitle = OriginalTitle,
-            OriginalArtist = OriginalAuthor 
+            OriginalArtist = OriginalAuthor
         };
     }
 

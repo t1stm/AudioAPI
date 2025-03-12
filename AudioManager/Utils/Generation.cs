@@ -3,7 +3,7 @@ namespace Audio.Utils;
 public static class Generation
 {
     private static readonly Random Rng = new();
-    
+
     public static string RandomString(int length, bool bad_symbols = false)
     {
         return new string(Enumerable

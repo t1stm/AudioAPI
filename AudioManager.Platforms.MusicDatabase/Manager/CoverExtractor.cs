@@ -7,17 +7,17 @@ namespace AudioManager.Platforms.MusicDatabase.Manager;
 public class CoverExtractor
 {
     public string ExportLocation = "./Album_Covers";
-    
+
     public void Extract(string location)
     {
         ExportLocation = Environment.GetEnvironmentVariable("ALBUM_COVERS", EnvironmentVariableTarget.Process) ?? ExportLocation;
-        
+
         if (!Directory.Exists(ExportLocation)) Directory.CreateDirectory(ExportLocation);
         foreach (var genre_directory in Directory.GetDirectories(location))
-        foreach (var artist_directory in Directory.GetDirectories(genre_directory))
-            ParseFolder(artist_directory);
+            foreach (var artist_directory in Directory.GetDirectories(genre_directory))
+                ParseFolder(artist_directory);
     }
-    
+
     public void ParseFolder(string folder)
     {
         var serializer = new JsonSerializer
@@ -25,7 +25,7 @@ public class CoverExtractor
             Formatting = Formatting.Indented,
             StringEscapeHandling = StringEscapeHandling.EscapeHtml
         };
-        
+
         using var file_stream = File.Open($"{folder}/Info.json", FileMode.OpenOrCreate, FileAccess.ReadWrite,
             FileShare.ReadWrite);
 

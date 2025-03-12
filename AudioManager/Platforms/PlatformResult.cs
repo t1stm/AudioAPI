@@ -29,7 +29,7 @@ public abstract class PlatformResult
     {
         var split_id = ID.Split("://");
         var pure_id = split_id.Length > 1 ? string.Join("://", split_id[1..]) : ID;
-        
+
         return pure_id;
     }
 
@@ -40,7 +40,7 @@ public abstract class PlatformResult
             var result = await downloader.TryGetContentData(this, token);
             if (result == Status.OK) return result;
         }
-        
+
         return Result<StreamSpreader, DownloadError>.Error(default);
     }
 

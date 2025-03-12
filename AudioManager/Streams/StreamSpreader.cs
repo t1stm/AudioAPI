@@ -18,7 +18,7 @@ public class StreamSpreader : Stream
         }
         finally
         {
-            Semaphore.Release();   
+            Semaphore.Release();
         }
     }
 
@@ -49,7 +49,7 @@ public class StreamSpreader : Stream
             Semaphore.Release();
         }
     }
-    
+
     public override void Write(byte[] buffer, int offset, int count)
     {
         try
@@ -100,7 +100,7 @@ public class StreamSpreader : Stream
         {
             Subscribers.Remove(subscriber);
         }
-        
+
         foreach (var subscriber in Subscribers)
         {
             var starting_index = subscriber.CachedDataIndex;
@@ -111,9 +111,9 @@ public class StreamSpreader : Stream
                 var current_slice = Data[subscriber.CachedDataIndex];
                 var (bytes, offset, length) = current_slice;
                 var status = await subscriber.WriteCall.Invoke(bytes, offset, length);
-                
+
                 if (!status.HasFlag(StreamStatus.Closed)) continue;
-                
+
                 RemoveQueue.Enqueue(subscriber);
                 break;
             }
@@ -122,7 +122,7 @@ public class StreamSpreader : Stream
             {
                 await subscriber.SyncCall();
                 if (!Closed) return;
-            
+
                 subscriber.SourceClosed = true;
                 await subscriber.CloseCall();
             });
@@ -132,13 +132,13 @@ public class StreamSpreader : Stream
     public override ValueTask DisposeAsync()
     {
         if (!Closed) return ValueTask.CompletedTask;
-        
+
         Data.Clear();
         GC.SuppressFinalize(this);
-        
+
         return ValueTask.CompletedTask;
     }
-    
+
     public void Clean()
     {
         Data.Clear();
@@ -151,7 +151,7 @@ public class StreamSpreader : Stream
     public override long Position { get; set; }
 
     #region Not Supported
-    
+
     public override void Flush()
     {
         throw new NotSupportedException();
@@ -171,6 +171,6 @@ public class StreamSpreader : Stream
     {
         throw new NotSupportedException();
     }
-    
+
     #endregion
 }

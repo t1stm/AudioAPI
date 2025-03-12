@@ -8,7 +8,7 @@ public class User
     public required WebSocket WebSocket { get; init; }
     public required string ID { get; init; }
     public string? Username { get; set; }
-    
+
     public string ChatUsername => Username ??= $"Anonymous {GetId(ID)}";
 
     public async Task SendMessageAsync(ReadOnlyMemory<byte> bytes)

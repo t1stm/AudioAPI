@@ -10,15 +10,15 @@ public class SpotifySearchProvider : SearchProvider, ISupportsID
     public override string Name => "Spotify";
     public override string PlatformIdentifier => "spotify://";
     public override int Priority => 99;
-    
+
     private static readonly SpotifyClientConfig SpotifyConfig = SpotifyClientConfig
         .CreateDefault()
         .WithAuthenticator(new ClientCredentialsAuthenticator
         (Environment.GetEnvironmentVariable("SPOTIFY_ID") ?? throw new ArgumentNullException(),
             Environment.GetEnvironmentVariable("SPOTIFY_SECRET") ?? throw new ArgumentNullException()));
-    
+
     private static readonly Lazy<SpotifyClient> Spotify = new(() => new SpotifyClient(SpotifyConfig));
-    
+
     protected static string ArtistsNameCombine(List<SimpleArtist> artists)
     {
         var artist = "";
@@ -44,7 +44,7 @@ public class SpotifySearchProvider : SearchProvider, ISupportsID
             Album = track.Album.Name,
             Explicit = track.Explicit
         };
-        
+
         return Result<PlatformResult, SearchError>.Success(result);
     }
 }

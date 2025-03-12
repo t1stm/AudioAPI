@@ -2,7 +2,7 @@ namespace Audio.Utils;
 
 public static class Romanize
 {
-    public static string FromCyrillic(string cyrillic_text)
+    public static string FromCyrillic(ReadOnlySpan<char> cyrillic_text)
     {
         var romanized_text = string.Empty;
         foreach (var c in cyrillic_text)

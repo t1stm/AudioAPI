@@ -13,19 +13,19 @@ public sealed class Getter_YtDLP : ContentGetter
     {
         var process_info = GetProcessStartInfo(youtube_result);
         var process = Process.Start(process_info);
-        
+
         if (process is null)
         {
             return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(DownloadError.Generic));
         }
-        
+
         var stream_spreader = new StreamSpreader();
         _ = Task.Run(async () =>
         {
             await process.StandardOutput.BaseStream.CopyToAsync(stream_spreader, cancellation_token);
             await stream_spreader.CloseAsync();
         }, cancellation_token);
-        
+
         return Task.FromResult(Result<StreamSpreader, DownloadError>.Success(stream_spreader));
     }
 

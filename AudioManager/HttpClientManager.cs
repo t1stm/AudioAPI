@@ -9,7 +9,7 @@ public static class HttpClientManager
         // TODO add functionality
         throw new NotImplementedException();
     }
-    
+
     public static HttpClient GetHttpClient()
     {
         return HttpClient;

@@ -12,10 +12,10 @@ public partial class MusicManager
     public static string Domain => Environment.GetEnvironmentVariable("DOMAIN", EnvironmentVariableTarget.Process) ?? string.Empty;
     public static string StorageDirectory => Environment.GetEnvironmentVariable("STORAGE", EnvironmentVariableTarget.Process) ?? "./";
     public static string AlbumCoverLocation => Domain + "/Album_Covers";
-    
+
     protected readonly CoverExtractor CoverExtractor = new();
     protected readonly List<MusicInfo> Songs = [];
-    
+
     public void Initialize()
     {
         var storage = Environment.GetEnvironmentVariable("STORAGE", EnvironmentVariableTarget.Process);
@@ -23,13 +23,13 @@ public partial class MusicManager
         {
             Directory.CreateDirectory(storage);
         }
-        
+
         var album_covers = Environment.GetEnvironmentVariable("ALBUM_COVERS", EnvironmentVariableTarget.Process);
         if (album_covers is not null)
         {
             Directory.CreateDirectory(album_covers);
         }
-        
+
         Load();
         CoverExtractor.Extract(StorageDirectory);
     }
@@ -60,21 +60,21 @@ public partial class MusicManager
         var json_file = Path.Combine(artist, "Info.json");
 
         var songs = Directory.GetFiles($"{artist}", "*", SearchOption.TopDirectoryOnly)
-            .Where(IsAudioBasedOnFileExtension).ToList();
-        
+            .Where(song => IsAudioBasedOnFileExtension(song)).ToList();
+
         var serializer = new JsonSerializer
         {
             Formatting = Formatting.Indented,
             StringEscapeHandling = StringEscapeHandling.EscapeHtml
         };
-        
+
         using var file_stream = File.Open(json_file, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
 
         if (File.Exists(json_file))
         {
             using var sr = new StreamReader(file_stream, Encoding.UTF8, true, 4096, true);
             var json = sr.ReadToEnd();
-            
+
             try
             {
                 var items = JsonConvert.DeserializeObject<List<MusicInfo>>(json) ??
@@ -99,18 +99,18 @@ public partial class MusicManager
         }
 
         {
-            var list = songs.Where(IsAudioBasedOnFileExtension)
+            var list = songs.Where(song => IsAudioBasedOnFileExtension(song))
                 .Select(ParseFile)
                 .ToList();
             using var writer = new StreamWriter(file_stream, Encoding.UTF8);
-            
+
             serializer.Serialize(writer, list);
             file_stream.Close();
-            
+
             return list;
         }
     }
-    
+
     private static IEnumerable<MusicInfo> UpdateData(List<MusicInfo> existing, List<string> files)
     {
         foreach (var info in existing) yield return info;
@@ -136,7 +136,7 @@ public partial class MusicManager
         var author = filename_split[0];
         var title = string.Join('.',
             string.Join('-', filename_split[1..]).Split('.')[..^1]);
-        
+
         var entry = MediaInfo.GetInformation(location).GetAwaiter().GetResult();
         entry.OriginalTitle ??= title.Trim();
         entry.OriginalAuthor ??= author.Trim();
@@ -144,51 +144,57 @@ public partial class MusicManager
         entry.RomanizedAuthor ??= romanized_author.Trim();
         entry.RelativeLocation ??= string.Join('/', split[^3..]);
         entry.ID = entry.UpdateRandomId();
-        
+
         return entry;
     }
 
-    protected static bool IsAudioBasedOnFileExtension(string file_name)
+    protected static bool IsAudioBasedOnFileExtension(ReadOnlySpan<char> file_name)
     {
         return file_name.EndsWith(".flac") || file_name.EndsWith(".ogg") ||
-               file_name.EndsWith(".mp3") || file_name.EndsWith(".wav") || 
+               file_name.EndsWith(".mp3") || file_name.EndsWith(".wav") ||
                file_name.EndsWith(".mka") || file_name.EndsWith(".adts") ||
                file_name.EndsWith(".wma") || file_name.EndsWith(".wv");
     }
-    
+
     public Result<IEnumerable<MusicInfo>, Empty> SearchByTerm(string term)
     {
         var found = Songs.Where(r => ScoreSingleTerm(term, r));
         return Result<IEnumerable<MusicInfo>, Empty>.Success(found);
     }
 
+    public Result<IEnumerable<MusicInfo>, Empty> GetRandomSongs(int count)
+    {
+        var songs = Songs.OrderBy(_ => Guid.NewGuid()).Take(count);
+        return Result<IEnumerable<MusicInfo>, Empty>.Success(songs);
+    }
+
     private static bool ScoreSingleTerm(string term, MusicInfo r)
     {
         var term_clean = LevenshteinDistance.RemoveFormatting(
             ParentesisRegex().Replace(term, string.Empty));
-        
-        var romanized_title_clean = r.RomanizedTitle is null ? null : 
+
+        var romanized_title_clean = r.RomanizedTitle is null ? null :
             LevenshteinDistance.RemoveFormatting(ParentesisRegex().Replace(r.RomanizedTitle, string.Empty));
-        
-        var original_title_clean = r.OriginalTitle is null ? null : 
+
+        var original_title_clean = r.OriginalTitle is null ? null :
             LevenshteinDistance.RemoveFormatting(ParentesisRegex().Replace(r.OriginalTitle, string.Empty));
-        
+
         var romanized_artist_clean = r.RomanizedAuthor is null ? null :
             LevenshteinDistance.RemoveFormatting(r.RomanizedAuthor);
-        
-        var original_artist_clean = r.OriginalAuthor is null ? null : 
+
+        var original_artist_clean = r.OriginalAuthor is null ? null :
             LevenshteinDistance.RemoveFormatting(r.OriginalAuthor);
-        
-        var eval = 
-                    romanized_title_clean != null && 
+
+        var eval =
+                    romanized_title_clean != null &&
                     (LevenshteinDistance.ComputeStrict(romanized_title_clean, term_clean) < 2 ||
                     LevenshteinDistance.ComputeStrict($"{romanized_title_clean}{romanized_artist_clean}", term_clean) < 3 ||
                     LevenshteinDistance.ComputeStrict($"{romanized_artist_clean}{romanized_title_clean}", term_clean) < 3 ||
-                    LevenshteinDistance.ComputeStrict($"{romanized_title_clean}{original_artist_clean}", term_clean) < 3) 
-                    
-                    || 
-                    
-                    original_title_clean != null && 
+                    LevenshteinDistance.ComputeStrict($"{romanized_title_clean}{original_artist_clean}", term_clean) < 3)
+
+                    ||
+
+                    original_title_clean != null &&
                    (LevenshteinDistance.ComputeStrict(original_title_clean, term_clean) < 2 ||
                     LevenshteinDistance.ComputeStrict($"{original_title_clean}{original_artist_clean}", term_clean) < 3 ||
                     LevenshteinDistance.ComputeStrict($"{original_artist_clean}{original_title_clean}", term_clean) < 3 ||
@@ -201,9 +207,9 @@ public partial class MusicManager
         var search = Songs.AsParallel().FirstOrDefault(r => r.ID == id) ??
                      // Second pass for regenerated infos.
                      Songs.AsParallel().FirstOrDefault(r => (r.ID ?? "  ")[..^2] == id[..^2]);
-        
-        return search != null ? 
-            Result<MusicInfo, Empty>.Success(search) : 
+
+        return search != null ?
+            Result<MusicInfo, Empty>.Success(search) :
             Result<MusicInfo, Empty>.Error(default);
     }
 
