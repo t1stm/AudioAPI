@@ -6,9 +6,14 @@ public static class Generation
 
     public static string RandomString(int length, bool bad_symbols = false)
     {
-        return new string(Enumerable
+        const string NORMAL_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        const string BAD_CHARS = NORMAL_CHARS + "_-.";
+
+        var rng = new Random(Rng.Next(int.MaxValue));
+        
+        return string.Concat(Enumerable
             .Repeat(
-                $"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789{bad_symbols switch { true => "_-.", false => "" }}",
-                length).Select(s => s[new Random(Rng.Next(int.MaxValue)).Next(s.Length)]).ToArray());
+                bad_symbols ? BAD_CHARS : NORMAL_CHARS, length)
+            .Select(s => s[rng.Next(s.Length)]));
     }
 }
