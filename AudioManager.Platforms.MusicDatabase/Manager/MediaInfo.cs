@@ -23,35 +23,38 @@ public static class MediaInfo
     
         if (process == null) return music_info;
         await process.WaitForExitAsync();
-    
+
+        JsonDocument json;
         try
         {
-            var json = await JsonDocument.ParseAsync(process.StandardOutput.BaseStream);
-            if (!json.RootElement.TryGetProperty("format", out var format)) return music_info;
-        
-            if (format.TryGetProperty("duration", out var durationStr) &&
-                double.TryParse(durationStr.GetString(), out var length))
-            {
-                music_info.Length = (ulong)(length * 1000);
-            }
-            
-            if (!format.TryGetProperty("tags", out var tags)) return music_info;
-            
-            if (tags.TryGetProperty("title", out var title))
-                music_info.OriginalTitle = title.GetString();
-            
-            if (tags.TryGetProperty("artist", out var artist))
-                music_info.OriginalAuthor = artist.GetString();
-
-            music_info.RomanizedTitle = Romanize.FromCyrillic(music_info.OriginalTitle ?? "");
-            music_info.RomanizedAuthor = Romanize.FromCyrillic(music_info.OriginalAuthor ?? "");
+            json = await JsonDocument.ParseAsync(process.StandardOutput.BaseStream);
+        }
+        catch (JsonException)
+        {
             return music_info;
         }
-        catch (Exception)
+        
+        if (!json.RootElement.TryGetProperty("format", out var format)) return music_info;
+        
+        if (format.TryGetProperty("duration", out var duration_string) &&
+            double.TryParse(duration_string.GetString(), out var length))
         {
-            // Handle error silently
+            music_info.Length = (ulong)(length * 1000);
         }
-    
+            
+        if (!format.TryGetProperty("tags", out var tags)) return music_info;
+
+        if (tags.TryGetProperty("title", out var title))
+        {
+            music_info.OriginalTitle = title.GetString();
+            music_info.RomanizedTitle = Romanize.FromCyrillic(music_info.OriginalTitle);
+        }
+
+        if (!tags.TryGetProperty("artist", out var artist)) return music_info;
+            
+        music_info.OriginalAuthor = artist.GetString();
+        music_info.RomanizedAuthor = Romanize.FromCyrillic(music_info.OriginalAuthor ?? "");
+
         return music_info;
     }
 }
