@@ -1,18 +1,20 @@
+using System.Text;
+
 namespace Audio.Utils;
 
 public static class Romanize
 {
     public static string FromCyrillic(ReadOnlySpan<char> cyrillic_text)
     {
-        var romanized_text = string.Empty;
+        var builder = new StringBuilder();
         foreach (var c in cyrillic_text)
         {
             var romanized = CyrillicToRomanSwitch(c);
-            romanized_text += char.IsLower(c) ? romanized :
-                romanized.Length > 1 ? char.ToUpper(romanized[0]) + romanized[1..] : char.ToUpper(romanized[0]);
+            builder.Append(char.IsLower(c) ? romanized :
+                romanized.Length > 1 ? char.ToUpper(romanized[0]) + romanized[1..] : char.ToUpper(romanized[0]));
         }
 
-        return romanized_text;
+        return builder.ToString();
     }
 
     public static string CyrillicToRomanSwitch(char letter)
