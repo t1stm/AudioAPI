@@ -77,15 +77,12 @@ public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlayli
         return PlaylistRegex().IsMatch(query);
     }
 
-    private static Task PopulateYouTubeCache(Result<IEnumerable<PlatformResult>, SearchError> results)
+    private static async Task PopulateYouTubeCache(Result<IEnumerable<PlatformResult>, SearchError> results)
     {
-        return Task.Run(async () =>
-        {
-            if (results == Status.Error) return;
-            await YouTubeCacher.AddToCacheAsync(results.GetOK()
-                .Where(r => r is YouTubeResult)
-                .Cast<YouTubeResult>());
-        });
+        if (results == Status.Error) return;
+        await YouTubeCacher.AddToCacheAsync(results.GetOK()
+            .Where(r => r is YouTubeResult)
+            .Cast<YouTubeResult>());
     }
 
     [GeneratedRegex(@"\/playlist\?list=[a-zA-Z0-9_-]+")]
