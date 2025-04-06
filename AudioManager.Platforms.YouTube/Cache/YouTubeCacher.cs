@@ -94,7 +94,8 @@ public class YouTubeCacher
     public async Task<Result<YouTubeResult, SearchError>> GetFromCacheAsync(string id)
     {
         await Sync.WaitAsync();
-        var found = Cache.TryGetValue(id, out var result);
+        var alternative_lookup = Cache.GetAlternateLookup<ReadOnlySpan<char>>();
+        var found = alternative_lookup.TryGetValue(id, out var result);
         Sync.Release();
 
         return found && result is not null ? Result<YouTubeResult, SearchError>.Success(result) :
