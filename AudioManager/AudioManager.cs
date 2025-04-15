@@ -67,42 +67,41 @@ public class AudioManager
             Task.FromResult(Result<PlatformResult, SearchError>.Error(SearchError.NotFound));
     }
 
-    public async Task<Result<IEnumerable<PlatformResult>, SearchError>> SearchKeywords(string query)
+    public async IAsyncEnumerable<PlatformResult> SearchKeywords(string query)
     {
-        var results = new List<PlatformResult>();
         var search_tasks = Platforms
             .Where(p => p is ISupportsSearch)
             .Cast<ISupportsSearch>()
             .Select(platform => platform.TrySearchKeywords(query));
 
-        foreach (var search in await Task.WhenAll(search_tasks))
+        foreach (var task in search_tasks)
         {
+            var search = await task;
             if (search == Status.Error) continue;
-            results.AddRange(search.GetOK());
+            
+            foreach (var result in search.GetOK())
+            {
+                yield return result;
+            }
         }
-
-        return results.Count == 0 ?
-            Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.NotFound) :
-            Result<IEnumerable<PlatformResult>, SearchError>.Success(results);
     }
 
-    public async Task<Result<IEnumerable<PlatformResult>, SearchError>> SearchPlaylist(string query)
+    public async IAsyncEnumerable<PlatformResult> SearchPlaylist(string query)
     {
-        var results = new List<PlatformResult>();
         var search_tasks = Platforms
             .Where(p => p is ISupportsPlaylist pl && pl.IsPlaylistUrl(query))
             .Cast<ISupportsPlaylist>()
             .Select(platform => platform.TrySearchPlaylist(query));
 
-        foreach (var search in await Task.WhenAll(search_tasks))
+        foreach (var task in search_tasks)
         {
+            var search = await task;
             if (search == Status.Error) continue;
-            results.AddRange(search.GetOK());
+            foreach (var result in search.GetOK())
+            {
+                yield return result;
+            }
         }
-
-        return results.Count == 0 ?
-            Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.NotFound) :
-            Result<IEnumerable<PlatformResult>, SearchError>.Success(results);
     }
 
     public async Task<Result<StreamSpreader, DownloadError>> TryGetContentData(PlatformResult result,

@@ -5,7 +5,7 @@ namespace AudioAPI.Controllers;
 public class Artist : ControllerBase
 {
     [HttpGet]
-    [Route("/artist/get")]
+    [Route("/Audio/Artist/Get")]
     public async Task<IActionResult> GetArtist(string term)
     {
         return Ok();
