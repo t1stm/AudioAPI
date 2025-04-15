@@ -10,11 +10,16 @@ public class StreamSpreader : Stream
 
     public void Subscribe(StreamSubscriber subscriber)
     {
+        SubscribeAsync(subscriber).GetAwaiter().GetResult();
+    }
+
+    public async Task SubscribeAsync(StreamSubscriber subscriber)
+    {
         try
         {
-            Semaphore.Wait();
+            await Semaphore.WaitAsync();
             Subscribers.Add(subscriber);
-            SyncSubscribers().GetAwaiter().GetResult();
+            await SyncSubscribers();
         }
         finally
         {
