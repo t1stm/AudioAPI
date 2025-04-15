@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace WebApplication3.Multiplayer;
+namespace AudioAPI.Multiplayer;
 
 public class MessageQueue(UserStore store)
 {

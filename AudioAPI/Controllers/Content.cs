@@ -7,7 +7,7 @@ using AudioManager.Platforms.MusicDatabase;
 using AudioManager.Streams;
 using Microsoft.AspNetCore.Mvc;
 using Result.Objects;
-using WebApplication3;
+using AudioAPI;
 
 namespace AudioAPI.Controllers;
 
@@ -15,19 +15,14 @@ namespace AudioAPI.Controllers;
 [Route("[controller]")]
 public class Content(ILogger<Content> logger) : ControllerBase
 {
-    public static Audio.AudioManager AudioManager => Globals.AudioManager;
-    public static Dictionary<(string codec, int bitrate, string id), FFmpegEncoder> CachedEncoders => Globals.CachedEncoders;
-    public static Dictionary<(string codec, int bitrate, string id), DateTime> ExpireTimes => Globals.ExpireTimes;
-    public static SemaphoreSlim CacheSemaphore => Globals.CacheSemaphore;
-
     [HttpGet]
     [Route("/Audio/Search")]
-    public async Task<IActionResult> Search(string query)
+    public async Task<IActionResult> Search(string query, [FromServices] ManagerService manager_service)
     {
         if (string.IsNullOrWhiteSpace(query)) return NotFound();
         logger.LogInformation("Searching for {Query}", query);
 
-        var query_type = AudioManager.FindQueryType(query);
+        var query_type = manager_service.AudioManager.FindQueryType(query);
 
         switch (query_type)
         {
@@ -37,14 +32,14 @@ public class Content(ILogger<Content> logger) : ControllerBase
                     var pure_id = split_query.Length > 1 ?
                         string.Join("://", split_query[1..]) : split_query[0];
 
-                    var found = await AudioManager.SearchID(pure_id);
+                    var found = await manager_service.AudioManager.SearchID(pure_id);
                     if (found == Status.Error) return NotFound();
                     return Content(found.GetOK().SerializeSelf(), "application/json");
                 }
 
             case QueryType.Playlist:
                 {
-                    var search = await AudioManager.SearchPlaylist(query);
+                    var search = await manager_service.AudioManager.SearchPlaylist(query);
                     if (search == Status.Error) return NotFound();
 
                     var found = search.GetOK();
@@ -53,7 +48,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
 
             case QueryType.Keywords:
                 {
-                    var search = await AudioManager.SearchKeywords(query);
+                    var search = await manager_service.AudioManager.SearchKeywords(query);
                     if (search == Status.Error) return NotFound();
 
                     var found = search.GetOK();
@@ -67,9 +62,9 @@ public class Content(ILogger<Content> logger) : ControllerBase
 
     [HttpGet]
     [Route("/Audio/RandomResults")]
-    public async Task<IActionResult> Search(int count = 10)
+    public async Task<IActionResult> Search([FromServices] ManagerService manager_service, int count = 10)
     {
-        var platform = AudioManager.GetPlatform<MusicDatabase>();
+        var platform = manager_service.AudioManager.GetPlatform<MusicDatabase>();
         logger.LogInformation("Returning {Count} random results", count);
         var results = await platform.GetRandomResults(count);
         if (results == Status.Error) return NotFound();
@@ -80,13 +75,13 @@ public class Content(ILogger<Content> logger) : ControllerBase
 
     [HttpGet]
     [Route("/Audio/DownloadRaw")]
-    public async Task<IActionResult> DownloadRaw(string id)
+    public async Task<IActionResult> DownloadRaw(string id, [FromServices] ManagerService manager_service)
     {
         if (string.IsNullOrWhiteSpace(id)) return NotFound();
         logger.LogInformation("Downloading Raw \'{Id}\'", id);
 
         var start = DateTime.Now;
-        var search = await AudioManager.SearchID(id);
+        var search = await manager_service.AudioManager.SearchID(id);
         if (search == Status.Error) return NotFound();
 
         var result = search.GetOK();
@@ -95,7 +90,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
         logger.LogInformation("Searching \'{Id}\' took \'{Duration}\'", id, found_result - start);
 
         var content_downloader_request =
-            await AudioManager.TryGetContentData(result);
+            await manager_service.AudioManager.TryGetContentData(result);
         if (content_downloader_request == Status.Error)
             return StatusCode(500);
 
@@ -159,7 +154,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
 
     [HttpGet]
     [Route("/Audio/Download/{codec:required}/{bitrate:int:required}")]
-    public async Task<IActionResult> Download(string codec, int bitrate, string id)
+    public async Task<IActionResult> Download(string codec, int bitrate, string id, [FromServices] ManagerService manager_service)
     {
         if (string.IsNullOrWhiteSpace(id)) return NotFound();
         logger.LogInformation("Downloading \'{Id}\' {Codec} {Bitrate}", codec, bitrate, id);
@@ -193,24 +188,24 @@ public class Content(ILogger<Content> logger) : ControllerBase
 
         var extension = ffmpeg_output_format[3..];
 
-        await CacheSemaphore.WaitAsync();
-        if (!CachedEncoders.TryGetValue((codec, bitrate, id), out var encoder))
+        await manager_service.CacheSemaphore.WaitAsync();
+        if (!manager_service.CachedEncoders.TryGetValue((codec, bitrate, id), out var encoder))
         {
             encoder = new FFmpegEncoder();
 
-            var search = await AudioManager.SearchID(id);
+            var search = await manager_service.AudioManager.SearchID(id);
             if (search == Status.Error) return NotFound();
 
             var result = search.GetOK();
 
             var content_downloader_request =
-                await AudioManager.TryGetContentData(result);
+                await manager_service.AudioManager.TryGetContentData(result);
 
             if (content_downloader_request == Status.Error)
                 return StatusCode(500);
 
-            CachedEncoders.Add((codec, bitrate, id), encoder);
-            CacheSemaphore.Release();
+            manager_service.CachedEncoders.Add((codec, bitrate, id), encoder);
+            manager_service.CacheSemaphore.Release();
 
             var source_stream_spreader = content_downloader_request.GetOK();
             var stream_subscriber_result = encoder.Convert(bitrate, ffmpeg_codec, ffmpeg_output_format);
@@ -220,7 +215,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
             var source_stream_subscriber = stream_subscriber_result.GetOK();
             source_stream_spreader.Subscribe(source_stream_subscriber);
         }
-        else CacheSemaphore.Release();
+        else manager_service.CacheSemaphore.Release();
 
         var cache = new ConcurrentQueue<(byte[], int, int)>();
         var waiting_semaphore = new SemaphoreSlim(0);
@@ -260,7 +255,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
 
             await SyncCall();
             waiting_semaphore.Release();
-            ExpireTimes.TryAdd((codec, bitrate, id), DateTime.Now.Add(TimeSpan.FromMinutes(45)));
+            manager_service.ExpireTimes.TryAdd((codec, bitrate, id), DateTime.Now.Add(TimeSpan.FromMinutes(45)));
         }
 
         async Task SyncCall()

@@ -1,6 +1,6 @@
-namespace WebApplication3.Multiplayer;
+namespace AudioAPI.Multiplayer;
 
-public class MultiplayerManager
+public class MultiplayerManager(ManagerService ManagerService)
 {
     protected readonly SemaphoreSlim Sync = new(1);
     protected readonly Dictionary<Guid, Room> Rooms = new();
@@ -11,7 +11,7 @@ public class MultiplayerManager
         await Sync.WaitAsync();
         var guid = Guid.NewGuid();
 
-        Rooms.Add(guid, new Room(guid)
+        Rooms.Add(guid, new Room(guid, ManagerService)
         {
             OnInfoModified = () => ChangeId++
         });

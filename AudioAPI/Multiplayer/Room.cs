@@ -2,7 +2,7 @@ using System.Net.WebSockets;
 using System.Text.Json.Serialization;
 using Result.Objects;
 
-namespace WebApplication3.Multiplayer;
+namespace AudioAPI.Multiplayer;
 
 public class Room
 {
@@ -23,10 +23,13 @@ public class Room
     protected readonly VirtualPlayer Player;
     [JsonIgnore]
     protected readonly System.Timers.Timer Timer;
+    
+    protected readonly ManagerService ManagerService;
 
-    public Room(Guid guid)
+    public Room(Guid guid, ManagerService manager_service)
     {
         RoomID = guid;
+        ManagerService = manager_service;
         RoomName = guid.ToString();
 
         Store = new UserStore();
@@ -82,7 +85,7 @@ public class Room
         switch (name)
         {
             case "add":
-                var result = await Globals.AudioManager.SearchID(value);
+                var result = await ManagerService.AudioManager.SearchID(value);
                 if (result == Status.Error) return;
 
                 await Player.Enqueue(result.GetOK());

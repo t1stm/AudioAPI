@@ -3,19 +3,19 @@ using Audio.FFmpeg;
 using AudioManager.Platforms.MusicDatabase;
 using AudioManager.Platforms.YouTube;
 
-namespace WebApplication3;
+namespace AudioAPI;
 
-public static class Globals
+public class ManagerService
 {
-    public static readonly Audio.AudioManager AudioManager;
+    public readonly Audio.AudioManager AudioManager;
 
-    public static readonly Dictionary<(string codec, int bitrate, string id), FFmpegEncoder> CachedEncoders = new();
-    public static readonly Dictionary<(string codec, int bitrate, string id), DateTime> ExpireTimes = new();
+    public readonly Dictionary<(string codec, int bitrate, string id), FFmpegEncoder> CachedEncoders = new();
+    public readonly Dictionary<(string codec, int bitrate, string id), DateTime> ExpireTimes = new();
 
-    public static readonly System.Timers.Timer ExpireTimer;
-    public static readonly SemaphoreSlim CacheSemaphore = new(1);
+    public readonly System.Timers.Timer ExpireTimer;
+    public readonly SemaphoreSlim CacheSemaphore = new(1);
 
-    static Globals()
+    public ManagerService()
     {
         AudioManager = new Audio.AudioManager();
         AudioManager.Initialize();
@@ -28,7 +28,7 @@ public static class Globals
         ExpireTimer.Elapsed += ExpireFFmpegSessions;
     }
 
-    public static void ExpireFFmpegSessions(object? sender, ElapsedEventArgs elapsedEventArgs)
+    public void ExpireFFmpegSessions(object? sender, ElapsedEventArgs elapsedEventArgs)
     {
         CacheSemaphore.Wait();
 
