@@ -17,9 +17,9 @@ public class Content(ILogger<Content> logger) : ControllerBase
 {
     [HttpGet]
     [Route("/Audio/Search")]
-    public async Task<IActionResult> Search(string query, [FromServices] ManagerService manager_service)
+    public async IAsyncEnumerable<PlatformResult> Search(string query, [FromServices] ManagerService manager_service)
     {
-        if (string.IsNullOrWhiteSpace(query)) return NotFound();
+        if (string.IsNullOrWhiteSpace(query)) yield break;
         logger.LogInformation("Searching for {Query}", query);
 
         var query_type = manager_service.AudioManager.FindQueryType(query);
@@ -33,36 +33,36 @@ public class Content(ILogger<Content> logger) : ControllerBase
                         string.Join("://", split_query[1..]) : split_query[0];
 
                     var found = await manager_service.AudioManager.SearchID(pure_id);
-                    if (found == Status.Error) return NotFound();
-                    return Content(found.GetOK().SerializeSelf(), "application/json");
+                    if (found == Status.Error)
+                        yield break;
+                    
+                    yield return found.GetOK();
+                    break;
                 }
 
             case QueryType.Playlist:
                 {
-                    var search = await manager_service.AudioManager.SearchPlaylist(query);
-                    if (search == Status.Error) return NotFound();
-
-                    var found = search.GetOK();
-                    return Content(found.ToJSON(), "application/json");
+                    await foreach (var result in manager_service.AudioManager.SearchPlaylist(query))
+                    {
+                        yield return result;
+                    }
+                    break;
                 }
 
             case QueryType.Keywords:
                 {
-                    var search = await manager_service.AudioManager.SearchKeywords(query);
-                    if (search == Status.Error) return NotFound();
-
-                    var found = search.GetOK();
-                    return Content(found.ToJSON(), "application/json");
+                    await foreach (var result in manager_service.AudioManager.SearchKeywords(query))
+                    {
+                        yield return result;
+                    }
+                    break;
                 }
-
-            default:
-                return new StatusCodeResult(403);
         }
     }
 
     [HttpGet]
     [Route("/Audio/RandomResults")]
-    public async Task<IActionResult> Search([FromServices] ManagerService manager_service, int count = 10)
+    public async Task<IActionResult> RandomResults([FromServices] ManagerService manager_service, int count = 10)
     {
         var platform = manager_service.AudioManager.GetPlatform<MusicDatabase>();
         logger.LogInformation("Returning {Count} random results", count);
