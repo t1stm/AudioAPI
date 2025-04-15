@@ -39,4 +39,10 @@ public class MusicDatabase : Platform, ISupportsSearch, ISupportsRandomResults
         var provider = (MusicSearchProvider)SearchProviders[0];
         return provider.GetRandomResults(count);
     }
+    
+    public Task<Result<IEnumerable<PlatformResult>, SearchError>> GetArtistSongs(string artist)
+    {
+        var provider = (MusicSearchProvider)SearchProviders[0];
+        return provider.GetArtistSongs(artist);
+    }
 }

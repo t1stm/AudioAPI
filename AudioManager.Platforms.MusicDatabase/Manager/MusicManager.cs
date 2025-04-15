@@ -226,4 +226,29 @@ public partial class MusicManager
 
     [GeneratedRegex(@"\(.*?\)")]
     private static partial Regex ParentesisRegex();
+
+    private static bool IsArtistPartOfSong(string artist, MusicInfo song)
+    {
+        var song_artist_formatted = LevenshteinDistance.RemoveFormatting(song.OriginalAuthor) ?? "";
+        var song_artist_romanized = LevenshteinDistance.RemoveFormatting(song.RomanizedAuthor) ?? "";
+
+        ReadOnlySpan<char> artist_span = artist;
+        ReadOnlySpan<char> formatted_span = song_artist_formatted;
+        ReadOnlySpan<char> romanized_span = song_artist_romanized;
+
+        return (formatted_span.Length != 0 || romanized_span.Length != 0) &&
+               (formatted_span.IndexOf(artist_span) != -1 || romanized_span.IndexOf(artist_span) != -1);
+    }
+    
+    public Result<IEnumerable<MusicInfo>, Empty> GetArtistSongs(string artist)
+    {
+        var artist_removed_formatting = LevenshteinDistance.RemoveFormatting(artist);
+        if (string.IsNullOrEmpty(artist_removed_formatting))
+            return Result<IEnumerable<MusicInfo>, Empty>.Error(default);
+        
+        var artist_songs = Songs.AsParallel()
+            .Where(song => IsArtistPartOfSong(artist_removed_formatting, song));
+        
+        return Result<IEnumerable<MusicInfo>, Empty>.Success(artist_songs);
+    }
 }

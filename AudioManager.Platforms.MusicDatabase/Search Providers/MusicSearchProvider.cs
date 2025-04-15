@@ -15,7 +15,7 @@ public class MusicSearchProvider : SearchProvider, ISupportsID, ISupportsSearch,
 
     protected override void Initialize()
     {
-        MusicManager.Initialize();
+        _ = MusicManager.Initialize();
         base.Initialize();
     }
 
@@ -41,6 +41,15 @@ public class MusicSearchProvider : SearchProvider, ISupportsID, ISupportsSearch,
     public Task<Result<IEnumerable<PlatformResult>, SearchError>> GetRandomResults(int count)
     {
         var results = MusicManager.GetRandomSongs(count);
+        if (results == Status.Error) return Task.FromResult(Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.NotFound));
+
+        var ok = results.GetOK();
+        return Task.FromResult(Result<IEnumerable<PlatformResult>, SearchError>.Success(ok.Select(song => song.ToMusicResult(ContentDownloaders))));
+    }
+
+    public Task<Result<IEnumerable<PlatformResult>, SearchError>> GetArtistSongs(string artist)
+    {
+        var results = MusicManager.GetArtistSongs(artist);
         if (results == Status.Error) return Task.FromResult(Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.NotFound));
 
         var ok = results.GetOK();
