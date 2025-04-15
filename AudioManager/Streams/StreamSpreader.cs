@@ -42,7 +42,7 @@ public class StreamSpreader : Stream
         {
             await Semaphore.WaitAsync();
             Closed = true;
-            SyncSubscribers().GetAwaiter().GetResult();
+            await SyncSubscribers();
         }
         finally
         {
