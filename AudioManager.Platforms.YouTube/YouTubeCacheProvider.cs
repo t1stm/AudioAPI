@@ -53,7 +53,7 @@ public static class YouTubeCacheProvider
             }
         };
 
-        stream_spreader.Subscribe(stream_subscriber);
+        await stream_spreader.SubscribeAsync(stream_subscriber);
         return;
 
         async Task SyncCall()

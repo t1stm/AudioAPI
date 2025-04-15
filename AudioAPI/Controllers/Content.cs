@@ -126,7 +126,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
         };
 
         var subscribed = DateTime.Now;
-        stream_spreader.Subscribe(stream_subscriber);
+        await stream_spreader.SubscribeAsync(stream_subscriber);
 
         await waiting_semaphore.WaitAsync();
         await Response.Body.FlushAsync();
@@ -213,7 +213,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
             if (stream_subscriber_result == Status.Error) return StatusCode(500);
 
             var source_stream_subscriber = stream_subscriber_result.GetOK();
-            source_stream_spreader.Subscribe(source_stream_subscriber);
+            await source_stream_spreader.SubscribeAsync(source_stream_subscriber);
         }
         else manager_service.CacheSemaphore.Release();
 
@@ -242,7 +242,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
             SyncCall = SyncCall,
             CloseCall = CloseCall
         };
-        encoder_stream_spreader.Subscribe(stream_subscriber);
+        await encoder_stream_spreader.SubscribeAsync(stream_subscriber);
         await waiting_semaphore.WaitAsync();
 
         await Response.Body.FlushAsync();
