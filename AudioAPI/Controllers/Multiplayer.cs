@@ -4,14 +4,13 @@ using AudioAPI.Controllers.Helpers;
 using Microsoft.AspNetCore.Mvc;
 using Result;
 using Result.Objects;
-using WebApplication3.Multiplayer;
+using AudioAPI.Multiplayer;
 
 namespace AudioAPI.Controllers;
 
-public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
+public class Multiplayer(ILogger<Multiplayer> logger, MultiplayerManager Manager) : ControllerBase
 {
     private static readonly SemaphoreSlim Semaphore = new(1);
-    private static readonly MultiplayerManager Manager = new();
 
     [HttpPost("/Audio/Multiplayer/CreateRoom")]
     public async Task<IActionResult> CreateRoom()
@@ -72,7 +71,7 @@ public class Multiplayer(ILogger<Multiplayer> logger) : ControllerBase
         return Ok();
     }
 
-    private static async Task HandleRoomUpdateWebSocket(WebSocket web_socket, CancellationToken? cancellation_token = null)
+    private async Task HandleRoomUpdateWebSocket(WebSocket web_socket, CancellationToken? cancellation_token = null)
     {
         cancellation_token ??= CancellationToken.None;
         var change_id = Manager.GetChangeId();

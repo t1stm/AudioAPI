@@ -75,11 +75,9 @@ public class AudioManager
             .Cast<ISupportsSearch>()
             .Select(platform => platform.TrySearchKeywords(query));
 
-        foreach (var task in search_tasks)
+        foreach (var search in await Task.WhenAll(search_tasks))
         {
-            var search = await task;
             if (search == Status.Error) continue;
-
             results.AddRange(search.GetOK());
         }
 
@@ -96,11 +94,9 @@ public class AudioManager
             .Cast<ISupportsPlaylist>()
             .Select(platform => platform.TrySearchPlaylist(query));
 
-        foreach (var task in search_tasks)
+        foreach (var search in await Task.WhenAll(search_tasks))
         {
-            var search = await task;
             if (search == Status.Error) continue;
-
             results.AddRange(search.GetOK());
         }
 

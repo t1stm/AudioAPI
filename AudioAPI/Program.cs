@@ -1,4 +1,5 @@
-using WebApplication3;
+using AudioAPI;
+using AudioAPI.Multiplayer;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -7,6 +8,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+builder.Services.AddSingleton<ManagerService>();
+builder.Services.AddSingleton<MultiplayerManager>();
 
 var app = builder.Build();
 
@@ -37,8 +41,9 @@ if (Environment.GetEnvironmentVariable("STORAGE") == null)
 if (Environment.GetEnvironmentVariable("ALBUM_COVERS") == null)
     Environment.SetEnvironmentVariable("ALBUM_COVERS", "./Music Database/Album_Covers");
 
-// initialize manager.
-_ = Globals.AudioManager;
+// initialize required service here.
+app.Services.GetRequiredService<ManagerService>();
+app.Services.GetRequiredService<MultiplayerManager>();
 
 app.UseAuthorization();
 app.MapControllers();

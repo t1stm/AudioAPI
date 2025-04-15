@@ -14,9 +14,9 @@ public partial class MusicManager
     public static string AlbumCoverLocation => Domain + "/Album_Covers";
 
     protected readonly CoverExtractor CoverExtractor = new();
-    protected readonly List<MusicInfo> Songs = [];
+    protected List<MusicInfo> Songs = [];
 
-    public void Initialize()
+    public async Task Initialize()
     {
         var storage = Environment.GetEnvironmentVariable("STORAGE", EnvironmentVariableTarget.Process);
         if (storage is not null)
@@ -30,30 +30,34 @@ public partial class MusicManager
             Directory.CreateDirectory(album_covers);
         }
 
-        Load();
+        await Load();
         CoverExtractor.Extract(StorageDirectory);
     }
 
-    protected void Load()
+    protected async Task Load()
     {
+        var songs = new List<MusicInfo>();
+        var genres = Directory.EnumerateDirectories(StorageDirectory, "*", SearchOption.TopDirectoryOnly);
+
+        foreach (var genre in genres)
+        {
+            var artists = Directory.EnumerateDirectories(genre, "*", SearchOption.TopDirectoryOnly);
+            foreach (var artist in artists)
+            {
+                var process = await ParseArtistFolder(artist);
+                songs.AddRange(process);
+            }
+        }
+
+        songs.ForEach(s => s.CoverUrl = s.CoverUrl?.Replace("$[DOMAIN]", AlbumCoverLocation));
+        
         lock (Songs)
         {
-            var genres = Directory.EnumerateDirectories(StorageDirectory, "*", SearchOption.TopDirectoryOnly);
-
-            foreach (var genre in genres)
-            {
-                var artists = Directory.EnumerateDirectories(genre, "*", SearchOption.TopDirectoryOnly);
-                foreach (var artist in artists)
-                {
-                    Songs.AddRange(ParseArtistFolder(artist));
-                }
-            }
-
-            Songs.ForEach(s => s.CoverUrl = s.CoverUrl?.Replace("$[DOMAIN]", AlbumCoverLocation));
+            Songs = songs;
         }
     }
 
-    private static IEnumerable<MusicInfo> ParseArtistFolder(string artist)
+    private static async Task<IEnumerable<MusicInfo>> ParseArtistFolder(string artist)
     {
         Console.WriteLine($"Loading artist: \'{artist}\'");
         var artist_name = artist.Split(Path.PathSeparator)[^1];
@@ -68,12 +72,12 @@ public partial class MusicManager
             StringEscapeHandling = StringEscapeHandling.EscapeHtml
         };
 
-        using var file_stream = File.Open(json_file, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        await using var file_stream = File.Open(json_file, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
 
         if (File.Exists(json_file))
         {
             using var sr = new StreamReader(file_stream, Encoding.UTF8, true, 4096, true);
-            var json = sr.ReadToEnd();
+            var json = await sr.ReadToEndAsync();
 
             try
             {
@@ -86,10 +90,12 @@ public partial class MusicManager
                 file_stream.Flush();
                 file_stream.Seek(0, SeekOrigin.Begin);
 
-                using var writer = new StreamWriter(file_stream, Encoding.UTF8);
-                serializer.Serialize(writer, update);
+                var blocking = update.ToBlockingEnumerable();
+                
+                await using var writer = new StreamWriter(file_stream, Encoding.UTF8);
+                serializer.Serialize(writer, blocking);
 
-                return update;
+                return blocking;
             }
             catch (Exception e)
             {
@@ -100,18 +106,19 @@ public partial class MusicManager
 
         {
             var list = songs.Where(song => IsAudioBasedOnFileExtension(song))
-                .Select(ParseFile)
-                .ToList();
-            using var writer = new StreamWriter(file_stream, Encoding.UTF8);
+                .Select(ParseFile);
 
-            serializer.Serialize(writer, list);
+            var awaited = await Task.WhenAll(list);
+            await using var writer = new StreamWriter(file_stream, Encoding.UTF8);
+
+            serializer.Serialize(writer, awaited);
             file_stream.Close();
 
-            return list;
+            return awaited;
         }
     }
 
-    private static IEnumerable<MusicInfo> UpdateData(List<MusicInfo> existing, List<string> files)
+    private static async IAsyncEnumerable<MusicInfo> UpdateData(List<MusicInfo> existing, List<string> files)
     {
         foreach (var info in existing) yield return info;
 
@@ -123,10 +130,11 @@ public partial class MusicManager
                 return m.RelativeLocation != relative_location;
             }));
 
-        foreach (var file in new_files) yield return ParseFile(file);
+        foreach (var file in new_files) 
+            yield return await ParseFile(file);
     }
 
-    private static MusicInfo ParseFile(string location)
+    private static async Task<MusicInfo> ParseFile(string location)
     {
         var split = location.Split('/');
         var filename = split[^1];
@@ -137,7 +145,7 @@ public partial class MusicManager
         var title = string.Join('.',
             string.Join('-', filename_split[1..]).Split('.')[..^1]);
 
-        var entry = MediaInfo.GetInformation(location).GetAwaiter().GetResult();
+        var entry = await MediaInfo.GetInformation(location);
         entry.OriginalTitle ??= title.Trim();
         entry.OriginalAuthor ??= author.Trim();
         entry.RomanizedTitle ??= Romanize.FromCyrillic(title).Trim();
@@ -158,7 +166,13 @@ public partial class MusicManager
 
     public Result<IEnumerable<MusicInfo>, Empty> SearchByTerm(string term)
     {
-        var found = Songs.Where(r => ScoreSingleTerm(term, r));
+        var term_clean = LevenshteinDistance.RemoveFormatting(
+            ParentesisRegex().Replace(term, string.Empty));
+        
+        if (string.IsNullOrEmpty(term_clean))
+            return Result<IEnumerable<MusicInfo>, Empty>.Error(new Empty());
+        
+        var found = Songs.Where(r => ScoreSingleTerm(term_clean, r));
         return Result<IEnumerable<MusicInfo>, Empty>.Success(found);
     }
 
@@ -168,11 +182,8 @@ public partial class MusicManager
         return Result<IEnumerable<MusicInfo>, Empty>.Success(songs);
     }
 
-    private static bool ScoreSingleTerm(string term, MusicInfo r)
+    private static bool ScoreSingleTerm(string term_clean, MusicInfo r)
     {
-        var term_clean = LevenshteinDistance.RemoveFormatting(
-            ParentesisRegex().Replace(term, string.Empty));
-
         var romanized_title_clean = r.RomanizedTitle is null ? null :
             LevenshteinDistance.RemoveFormatting(ParentesisRegex().Replace(r.RomanizedTitle, string.Empty));
 

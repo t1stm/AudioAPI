@@ -3,7 +3,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using AudioManager.Platforms;
 
-namespace WebApplication3.Multiplayer;
+namespace AudioAPI.Multiplayer;
 
 public class VirtualPlayer(MessageQueue MessageQueue)
 {
