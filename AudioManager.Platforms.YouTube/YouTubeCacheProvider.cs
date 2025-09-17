@@ -9,6 +9,8 @@ public static class YouTubeCacheProvider
 
     public static async Task UpdateCache(PlatformResult result, StreamSpreader stream_spreader)
     {
+        var alternativeLookup = CurrentCache.GetAlternateLookup<ReadOnlySpan<char>>();
+        
         if (result is not YouTubeResult youtube_result) return;
         var export_directory =
             Environment.GetEnvironmentVariable("YOUTUBE_CACHE", EnvironmentVariableTarget.Process);
@@ -21,7 +23,7 @@ public static class YouTubeCacheProvider
         if (File.Exists(file_path)) return;
 
         await CacheLock.WaitAsync();
-        if (!CurrentCache.TryAdd(file_path, stream_spreader))
+        if (!alternativeLookup.TryAdd(file_path, stream_spreader))
         {
             CacheLock.Release();
             return;
@@ -48,7 +50,7 @@ public static class YouTubeCacheProvider
                 await new_file.DisposeAsync();
 
                 await CacheLock.WaitAsync();
-                CurrentCache.Remove(file_path);
+                alternativeLookup.Remove(file_path);
                 CacheLock.Release();
             }
         };

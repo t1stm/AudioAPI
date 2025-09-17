@@ -8,5 +8,5 @@ public interface ISupportsPlaylist
     public Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchPlaylist(string playlist,
         CancellationToken cancellation_token = default);
 
-    public bool IsPlaylistUrl(string query);
+    public bool IsPlaylistUrl(ReadOnlySpan<char> query);
 }

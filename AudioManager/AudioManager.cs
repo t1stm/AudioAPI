@@ -16,6 +16,7 @@ public class AudioManager
 
     protected readonly SemaphoreSlim Semaphore = new(1, 1);
     protected readonly TimeSpan ExpireTimeSpan = TimeSpan.FromMinutes(45);
+
     protected readonly System.Timers.Timer ExpireTimer = new()
     {
         Interval = 60 * 1000
@@ -58,13 +59,16 @@ public class AudioManager
 
     public Task<Result<PlatformResult, SearchError>> SearchID(string id, CancellationToken cancellation_token = default)
     {
-        var split_id = id.Trim().Split("://");
-        var identifier = split_id[0] + "://";
-        var pure_id = split_id.Length > 1 ? string.Join("://", split_id[1..]) : id;
+        var idSpan = id.AsSpan();
+        Span<Range> platformSplit = stackalloc Range[2];
+        idSpan.Trim().Split(platformSplit, "://");
 
-        return SearchIDMap.TryGetValue(identifier, out var platform) ?
-            platform.TryID(pure_id, cancellation_token) :
-            Task.FromResult(Result<PlatformResult, SearchError>.Error(SearchError.NotFound));
+        var split_id = idSpan[platformSplit[0]];
+        var identifier = split_id[0] + "://";
+
+        return SearchIDMap.TryGetValue(identifier, out var platform)
+            ? platform.TryID(split_id.Length > 1 ? split_id[1..].ToString() : id, cancellation_token)
+            : Task.FromResult(Result<PlatformResult, SearchError>.Error(SearchError.NotFound));
     }
 
     public async IAsyncEnumerable<PlatformResult> SearchKeywords(string query)
@@ -78,7 +82,7 @@ public class AudioManager
         {
             var search = await task;
             if (search == Status.Error) continue;
-            
+
             foreach (var result in search.GetOK())
             {
                 yield return result;
@@ -164,12 +168,23 @@ public class AudioManager
         Semaphore.Release();
     }
 
+    private static ReadOnlySpan<char> GetProtocolSpan(Span<char> buffer, ReadOnlySpan<char> platformID)
+    {
+        const string protocolSeparator = "://";
+        platformID.CopyTo(buffer);
+        protocolSeparator.CopyTo(buffer[platformID.Length..]);
+        return buffer[..(platformID.Length + protocolSeparator.Length)];
+    }
+
     public QueryType FindQueryType(string query)
     {
+        var querySpan = query.AsSpan();
+        Span<char> protocolBuffer = stackalloc char[32];
+
         foreach (var (platform_id, _) in SearchIDMap)
         {
-            var protocol = $"{platform_id}://";
-            if (!query.StartsWith(protocol)) continue;
+            var protocol = GetProtocolSpan(protocolBuffer, platform_id);
+            if (!querySpan.StartsWith(protocol)) continue;
             return QueryType.ID;
         }
 
@@ -181,11 +196,17 @@ public class AudioManager
             return QueryType.Playlist;
         }
 
-        return (from platform in playlist_platforms
-                let split_query = query.Split("://")
-                let protocol = $"{split_query[0]}://"
-                where platform.SearchPlaylistIdentifiers.Contains(protocol)
-                select platform).Any() ? QueryType.Playlist : QueryType.Keywords;
+        Span<Range> platformSplit = stackalloc Range[2];
+        foreach (var platform in playlist_platforms)
+        {
+            querySpan.Split(platformSplit, "://");
+            var protocol = GetProtocolSpan(protocolBuffer, querySpan[platformSplit[0]]);
+            if (!platform.SearchPlaylistIdentifiers.GetAlternateLookup<ReadOnlySpan<char>>()
+                    .Contains(protocol)) continue;
+            return QueryType.Playlist;
+        }
+
+        return QueryType.Keywords;
     }
 
     ~AudioManager()
