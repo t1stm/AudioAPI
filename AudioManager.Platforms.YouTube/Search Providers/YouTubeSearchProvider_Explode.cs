@@ -100,7 +100,7 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider,
         }
     }
 
-    public bool IsPlaylistUrl(string query)
+    public bool IsPlaylistUrl(ReadOnlySpan<char> query)
     {
         throw new NotSupportedException();
     }

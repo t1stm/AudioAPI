@@ -7,7 +7,6 @@ using AudioManager.Platforms.MusicDatabase;
 using AudioManager.Streams;
 using Microsoft.AspNetCore.Mvc;
 using Result.Objects;
-using AudioAPI;
 
 namespace AudioAPI.Controllers;
 
@@ -23,7 +22,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
         logger.LogInformation("Searching for {Query}", query);
 
         var query_type = manager_service.AudioManager.FindQueryType(query);
-
+        
         switch (query_type)
         {
             case QueryType.ID:

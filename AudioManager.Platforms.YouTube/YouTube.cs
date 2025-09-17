@@ -72,7 +72,7 @@ public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlayli
         return Result<IEnumerable<PlatformResult>, SearchError>.Error(default);
     }
 
-    public bool IsPlaylistUrl(string query)
+    public bool IsPlaylistUrl(ReadOnlySpan<char> query)
     {
         return PlaylistRegex().IsMatch(query);
     }
