@@ -55,23 +55,28 @@ public class YouTubeCacher
         var duplicate = false;
         
         await Sync.WaitAsync();
-        if (!File.Exists(CachePath))
-            return;
-
-        await using var file = File.Open(CachePath, FileMode.Open);
-        var deserialized = await JsonSerializer.DeserializeAsync<YouTubeResult[]>(file, JsonSerializerOptions);
-        Cache.Clear();
-
-        if (deserialized is null)
-            return;
-
-        foreach (var result in deserialized)
+        try
         {
-            if (!alternativeLookup.TryAdd(result.GetPureID(), result))
-                duplicate = true;
-        }
+            if (!File.Exists(CachePath))
+                return;
 
-        Sync.Release();
+            await using var file = File.Open(CachePath, FileMode.Open);
+            var deserialized = await JsonSerializer.DeserializeAsync<YouTubeResult[]>(file, JsonSerializerOptions);
+            Cache.Clear();
+
+            if (deserialized is null)
+                return;
+
+            foreach (var result in deserialized)
+            {
+                if (!alternativeLookup.TryAdd(result.GetPureID(), result))
+                    duplicate = true;
+            }
+        }
+        finally
+        {
+            Sync.Release();
+        }
 
         if (duplicate)
         {

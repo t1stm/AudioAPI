@@ -14,7 +14,7 @@ public class ManagerService
     protected readonly Dictionary<string, FFmpegEncoder> CachedEncoders = new();
     protected readonly Dictionary<FFmpegEncoder, DateTime> ExpireTimes = new();
     
-    private readonly ReaderWriterLockSlim _lock = new();
+    private readonly ReaderWriterLockSlim _lock = new(LockRecursionPolicy.SupportsRecursion);
 
     public ManagerService()
     {

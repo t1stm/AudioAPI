@@ -63,15 +63,15 @@ public class AudioManager
 
     public Task<Result<PlatformResult, SearchError>> SearchID(string id, CancellationToken cancellation_token = default)
     {
-        var idSpan = id.AsSpan();
+        var idSpan = id.AsSpan().Trim();
         Span<Range> platformSplit = stackalloc Range[2];
-        idSpan.Trim().Split(platformSplit, "://");
+        var splitCount = idSpan.Trim().Split(platformSplit, "://");
 
         var split_id = idSpan[platformSplit[0]];
-        var identifier = split_id[0] + "://";
+        var identifier = idSpan[..(split_id.Length + 3)];
 
         return SearchIDLookup.TryGetValue(identifier, out var platform)
-            ? platform.TryID(split_id.Length > 1 ? split_id[1].ToString() : id, cancellation_token)
+            ? platform.TryID(splitCount > 1 ? idSpan[platformSplit[1]].ToString() : id, cancellation_token)
             : Task.FromResult(Result<PlatformResult, SearchError>.Error(SearchError.NotFound));
     }
 
