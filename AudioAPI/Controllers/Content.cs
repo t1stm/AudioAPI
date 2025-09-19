@@ -1,7 +1,7 @@
+using System.Buffers;
 using System.Collections.Concurrent;
-using System.Net;
+using System.Text.Encodings.Web;
 using Audio;
-using Audio.FFmpeg;
 using AudioManager.Platforms;
 using AudioManager.Platforms.MusicDatabase;
 using AudioManager.Streams;
@@ -27,11 +27,13 @@ public class Content(ILogger<Content> logger) : ControllerBase
         {
             case QueryType.ID:
                 {
-                    var split_query = query.Split("://");
-                    var pure_id = split_query.Length > 1 ?
-                        string.Join("://", split_query[1..]) : split_query[0];
+                    var idSpan = query.AsSpan();
+                    Span<Range> ranges = stackalloc Range[2];
+        
+                    var count = idSpan.Split(ranges, "://");
+                    var pureId = count > 1 ? idSpan[ranges[1]]: idSpan;
 
-                    var found = await manager_service.AudioManager.SearchID(pure_id);
+                    var found = await manager_service.AudioManager.SearchID(pureId.ToString()); // TODO: search methods should use ReadOnlySpan<char> wherever possible
                     if (found == Status.Error)
                         yield break;
                     
@@ -93,17 +95,25 @@ public class Content(ILogger<Content> logger) : ControllerBase
         if (content_downloader_request == Status.Error)
             return StatusCode(500);
 
-        var split_query = id.Split("://");
-        var pure_id = split_query.Length > 1 ?
-            string.Join("://", split_query[1..]) : split_query[0];
-
         var stream_spreader = content_downloader_request.GetOK();
         var cache = new ConcurrentQueue<(byte[], int, int)>();
 
-        var file_id = WebUtility.UrlEncode(pure_id);
-        Response.Headers.Append("Content-Disposition", $"attachment; filename={file_id}");
+        var idSpan = id.AsSpan();
+        Span<Range> ranges = stackalloc Range[2];
+        
+        var count = idSpan.Split(ranges, "://");
+        var pureId = count > 1 ? idSpan[ranges[1]]: idSpan;
+
+        var rentArray = ArrayPool<char>.Shared.Rent(pureId.Length);
+        var rentBuffer = rentArray.AsSpan();
+        var urlEncoder = UrlEncoder.Default;
+
+        urlEncoder.Encode(pureId, rentBuffer, out _, out var written);
+        ReadOnlySpan<char> fileId = rentBuffer[..written];
+        
+        Response.Headers.Append("Content-Disposition", (string)$"attachment; filename={fileId}");
         Response.Headers.Append("Cache-Control", "public, max-age=31536000, immutable");
-        Response.Headers.ETag = $"raw-{file_id}";
+        Response.Headers.ETag = (string)$"raw-{fileId}";
 
         var waiting_semaphore = new SemaphoreSlim(0, 1);
         var sync_semaphore = new SemaphoreSlim(1, 1);
@@ -155,8 +165,9 @@ public class Content(ILogger<Content> logger) : ControllerBase
     [Route("/Audio/Download/{codec:required}/{bitrate:int:required}")]
     public async Task<IActionResult> Download(string codec, int bitrate, string id, [FromServices] ManagerService manager_service)
     {
-        if (string.IsNullOrWhiteSpace(id)) return NotFound();
-        logger.LogInformation("Downloading \'{Id}\' {Codec} {Bitrate}", codec, bitrate, id);
+        if (bitrate < 8) return BadRequest("Bitrate must be greater than 8");
+        if (string.IsNullOrWhiteSpace(id)) return NotFound("No ID provided");
+        logger.LogInformation("Downloading \'{Id}\' {Codec} {Bitrate}", id, codec, bitrate);
 
         var type = codec switch
         {
@@ -167,7 +178,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
         };
         Response.ContentType = type;
 
-        var ffmpeg_codec = codec switch
+        var ffmpegCodec = codec switch
         {
             "Vorbis" => "-c:a libvorbis",
             "AAC" => "-c:a aac",
@@ -176,7 +187,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
             _ => "-c:a libopus"
         };
 
-        var ffmpeg_output_format = codec switch
+        var ffmpegOutputFormat = codec switch
         {
             "Opus" or "Vorbis" => "-f ogg",
             "AAC" => "-f adts",
@@ -185,15 +196,12 @@ public class Content(ILogger<Content> logger) : ControllerBase
             _ => "-f mka"
         };
 
-        var extension = ffmpeg_output_format[3..];
-
-        await manager_service.CacheSemaphore.WaitAsync();
-        if (!manager_service.CachedEncoders.TryGetValue((codec, bitrate, id), out var encoder))
+        var extension = ffmpegOutputFormat[3..];
+        
+        if (!manager_service.TryGetEncoder(codec, bitrate, id, out var encoder))
         {
-            encoder = new FFmpegEncoder();
-
             var search = await manager_service.AudioManager.SearchID(id);
-            if (search == Status.Error) return NotFound();
+            if (search == Status.Error) return NotFound("Search resulted in error");
 
             var result = search.GetOK();
 
@@ -203,33 +211,40 @@ public class Content(ILogger<Content> logger) : ControllerBase
             if (content_downloader_request == Status.Error)
                 return StatusCode(500);
 
-            manager_service.CachedEncoders.Add((codec, bitrate, id), encoder);
-            manager_service.CacheSemaphore.Release();
+            (_, encoder) = manager_service.CreateNewEncoder(codec, bitrate, id);
 
             var source_stream_spreader = content_downloader_request.GetOK();
-            var stream_subscriber_result = encoder.Convert(bitrate, ffmpeg_codec, ffmpeg_output_format);
+            var stream_subscriber_result = encoder.Convert(bitrate, ffmpegCodec, ffmpegOutputFormat);
 
             if (stream_subscriber_result == Status.Error) return StatusCode(500);
 
             var source_stream_subscriber = stream_subscriber_result.GetOK();
             await source_stream_spreader.SubscribeAsync(source_stream_subscriber);
         }
-        else manager_service.CacheSemaphore.Release();
 
         var cache = new ConcurrentQueue<(byte[], int, int)>();
         var waiting_semaphore = new SemaphoreSlim(0);
         var sync_semaphore = new SemaphoreSlim(1);
         var encoder_stream_spreader = encoder.GetStreamSpreader();
+        
+        var idSpan = id.AsSpan();
+        Span<Range> ranges = stackalloc Range[2];
+        
+        var count = idSpan.Split(ranges, "://");
+        var pureId = count > 1 ? idSpan[ranges[1]]: idSpan;
 
-        var split_query = id.Split("://");
-        var pure_id = split_query.Length > 1 ?
-            string.Join("://", split_query[1..]) : split_query[0];
+        var rentArray = ArrayPool<char>.Shared.Rent(pureId.Length);
+        var rentBuffer = rentArray.AsSpan();
+        var urlEncoder = UrlEncoder.Default;
 
-        var file_id = WebUtility.UrlEncode(pure_id);
-        Response.Headers.Append("Content-Disposition", $"attachment; filename={file_id}.{extension}");
+        urlEncoder.Encode(pureId, rentBuffer, out _, out var written);
+        ReadOnlySpan<char> fileId = rentBuffer[..written];
+        
+        Response.Headers.Append("Content-Disposition", (string)$"attachment; filename={fileId}.{extension}");
         Response.Headers.Append("Cache-Control", "public, max-age=31536000, immutable");
-        Response.Headers.ETag = $"{type}-{bitrate}-{file_id}";
-
+        Response.Headers.ETag = (string)$"{type}-{bitrate}-{fileId}";
+        
+        ArrayPool<char>.Shared.Return(rentArray);
         var stream_subscriber = new StreamSubscriber
         {
             WriteCall = (bytes, offset, length) =>
@@ -254,7 +269,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
 
             await SyncCall();
             waiting_semaphore.Release();
-            manager_service.ExpireTimes.TryAdd((codec, bitrate, id), DateTime.Now.Add(TimeSpan.FromMinutes(45)));
+            manager_service.AddNewExpireSession(encoder, DateTime.Now.Add(TimeSpan.FromMinutes(45)));
         }
 
         async Task SyncCall()

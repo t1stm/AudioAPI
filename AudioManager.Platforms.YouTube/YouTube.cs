@@ -13,9 +13,9 @@ namespace AudioManager.Platforms.YouTube;
 public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlaylist
 {
     public static readonly YouTubeCacher YouTubeCacher = new();
-    public override HashSet<string> SearchIDIdentifiers => ["yt://"];
-    public override HashSet<string> SearchPlaylistIdentifiers => ["yt-playlist://"];
-    public override HashSet<string> PlatformDomains => ["youtube.com", "youtu.be",
+    protected override HashSet<string> SearchIDIdentifiers => ["yt://"];
+    protected override HashSet<string> SearchPlaylistIdentifiers => ["yt-playlist://"];
+    protected override HashSet<string> PlatformDomains => ["youtube.com", "youtu.be",
         "m.youtube.com", "music.youtube.com"];
     public override string Name => "YouTube";
     public override string Description => "The YouTube video and music platform.";

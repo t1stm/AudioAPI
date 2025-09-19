@@ -51,7 +51,9 @@ public class YouTubeCacher
 
     public async Task InitializeAsync()
     {
+        var alternativeLookup = Cache.GetAlternateLookup<ReadOnlySpan<char>>();
         var duplicate = false;
+        
         await Sync.WaitAsync();
         if (!File.Exists(CachePath))
             return;
@@ -65,7 +67,7 @@ public class YouTubeCacher
 
         foreach (var result in deserialized)
         {
-            if (!Cache.TryAdd(result.GetPureID(), result))
+            if (!alternativeLookup.TryAdd(result.GetPureID(), result))
                 duplicate = true;
         }
 
@@ -79,11 +81,13 @@ public class YouTubeCacher
 
     public async Task AddToCacheAsync(IEnumerable<YouTubeResult> results)
     {
+        var cache = Cache.GetAlternateLookup<ReadOnlySpan<char>>();
         await Sync.WaitAsync();
-        var youtube_results = results.Where(r => !Cache.ContainsKey(r.GetPureID())).ToArray();
+        
+        var youtube_results = results.Where(r => !cache.ContainsKey(r.GetPureID())).ToArray();
         foreach (var result in youtube_results)
         {
-            Cache.TryAdd(result.GetPureID(), result);
+            cache.TryAdd(result.GetPureID(), result);
         }
         Sync.Release();
 
@@ -94,8 +98,8 @@ public class YouTubeCacher
     public async Task<Result<YouTubeResult, SearchError>> GetFromCacheAsync(string id)
     {
         await Sync.WaitAsync();
-        var alternative_lookup = Cache.GetAlternateLookup<ReadOnlySpan<char>>();
-        var found = alternative_lookup.TryGetValue(id, out var result);
+        var alternateLookup = Cache.GetAlternateLookup<ReadOnlySpan<char>>();
+        var found = alternateLookup.TryGetValue(id, out var result);
         Sync.Release();
 
         return found && result is not null ? Result<YouTubeResult, SearchError>.Success(result) :
