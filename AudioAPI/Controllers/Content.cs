@@ -16,6 +16,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
 {
     [HttpGet]
     [Route("/Audio/Search")]
+    [Produces("application/json")]
     public async IAsyncEnumerable<PlatformResult> Search(string query, [FromServices] ManagerService manager_service)
     {
         if (string.IsNullOrWhiteSpace(query)) yield break;
@@ -76,6 +77,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
 
     [HttpGet]
     [Route("/Audio/DownloadRaw")]
+    [Produces("audio/ogg", "audio/mp3", "audio/aac", "audio/flac", "audio/mka", "audio/webm", "text/plain")]
     public async Task<IActionResult> DownloadRaw(string id, [FromServices] ManagerService manager_service)
     {
         if (string.IsNullOrWhiteSpace(id)) return NotFound();
@@ -163,6 +165,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
 
     [HttpGet]
     [Route("/Audio/Download/{codec:required}/{bitrate:int:required}")]
+    [Produces("audio/ogg", "audio/mp3", "audio/aac", "audio/flac", "audio/mka", "audio/webm", "text/plain")]
     public async Task<IActionResult> Download(string codec, int bitrate, string id, [FromServices] ManagerService manager_service)
     {
         if (bitrate < 8) return BadRequest("Bitrate must be greater than 8");
