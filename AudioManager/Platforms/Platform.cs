@@ -7,9 +7,19 @@ namespace AudioManager.Platforms;
 
 public abstract class Platform : ISupportsID
 {
-    public abstract HashSet<string> SearchIDIdentifiers { get; }
-    public abstract HashSet<string> PlatformDomains { get; }
-    public abstract HashSet<string> SearchPlaylistIdentifiers { get; }
+    protected abstract HashSet<string> SearchIDIdentifiers { get; }
+    protected abstract HashSet<string> PlatformDomains { get; }
+    protected abstract HashSet<string> SearchPlaylistIdentifiers { get; }
+
+    public virtual HashSet<string>.AlternateLookup<ReadOnlySpan<char>> SearchIDIdentifiersLookup =>
+        SearchIDIdentifiers.GetAlternateLookup<ReadOnlySpan<char>>();
+
+    public virtual HashSet<string>.AlternateLookup<ReadOnlySpan<char>> PlatformDomainsLookup =>
+        PlatformDomains.GetAlternateLookup<ReadOnlySpan<char>>();
+
+    public virtual HashSet<string>.AlternateLookup<ReadOnlySpan<char>> SearchPlaylistIdentifiersLookup =>
+        SearchPlaylistIdentifiers.GetAlternateLookup<ReadOnlySpan<char>>();
+
     public abstract string Name { get; }
     public abstract string Description { get; }
     public abstract int Priority { get; }

@@ -33,6 +33,10 @@ public class AudioManager
         ExpireTimer.Start();
     }
 
+    protected Dictionary<string,Platform>.AlternateLookup<ReadOnlySpan<char>> SearchIDLookup => SearchIDMap.GetAlternateLookup<ReadOnlySpan<char>>();
+    protected Dictionary<string,StreamSpreader>.AlternateLookup<ReadOnlySpan<char>> CachedResultLookup => CachedResults.GetAlternateLookup<ReadOnlySpan<char>>();
+    protected Dictionary<string,DateTime>.AlternateLookup<ReadOnlySpan<char>> ExpireTimestampLookup => ExpireTimestamps.GetAlternateLookup<ReadOnlySpan<char>>();
+    
     public void RegisterPlatform<T>() where T : Platform, new()
     {
         var platform = new T();
@@ -51,9 +55,9 @@ public class AudioManager
 
     protected void MapPlatformIdentifiers(Platform platform)
     {
-        foreach (var identifier in platform.SearchIDIdentifiers)
+        foreach (var identifier in platform.SearchIDIdentifiersLookup.Set)
         {
-            SearchIDMap.Add(identifier, platform);
+            SearchIDLookup.TryAdd(identifier, platform);
         }
     }
 
@@ -66,8 +70,8 @@ public class AudioManager
         var split_id = idSpan[platformSplit[0]];
         var identifier = split_id[0] + "://";
 
-        return SearchIDMap.TryGetValue(identifier, out var platform)
-            ? platform.TryID(split_id.Length > 1 ? split_id[1..].ToString() : id, cancellation_token)
+        return SearchIDLookup.TryGetValue(identifier, out var platform)
+            ? platform.TryID(split_id.Length > 1 ? split_id[1].ToString() : id, cancellation_token)
             : Task.FromResult(Result<PlatformResult, SearchError>.Error(SearchError.NotFound));
     }
 
@@ -113,8 +117,10 @@ public class AudioManager
     {
         try
         {
+            var cachedResults = CachedResultLookup;
+            
             await Semaphore.WaitAsync(cancellation_token);
-            if (CachedResults.TryGetValue(result.ID, out var stream_spreader))
+            if (cachedResults.TryGetValue(result.ID, out var stream_spreader))
             {
                 return Result<StreamSpreader, DownloadError>.Success(stream_spreader);
             }
@@ -142,27 +148,29 @@ public class AudioManager
 
     protected async void HandleStreamSpreaders(object? sender, ElapsedEventArgs elapsedEventArgs)
     {
+        var expireTimestamps = ExpireTimestampLookup;
         await Semaphore.WaitAsync();
 
         foreach (var (id, stream_spreader) in CachedResults)
         {
             if (!stream_spreader.Closed) continue;
-            if (ExpireTimestamps.ContainsKey(id)) continue;
+            if (expireTimestamps.ContainsKey(id)) continue;
 
-            ExpireTimestamps[id] = DateTime.UtcNow.Add(ExpireTimeSpan);
+            expireTimestamps[id] = DateTime.UtcNow.Add(ExpireTimeSpan);
         }
 
         var cached_dictionary = ExpireTimestamps.ToDictionary();
         var now = DateTime.UtcNow;
 
+        var cachedResults = CachedResultLookup;
         foreach (var (id, expire) in cached_dictionary)
         {
             if (expire < now) continue;
-            ExpireTimestamps.Remove(id);
+            expireTimestamps.Remove(id);
 
-            var spreader = CachedResults[id];
+            var spreader = cachedResults[id];
             await spreader.DisposeAsync();
-            CachedResults.Remove(id);
+            cachedResults.Remove(id);
         }
 
         Semaphore.Release();
@@ -181,7 +189,7 @@ public class AudioManager
         var querySpan = query.AsSpan();
         Span<char> protocolBuffer = stackalloc char[32];
 
-        foreach (var (platform_id, _) in SearchIDMap)
+        foreach (var (platform_id, _) in SearchIDLookup.Dictionary)
         {
             var protocol = GetProtocolSpan(protocolBuffer, platform_id);
             if (!querySpan.StartsWith(protocol)) continue;
@@ -201,8 +209,7 @@ public class AudioManager
         {
             querySpan.Split(platformSplit, "://");
             var protocol = GetProtocolSpan(protocolBuffer, querySpan[platformSplit[0]]);
-            if (!platform.SearchPlaylistIdentifiers.GetAlternateLookup<ReadOnlySpan<char>>()
-                    .Contains(protocol)) continue;
+            if (!platform.SearchPlaylistIdentifiersLookup.Contains(protocol)) continue;
             return QueryType.Playlist;
         }
 

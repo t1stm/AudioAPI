@@ -14,8 +14,10 @@ public class SpotifySearchProvider : SearchProvider, ISupportsID
     private static readonly SpotifyClientConfig SpotifyConfig = SpotifyClientConfig
         .CreateDefault()
         .WithAuthenticator(new ClientCredentialsAuthenticator
-        (Environment.GetEnvironmentVariable("SPOTIFY_ID") ?? throw new ArgumentNullException(),
-            Environment.GetEnvironmentVariable("SPOTIFY_SECRET") ?? throw new ArgumentNullException()));
+        (Environment.GetEnvironmentVariable("SPOTIFY_ID") ??
+         throw new ArgumentNullException(nameof(SpotifyConfig), "Environment variable SPOTIFY_ID is not set"),
+            Environment.GetEnvironmentVariable("SPOTIFY_SECRET") ??
+            throw new ArgumentNullException(nameof(SpotifyConfig), "Environment variable SPOTIFY_SECRET is not set")));
 
     private static readonly Lazy<SpotifyClient> Spotify = new(() => new SpotifyClient(SpotifyConfig));
 
@@ -31,7 +33,8 @@ public class SpotifySearchProvider : SearchProvider, ISupportsID
         return artist;
     }
 
-    public async Task<Result<PlatformResult, SearchError>> TryID(string id, CancellationToken cancellation_token = default)
+    public async Task<Result<PlatformResult, SearchError>> TryID(string id,
+        CancellationToken cancellation_token = default)
     {
         var track = await Spotify.Value.Tracks.Get(id, cancellation_token);
         var result = new SpotifyResult

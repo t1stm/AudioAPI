@@ -19,7 +19,7 @@ public class Getter_YouTubeExplode : ContentGetter
 
             var youtube_client = Client;
             var stream = await youtube_client.Videos.Streams.GetManifestAsync(
-                youtube_result.GetPureID(), cancellation_token);
+                youtube_result.GetPureID().ToString(), cancellation_token);
             var audio_only_streams = stream.GetAudioOnlyStreams()
                 .OrderByDescending(s => s.Bitrate.KiloBitsPerSecond * (s.AudioCodec is "Opus" ? 2 : 1));
 

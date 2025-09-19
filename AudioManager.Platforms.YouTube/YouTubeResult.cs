@@ -7,7 +7,16 @@ namespace AudioManager.Platforms.YouTube;
 public sealed class YouTubeResult : PlatformResult, ISupportsCaching
 {
     [JsonIgnore]
-    public string PureId => ID.Split("://")[1];
+    public ReadOnlySpan<char> PureId {
+        get
+        {
+            var span = ID.AsSpan();
+            Span<Range> ranges = stackalloc Range[2];
+            
+            var count = span.Split(ranges, "://");
+            return count > 1 ? span[ranges[1]] : span;
+        } 
+    }
 
     public override string GetDownloadUrl()
     {

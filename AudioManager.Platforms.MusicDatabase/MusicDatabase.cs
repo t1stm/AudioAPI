@@ -8,9 +8,9 @@ namespace AudioManager.Platforms.MusicDatabase;
 
 public class MusicDatabase : Platform, ISupportsSearch, ISupportsRandomResults
 {
-    public override HashSet<string> SearchIDIdentifiers { get; } = ["audio://"];
-    public override HashSet<string> PlatformDomains { get; } = [];
-    public override HashSet<string> SearchPlaylistIdentifiers { get; } = [];
+    protected override HashSet<string> SearchIDIdentifiers { get; } = ["audio://"];
+    protected override HashSet<string> PlatformDomains { get; } = [];
+    protected override HashSet<string> SearchPlaylistIdentifiers { get; } = [];
 
     public override string Name => "Music Database";
     public override string Description => "Locally stored music";
