@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { type PageData } from './$types';
-	import Song from '$components/home/song/Song.svelte';
+  import { type PageData } from './$types';
+  import Song from '$components/home/song/Song.svelte';
 
 	const { data }: { data: PageData } = $props();
 	let results = $derived(data.results);

@@ -3,6 +3,14 @@
 	import empty from '/static/empty.png';
 
 	let thumbnail = $derived(current.thumbnail?.length > 0 ? current.thumbnail : empty);
+
+  $effect(() => {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: current.name,
+      artist: current.artist,
+      artwork: [{ src: thumbnail }]
+    })
+  })
 </script>
 
 <div id="track-info" class="flex items-center gap-1.5">
