@@ -7,7 +7,7 @@
 	let icon = $derived((slider.percentage > 0) ? SpeakerWave : SpeakerXMark);
 
 	$effect(() => {
-		audio.volume = slider.percentage
+		audio.volume = slider.percentage / 100
 	});
 </script>
 

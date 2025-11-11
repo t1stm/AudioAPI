@@ -17,6 +17,32 @@
 
 	let currentTime = $derived(getTimeString(audio.currentSeconds));
 	let maxTime = $derived(getTimeString(current.lengthSeconds));
+
+  $effect(() => {
+    // in a separate effect to avoid re-running on every audio time update
+    navigator.mediaSession.setActionHandler('seekbackward', () => {
+      slider.keydown({
+        key: 'ArrowLeft'
+      } as KeyboardEvent)
+    })
+
+    navigator.mediaSession.setActionHandler('seekforward', () => {
+      slider.keydown({
+        key: 'ArrowRight'
+      } as KeyboardEvent)
+    })
+  })
+
+  $effect(() => {
+    const position = audio.currentSeconds;
+    const length = current.lengthSeconds > audio.currentSeconds ? current.lengthSeconds : audio.currentSeconds;
+
+    navigator.mediaSession.setPositionState({
+      duration: length,
+      position: position,
+      playbackRate: 1,
+    })
+  })
 </script>
 
 <div id="seekbar" class="flex items-center gap-2 w-full max-w-lg">

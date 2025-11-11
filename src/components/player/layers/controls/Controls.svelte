@@ -18,7 +18,27 @@
 			icon: Forward,
 			onClick: () => queue.nextTrack()
 		}
-	]);
+	])
+
+  $effect(() => {
+    // static navigator fields are not very reactive. shouldn't update them every time
+    navigator.mediaSession.setActionHandler('play', () => {
+      audio.paused = false;
+    });
+    navigator.mediaSession.setActionHandler('pause', () => {
+      audio.paused = true;
+    });
+    navigator.mediaSession.setActionHandler('previoustrack', () => {
+      queue.previousTrack();
+    });
+    navigator.mediaSession.setActionHandler('nexttrack', () => {
+      queue.nextTrack();
+    });
+  })
+
+  $effect(() => {
+    navigator.mediaSession.playbackState = audio.paused ? 'paused' : 'playing'
+  })
 </script>
 
 <div id="controls" class="flex gap-2">
