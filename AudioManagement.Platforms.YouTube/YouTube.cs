@@ -7,11 +7,17 @@ using AudioManagement.Platforms.YouTube.Getters;
 using AudioManagement.Platforms.YouTube.Search_Providers;
 using Result;
 using Result.Objects;
+using Serilog;
 
 namespace AudioManagement.Platforms.YouTube;
 
-public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlaylist
+public sealed partial class YouTube(ILogger logger) : Platform(logger), IPlatformFactory<YouTube>, ISupportsSearch, ISupportsPlaylist
 {
+    public static YouTube CreateNew(ILogger logger)
+    {
+        return new YouTube(logger);
+    }
+    
     public static readonly YouTubeCacher YouTubeCacher = new();
     protected override HashSet<string> SearchIDIdentifiers => ["yt://"];
     protected override HashSet<string> SearchPlaylistIdentifiers => ["yt-playlist://"];
@@ -28,17 +34,17 @@ public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlayli
 
     protected override List<SearchProvider> SearchProviders { get; set; } =
     [
-        new YouTubeSearchProviderCached(YouTubeCacher),
-        new YouTubeSearchProviderMadeyoga(),
-        new YouTubeSearchProviderExplode()
+        new YouTubeSearchProviderCached(logger, YouTubeCacher),
+        new YouTubeSearchProviderMadeyoga(logger),
+        new YouTubeSearchProviderExplode(logger)
     ];
 
     protected override List<ContentGetter> ContentDownloaders { get; set; } =
     [
-        new GetterLocalCache(),
-        new GetterYouTubeExplode(),
-        new GetterYtDlp(),
-        new GetterVideoLibrary()
+        new GetterLocalCache(logger),
+        new GetterYouTubeExplode(logger),
+        new GetterYtDlp(logger),
+        new GetterVideoLibrary(logger)
     ];
 
     public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchPlaylist(string playlist,

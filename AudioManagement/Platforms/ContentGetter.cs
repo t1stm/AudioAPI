@@ -1,10 +1,11 @@
 using AudioManagement.Platforms.Errors;
 using AudioManagement.Streams;
 using Result;
+using Serilog;
 
 namespace AudioManagement.Platforms;
 
-public abstract class ContentGetter
+public abstract class ContentGetter(ILogger logger)
 {
     public abstract int Priority { get; }
 

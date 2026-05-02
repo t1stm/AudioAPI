@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using AudioManagement.Platforms.YouTube;
 using Result.Objects;
+using Serilog.Core;
 using Xunit.Abstractions;
 
 namespace AudioManagement.Tests;
@@ -70,7 +71,7 @@ public class StreamSpreaderTests(ITestOutputHelper output)
     {
         const int streamCount = 16;
         output.WriteLine("Starting download test.");
-        var audioManager = new AudioManager();
+        var audioManager = new AudioManager(Logger.None);
 
         audioManager.Initialize();
         audioManager.RegisterPlatform<YouTube>();

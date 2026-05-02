@@ -2,13 +2,14 @@ using AudioManagement.Platforms.Errors;
 using AudioManagement.Platforms.Optional.Supports;
 using AudioManagement.Utils;
 using Result;
+using Serilog;
 using YoutubeSearchApi.Net;
 using YoutubeSearchApi.Net.Backends;
 using YoutubeSearchApi.Net.Objects;
 
 namespace AudioManagement.Platforms.YouTube.Search_Providers;
 
-public class YouTubeSearchProviderMadeyoga : SearchProvider,
+public class YouTubeSearchProviderMadeyoga(ILogger logger) : SearchProvider(logger),
     ISupportsSearch
 {
     public override string Name => "YouTubeSearchAPI.Net";

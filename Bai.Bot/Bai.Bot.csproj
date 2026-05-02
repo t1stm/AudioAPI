@@ -8,9 +8,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\AudioManagement\AudioManagement.csproj"/>
-    <ProjectReference Include="..\AudioManagement.Platforms.YouTube\AudioManagement.Platforms.YouTube.csproj" />
     <ProjectReference Include="..\AudioManagement.Platforms.MusicDatabase\AudioManagement.Platforms.MusicDatabase.csproj" />
+    <ProjectReference Include="..\AudioManagement.Platforms.Spotify\AudioManagement.Platforms.Spotify.csproj" />
+    <ProjectReference Include="..\AudioManagement.Platforms.YouTube\AudioManagement.Platforms.YouTube.csproj" />
+    <ProjectReference Include="..\AudioManagement\AudioManagement.csproj" />
+    <ProjectReference Include="../../DSharpPlus/DSharpPlus/DSharpPlus.csproj" />
+    <ProjectReference Include="../../DSharpPlus/DSharpPlus.Voice/DSharpPlus.Voice.csproj" />
   </ItemGroup>
 
   <ItemGroup>

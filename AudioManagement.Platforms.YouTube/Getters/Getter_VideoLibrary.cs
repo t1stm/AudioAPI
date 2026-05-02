@@ -1,11 +1,12 @@
 using AudioManagement.Platforms.Errors;
 using AudioManagement.Streams;
 using Result;
+using Serilog;
 using VideoLibrary;
 
 namespace AudioManagement.Platforms.YouTube.Getters;
 
-public class GetterVideoLibrary : ContentGetter
+public class GetterVideoLibrary(ILogger logger) : ContentGetter(logger)
 {
     public override int Priority => 0;
 

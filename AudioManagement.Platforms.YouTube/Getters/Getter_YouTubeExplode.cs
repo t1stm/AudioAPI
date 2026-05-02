@@ -2,11 +2,12 @@ using AudioManagement.Platforms.Errors;
 using AudioManagement.Platforms.YouTube.Search_Providers;
 using AudioManagement.Streams;
 using Result;
+using Serilog;
 using YoutubeExplode;
 
 namespace AudioManagement.Platforms.YouTube.Getters;
 
-public class GetterYouTubeExplode : ContentGetter
+public class GetterYouTubeExplode(ILogger logger) : ContentGetter(logger)
 {
     public override int Priority => 40;
     protected static YoutubeClient Client => YouTubeSearchProviderExplode.Client;

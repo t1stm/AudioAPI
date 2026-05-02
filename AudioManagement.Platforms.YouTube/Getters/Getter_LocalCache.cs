@@ -1,10 +1,11 @@
 using AudioManagement.Platforms.Errors;
 using AudioManagement.Streams;
 using Result;
+using Serilog;
 
 namespace AudioManagement.Platforms.YouTube.Getters;
 
-public class GetterLocalCache : ContentGetter
+public class GetterLocalCache(ILogger logger) : ContentGetter(logger)
 {
     public string CacheLocation = "./YouTube Cache";
     public override int Priority => 99;

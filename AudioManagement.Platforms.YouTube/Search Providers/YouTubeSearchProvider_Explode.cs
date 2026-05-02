@@ -2,12 +2,13 @@ using AudioManagement.Platforms.Errors;
 using AudioManagement.Platforms.Optional.Supports;
 using AudioManagement.Utils;
 using Result;
+using Serilog;
 using YoutubeExplode;
 using YoutubeExplode.Common;
 
 namespace AudioManagement.Platforms.YouTube.Search_Providers;
 
-public sealed class YouTubeSearchProviderExplode : SearchProvider,
+public sealed class YouTubeSearchProviderExplode(ILogger logger) : SearchProvider(logger),
     ISupportsID, ISupportsPlaylist, ISupportsSearch
 {
     public static YoutubeClient Client { get; } = new();

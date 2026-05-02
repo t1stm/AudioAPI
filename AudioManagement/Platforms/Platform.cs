@@ -2,11 +2,13 @@ using AudioManagement.Platforms.Errors;
 using AudioManagement.Platforms.Optional.Supports;
 using Result;
 using Result.Objects;
+using Serilog;
 
 namespace AudioManagement.Platforms;
 
-public abstract class Platform : ISupportsID
+public abstract class Platform(ILogger logger) : ISupportsID
 {
+    public ILogger Logger { get; } = logger.ForContext<Platform>();
     protected abstract HashSet<string> SearchIDIdentifiers { get; }
     protected abstract HashSet<string> PlatformDomains { get; }
     protected abstract HashSet<string> SearchPlaylistIdentifiers { get; }

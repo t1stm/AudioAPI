@@ -3,10 +3,11 @@ using AudioManagement.Platforms.MusicDatabase.Manager;
 using AudioManagement.Platforms.Optional.Supports;
 using Result;
 using Result.Objects;
+using Serilog;
 
 namespace AudioManagement.Platforms.MusicDatabase.Search_Providers;
 
-public class MusicSearchProvider : SearchProvider, ISupportsID, ISupportsSearch, ISupportsRandomResults
+public class MusicSearchProvider(ILogger logger) : SearchProvider(logger), ISupportsID, ISupportsSearch, ISupportsRandomResults
 {
     protected readonly MusicManager MusicManager = new();
     public override string Name => "Music Search";

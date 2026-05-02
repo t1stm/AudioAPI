@@ -3,10 +3,11 @@ using AudioManagement.Platforms.Optional.Supports;
 using AudioManagement.Platforms.YouTube.Cache;
 using Result;
 using Result.Objects;
+using Serilog;
 
 namespace AudioManagement.Platforms.YouTube.Search_Providers;
 
-public class YouTubeSearchProviderCached(YouTubeCacher cacher) : SearchProvider, ISupportsID
+public class YouTubeSearchProviderCached(ILogger logger, YouTubeCacher cacher) : SearchProvider(logger), ISupportsID
 {
     protected readonly YouTubeCacher YouTubeCacher = cacher;
     public override string Name => "YouTube Cached Results";

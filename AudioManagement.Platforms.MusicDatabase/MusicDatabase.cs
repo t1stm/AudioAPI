@@ -3,10 +3,11 @@ using AudioManagement.Platforms.MusicDatabase.Getters;
 using AudioManagement.Platforms.MusicDatabase.Search_Providers;
 using AudioManagement.Platforms.Optional.Supports;
 using Result;
+using Serilog;
 
 namespace AudioManagement.Platforms.MusicDatabase;
 
-public class MusicDatabase : Platform, ISupportsSearch, ISupportsRandomResults
+public class MusicDatabase(ILogger logger) : Platform(logger), IPlatformFactory<MusicDatabase>, ISupportsSearch, ISupportsRandomResults
 {
     protected override HashSet<string> SearchIDIdentifiers { get; } = ["audio://"];
     protected override HashSet<string> PlatformDomains { get; } = [];
@@ -16,14 +17,19 @@ public class MusicDatabase : Platform, ISupportsSearch, ISupportsRandomResults
     public override string Description => "Locally stored music";
     public override int Priority => 99;
 
+    public static MusicDatabase CreateNew(ILogger logger)
+    {
+        return new MusicDatabase(logger);
+    }
+    
     protected override List<SearchProvider> SearchProviders { get; set; } =
     [
-        new MusicSearchProvider()
+        new MusicSearchProvider(logger)
     ];
 
     protected override List<ContentGetter> ContentDownloaders { get; set; } =
     [
-        new MusicGetter()
+        new MusicGetter(logger)
     ];
 
     public Task<Result<IEnumerable<PlatformResult>, SearchError>> GetRandomResults(int count)

@@ -5,12 +5,14 @@ using AudioManagement.Platforms.Optional.Supports;
 using AudioManagement.Streams;
 using Result;
 using Result.Objects;
+using Serilog;
 using Timer = System.Timers.Timer;
 
 namespace AudioManagement;
 
-public class AudioManager
+public class AudioManager(ILogger logger)
 {
+    public ILogger Logger { get; } = logger.ForContext<AudioManager>();
     protected readonly Dictionary<string, StreamSpreader> CachedResults = [];
 
     protected readonly Timer ExpireTimer = new()
@@ -44,9 +46,9 @@ public class AudioManager
         ExpireTimer.Start();
     }
 
-    public void RegisterPlatform<T>() where T : Platform, new()
+    public void RegisterPlatform<T>() where T : Platform, IPlatformFactory<T>
     {
-        var platform = new T();
+        var platform = T.CreateNew(Logger);
         platform.Initialize();
 
         Platforms.Add(platform);

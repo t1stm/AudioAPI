@@ -4,8 +4,13 @@ using AudioManagement.Platforms.MusicDatabase;
 using AudioManagement.Platforms.YouTube;
 using AudioManagement.Streams;
 using Result.Objects;
+using Serilog;
 
-var audioManager = new AudioManager();
+var loggerConfiguration = new LoggerConfiguration()
+    .WriteTo.Console();
+
+var logger = loggerConfiguration.CreateLogger();
+var audioManager = new AudioManager(logger);
 audioManager.Initialize();
 
 audioManager.RegisterPlatform<YouTube>();

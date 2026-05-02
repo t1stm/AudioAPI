@@ -5,11 +5,13 @@ using AudioManagement;
 using AudioManagement.Platforms.MusicDatabase;
 using AudioManagement.Platforms.YouTube;
 using Timer = System.Timers.Timer;
+using ILogger = Serilog.ILogger;
 
 namespace AudioAPI;
 
 public class ManagerService
 {
+    public ILogger Logger { get; }
     private readonly ReaderWriterLockSlim _lock = new(LockRecursionPolicy.SupportsRecursion);
 
     protected readonly Dictionary<string, FFmpegEncoder> CachedEncoders = new();
@@ -17,9 +19,10 @@ public class ManagerService
     protected readonly Dictionary<FFmpegEncoder, DateTime> ExpireTimes = new();
     public readonly AudioManager Manager;
 
-    public ManagerService()
+    public ManagerService(ILogger logger)
     {
-        Manager = new AudioManager();
+        Logger = logger;
+        Manager = new AudioManager(logger);
         Manager.Initialize();
 
         Manager.RegisterPlatform<MusicDatabase>();

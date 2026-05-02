@@ -1,10 +1,11 @@
 using AudioManagement.Platforms.Errors;
 using AudioManagement.Streams;
 using Result;
+using Serilog;
 
 namespace AudioManagement.Platforms.MusicDatabase.Getters;
 
-public class MusicGetter : ContentGetter
+public class MusicGetter(ILogger logger) : ContentGetter(logger)
 {
     public override int Priority => 99;
 

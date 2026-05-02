@@ -2,10 +2,11 @@ using System.Diagnostics;
 using AudioManagement.Platforms.Errors;
 using AudioManagement.Streams;
 using Result;
+using Serilog;
 
 namespace AudioManagement.Platforms.Cross_Platform;
 
-public sealed class GetterYtDlp : ContentGetter
+public sealed class GetterYtDlp(ILogger logger) : ContentGetter(logger)
 {
     public override int Priority => 20;
 

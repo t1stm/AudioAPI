@@ -1,11 +1,12 @@
 using AudioManagement.Platforms.Errors;
 using AudioManagement.Platforms.Optional.Supports;
 using Result;
+using Serilog;
 using SpotifyAPI.Web;
 
 namespace AudioManagement.Platforms.Spotify;
 
-public class SpotifySearchProvider : SearchProvider, ISupportsID
+public class SpotifySearchProvider(ILogger logger) : SearchProvider(logger), ISupportsID
 {
     private static readonly SpotifyClientConfig SpotifyConfig = SpotifyClientConfig
         .CreateDefault()

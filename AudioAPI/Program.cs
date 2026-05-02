@@ -1,5 +1,6 @@
 using AudioAPI;
 using AudioAPI.Multiplayer;
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,6 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddSerilog();
 
 builder.Services.AddSingleton<ManagerService>();
 builder.Services.AddSingleton<MultiplayerManager>();
