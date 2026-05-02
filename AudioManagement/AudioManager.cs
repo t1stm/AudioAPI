@@ -81,9 +81,7 @@ public class AudioManager
 
     public async IAsyncEnumerable<PlatformResult> SearchKeywords(string query)
     {
-        var searchTasks = Platforms
-            .Where(p => p is ISupportsSearch)
-            .Cast<ISupportsSearch>()
+        var searchTasks = Platforms.OfType<ISupportsSearch>()
             .Select(platform => platform.TrySearchKeywords(query));
 
         foreach (var task in searchTasks)

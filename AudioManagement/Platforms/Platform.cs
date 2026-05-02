@@ -31,8 +31,7 @@ public abstract class Platform : ISupportsID
         CancellationToken cancellationToken = default)
     {
         foreach (var searchProvider in
-                 SearchProviders.Where(searchProvider => searchProvider is ISupportsID)
-                     .Cast<ISupportsID>())
+                 SearchProviders.OfType<ISupportsID>())
         {
             var result = await searchProvider.TryID(id, cancellationToken);
             if (result == Status.Ok) return result;

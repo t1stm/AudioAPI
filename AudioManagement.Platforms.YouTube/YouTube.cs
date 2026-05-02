@@ -45,8 +45,7 @@ public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlayli
         CancellationToken cancellationToken = default)
     {
         foreach (var searchProvider in
-                 SearchProviders.Where(searchProvider => searchProvider is ISupportsPlaylist)
-                     .Cast<ISupportsPlaylist>())
+                 SearchProviders.OfType<ISupportsPlaylist>())
         {
             var result = await searchProvider.TrySearchPlaylist(playlist, cancellationToken);
             _ = PopulateYouTubeCache(result);
@@ -65,8 +64,7 @@ public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlayli
         CancellationToken cancellationToken = default)
     {
         foreach (var searchProvider in
-                 SearchProviders.Where(searchProvider => searchProvider is ISupportsSearch)
-                     .Cast<ISupportsSearch>())
+                 SearchProviders.OfType<ISupportsSearch>())
         {
             var result = await searchProvider.TrySearchKeywords(keywords, cancellationToken);
             _ = PopulateYouTubeCache(result);
@@ -85,9 +83,7 @@ public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlayli
     private static async Task PopulateYouTubeCache(Result<IEnumerable<PlatformResult>, SearchError> results)
     {
         if (results == Status.Error) return;
-        await YouTubeCacher.AddToCacheAsync(results.GetOk()
-            .Where(r => r is YouTubeResult)
-            .Cast<YouTubeResult>());
+        await YouTubeCacher.AddToCacheAsync(results.GetOk().OfType<YouTubeResult>());
     }
 
     [GeneratedRegex(@"\/playlist\?list=[a-zA-Z0-9_-]+")]
