@@ -34,6 +34,7 @@ public class MusicDatabase(ILogger logger) : Platform(logger), IPlatformFactory<
 
     public Task<Result<IEnumerable<PlatformResult>, SearchError>> GetRandomResults(int count)
     {
+        Logger.Debug("Getting {Count} random results from MusicDatabase", count);
         var provider = (MusicSearchProvider)SearchProviders[0];
         return provider.GetRandomResults(count);
     }
@@ -41,6 +42,7 @@ public class MusicDatabase(ILogger logger) : Platform(logger), IPlatformFactory<
     public Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchKeywords(string keywords,
         CancellationToken cancellationToken = default)
     {
+        Logger.Debug("Searching for keywords in MusicDatabase: {Keywords}", keywords);
         var provider = (MusicSearchProvider)SearchProviders[0];
         return provider.TrySearchKeywords(keywords, cancellationToken);
     }
@@ -48,12 +50,14 @@ public class MusicDatabase(ILogger logger) : Platform(logger), IPlatformFactory<
     public override Task<Result<PlatformResult, SearchError>> TryID(string id,
         CancellationToken cancellationToken = default)
     {
+        Logger.Debug("Searching for ID in MusicDatabase: {Id}", id);
         var provider = (MusicSearchProvider)SearchProviders[0];
         return provider.TryID(id, cancellationToken);
     }
 
     public Task<Result<IEnumerable<PlatformResult>, SearchError>> GetArtistSongs(string artist)
     {
+        Logger.Debug("Getting songs for artist in MusicDatabase: {Artist}", artist);
         var provider = (MusicSearchProvider)SearchProviders[0];
         return provider.GetArtistSongs(artist);
     }

@@ -106,7 +106,7 @@ public class YouTubeCacher(ILogger logger)
         var cache = Cache.GetAlternateLookup<ReadOnlySpan<char>>();
         await Sync.WaitAsync();
         var youTubeResults = results as YouTubeResult[] ?? results.ToArray();
-        Logger.Debug("Adding {Count} YouTube results to cache", youTubeResults.Count);
+        Logger.Debug("Adding {Count} YouTube results to cache", youTubeResults.Length);
 
         var youtubeResults = youTubeResults.Where(r => !cache.ContainsKey(r.GetPureID())).ToArray();
         foreach (var result in youtubeResults) cache.TryAdd(result.GetPureID(), result);

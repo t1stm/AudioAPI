@@ -24,24 +24,38 @@ public partial class MusicManager(ILogger logger)
 
     public async Task Initialize()
     {
+        Logger.Information("Initializing MusicManager");
         var storage = Environment.GetEnvironmentVariable("STORAGE", EnvironmentVariableTarget.Process);
-        if (storage is not null) Directory.CreateDirectory(storage);
+        if (storage is not null)
+        {
+            Logger.Debug("Ensuring storage directory exists: {Storage}", storage);
+            Directory.CreateDirectory(storage);
+        }
 
         var albumCovers = Environment.GetEnvironmentVariable("ALBUM_COVERS", EnvironmentVariableTarget.Process);
-        if (albumCovers is not null) Directory.CreateDirectory(albumCovers);
+        if (albumCovers is not null)
+        {
+            Logger.Debug("Ensuring album covers directory exists: {AlbumCovers}", albumCovers);
+            Directory.CreateDirectory(albumCovers);
+        }
 
         await Load();
+        Logger.Debug("Extracting covers from {StorageDirectory}", StorageDirectory);
         CoverExtractor.Extract(StorageDirectory);
+        Logger.Information("MusicManager initialization complete. Loaded {Count} songs", Songs.Count);
     }
 
     protected async Task Load()
     {
+        Logger.Debug("Loading music from {StorageDirectory}", StorageDirectory);
         var songs = new List<MusicInfo>();
-        var genres = Directory.EnumerateDirectories(StorageDirectory, "*", SearchOption.TopDirectoryOnly);
+        var genres = Directory.EnumerateDirectories(StorageDirectory, "*", SearchOption.TopDirectoryOnly).ToList();
 
+        Logger.Debug("Found {Count} genres in storage", genres.Count);
         foreach (var genre in genres)
         {
-            var artists = Directory.EnumerateDirectories(genre, "*", SearchOption.TopDirectoryOnly);
+            var artists = Directory.EnumerateDirectories(genre, "*", SearchOption.TopDirectoryOnly).ToList();
+            Logger.Debug("Found {Count} artists in genre {Genre}", artists.Count, genre);
             foreach (var artist in artists)
             {
                 var process = await ParseArtistFolder(artist);
@@ -165,19 +179,25 @@ public partial class MusicManager(ILogger logger)
 
     public Result<IEnumerable<MusicInfo>, Empty> SearchByTerm(string term)
     {
+        Logger.Debug("MusicManager: Searching by term: {Term}", term);
         var termClean = LevenshteinDistance.RemoveFormatting(
             ParentesisRegex().Replace(term, string.Empty));
 
         if (string.IsNullOrEmpty(termClean))
+        {
+            Logger.Information("MusicManager: Cleaned search term is empty for: {Term}", term);
             return Result<IEnumerable<MusicInfo>, Empty>.Error(new Empty());
+        }
 
-        var found = Songs.Where(r => ScoreSingleTerm(termClean, r));
+        var found = Songs.Where(r => ScoreSingleTerm(termClean, r)).ToList();
+        Logger.Debug("MusicManager: Found {Count} matches for term: {Term}", found.Count, term);
         return Result<IEnumerable<MusicInfo>, Empty>.Success(found);
     }
 
     public Result<IEnumerable<MusicInfo>, Empty> GetRandomSongs(int count)
     {
-        var songs = Songs.OrderBy(_ => Guid.NewGuid()).Take(count);
+        Logger.Debug("MusicManager: Getting {Count} random songs", count);
+        var songs = Songs.OrderBy(_ => Guid.NewGuid()).Take(count).ToList();
         return Result<IEnumerable<MusicInfo>, Empty>.Success(songs);
     }
 
@@ -214,11 +234,19 @@ public partial class MusicManager(ILogger logger)
 
     public Result<MusicInfo, Empty> SearchById(string id)
     {
+        Logger.Debug("MusicManager: Searching by ID: {Id}", id);
         var search = Songs.AsParallel().FirstOrDefault(r => r.ID == id) ??
                      // Second pass for regenerated infos.
                      Songs.AsParallel().FirstOrDefault(r => (r.ID ?? "  ")[..^2] == id[..^2]);
 
-        return search != null ? Result<MusicInfo, Empty>.Success(search) : Result<MusicInfo, Empty>.Error(default);
+        if (search == null)
+        {
+            Logger.Information("MusicManager: ID not found: {Id}", id);
+            return Result<MusicInfo, Empty>.Error(default);
+        }
+
+        Logger.Debug("MusicManager: Found song for ID {Id}: {Title}", id, search.OriginalTitle);
+        return Result<MusicInfo, Empty>.Success(search);
     }
 
     [GeneratedRegex(@"\(.*?\)")]
@@ -239,13 +267,18 @@ public partial class MusicManager(ILogger logger)
 
     public Result<IEnumerable<MusicInfo>, Empty> GetArtistSongs(string artist)
     {
+        Logger.Debug("MusicManager: Getting songs for artist: {Artist}", artist);
         var artistRemovedFormatting = LevenshteinDistance.RemoveFormatting(artist);
         if (string.IsNullOrEmpty(artistRemovedFormatting))
+        {
+            Logger.Information("MusicManager: Cleaned artist name is empty for: {Artist}", artist);
             return Result<IEnumerable<MusicInfo>, Empty>.Error(default);
+        }
 
         var artistSongs = Songs.AsParallel()
-            .Where(song => IsArtistPartOfSong(artistRemovedFormatting, song));
+            .Where(song => IsArtistPartOfSong(artistRemovedFormatting, song)).ToList();
 
+        Logger.Debug("MusicManager: Found {Count} songs for artist: {Artist}", artistSongs.Count, artist);
         return Result<IEnumerable<MusicInfo>, Empty>.Success(artistSongs);
     }
 }
