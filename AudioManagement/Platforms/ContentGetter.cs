@@ -9,7 +9,7 @@ public abstract class ContentGetter
     public abstract int Priority { get; }
 
     public abstract Task<Result<StreamSpreader, DownloadError>> TryGetContentData(PlatformResult result,
-        CancellationToken cancellation_token);
+        CancellationToken cancellationToken);
 
     public virtual void Initialize()
     {

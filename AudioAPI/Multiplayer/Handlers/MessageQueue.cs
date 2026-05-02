@@ -18,10 +18,10 @@ public class MessageQueue(UserStore store)
             var message = Messages.Dequeue();
 
             var bytes = Encoding.UTF8.GetBytes(message);
-            var bytes_memory = new ReadOnlyMemory<byte>(bytes);
+            var bytesMemory = new ReadOnlyMemory<byte>(bytes);
 
             await Parallel.ForEachAsync(store.GetUsers(),
-                async (user, _) => { await user.SendMessageAsync(bytes_memory); });
+                async (user, _) => { await user.SendMessageAsync(bytesMemory); });
         }
 
         Sync.Release();

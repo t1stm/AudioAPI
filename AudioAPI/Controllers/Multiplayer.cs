@@ -8,17 +8,17 @@ using Result.Objects;
 
 namespace AudioAPI.Controllers;
 
-public class Multiplayer(ILogger<Multiplayer> logger, MultiplayerManager Manager) : ControllerBase
+public class Multiplayer(ILogger<Multiplayer> logger, MultiplayerManager manager) : ControllerBase
 {
     private static readonly SemaphoreSlim Semaphore = new(1);
 
     [HttpPost("/Audio/Multiplayer/CreateRoom")]
     public async Task<IActionResult> CreateRoom()
     {
-        var room_id = await Manager.CreateNewRoom();
-        logger.LogInformation("Room created: {Room}", room_id);
+        var roomID = await manager.CreateNewRoom();
+        logger.LogInformation("Room created: {Room}", roomID);
 
-        var room = Manager.GetRoom(room_id);
+        var room = manager.GetRoom(roomID);
         return new JsonResult(room);
     }
 
@@ -29,11 +29,11 @@ public class Multiplayer(ILogger<Multiplayer> logger, MultiplayerManager Manager
         {
             if (!HttpContext.WebSockets.IsWebSocketRequest) return new BadRequestResult();
 
-            using var web_socket = await HttpContext.WebSockets.AcceptWebSocketAsync();
+            using var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync();
             logger.LogDebug("Room update websocket \'{ID}\' connected, with IP: {IP}", HttpContext.TraceIdentifier,
                 HttpContext.Connection.RemoteIpAddress);
 
-            await HandleRoomUpdateWebSocket(web_socket);
+            await HandleRoomUpdateWebSocket(webSocket);
         }
         catch (Exception e)
         {
@@ -51,10 +51,10 @@ public class Multiplayer(ILogger<Multiplayer> logger, MultiplayerManager Manager
         {
             if (!HttpContext.WebSockets.IsWebSocketRequest || !Guid.TryParse(room, out var guid)) return BadRequest();
 
-            using var web_socket = await HttpContext.WebSockets.AcceptWebSocketAsync();
+            using var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync();
             logger.LogDebug("WebSocket \'{ID}\' connected, with IP: {IP}", HttpContext.TraceIdentifier,
                 HttpContext.Connection.RemoteIpAddress);
-            await HandleRoomJoinWebSocket(web_socket, guid, username, HttpContext.TraceIdentifier,
+            await HandleRoomJoinWebSocket(webSocket, guid, username, HttpContext.TraceIdentifier,
                 HttpContext.RequestAborted);
         }
         catch (Exception e)
@@ -66,78 +66,78 @@ public class Multiplayer(ILogger<Multiplayer> logger, MultiplayerManager Manager
         return Ok();
     }
 
-    private async Task HandleRoomUpdateWebSocket(WebSocket web_socket, CancellationToken? cancellation_token = null)
+    private async Task HandleRoomUpdateWebSocket(WebSocket webSocket, CancellationToken? cancellationToken = null)
     {
-        cancellation_token ??= CancellationToken.None;
-        var change_id = Manager.GetChangeId();
+        cancellationToken ??= CancellationToken.None;
+        var changeID = manager.GetChangeId();
         var user = new User
         {
             ID = "dummy user",
-            WebSocket = web_socket
+            WebSocket = webSocket
         };
 
         await SendRooms();
         do
         {
-            var new_id = Manager.GetChangeId();
-            if (change_id == new_id)
+            var newID = manager.GetChangeId();
+            if (changeID == newID)
             {
                 await Task.Delay(166);
                 continue;
             }
 
-            change_id = new_id;
+            changeID = newID;
 
             await SendRooms();
-        } while (web_socket.State == WebSocketState.Open && !cancellation_token.Value.IsCancellationRequested);
+        } while (webSocket.State == WebSocketState.Open && !cancellationToken.Value.IsCancellationRequested);
 
 
-        await web_socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
+        await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
         return;
 
         async Task SendRooms()
         {
-            var rooms = Manager.GetRooms();
+            var rooms = manager.GetRooms();
             var serialized = JsonSerializer.Serialize(rooms);
 
             await user.SendMessageAsync(serialized);
         }
     }
 
-    private async Task HandleRoomJoinWebSocket(WebSocket web_socket, Guid room_id, string? username, string id,
-        CancellationToken cancellation_token)
+    private async Task HandleRoomJoinWebSocket(WebSocket webSocket, Guid roomID, string? username, string id,
+        CancellationToken cancellationToken)
     {
         var reader = new WebSocketTextReader(logger);
-        await HandleUserMessage(id, room_id, web_socket, string.Empty, username);
+        await HandleUserMessage(id, roomID, webSocket, string.Empty, username);
         Result<string, WebSocketReadStatus> response;
         do
         {
-            response = await reader.ReadWholeMessageAsync(web_socket, cancellation_token);
+            response = await reader.ReadWholeMessageAsync(webSocket, cancellationToken);
             if (response == Status.Error) break;
 
-            var handle = await HandleUserMessage(id, room_id, web_socket, response.GetOK());
+            var handle = await HandleUserMessage(id, roomID, webSocket, response.GetOk());
             if (handle != HandleEvent.None) break;
-        } while (response == Status.OK);
+        } while (response == Status.Ok);
 
-        var room = Manager.GetRoom(room_id);
+        var room = manager.GetRoom(roomID);
         await (room?.RemoveUser(id) ?? Task.CompletedTask);
 
-        await web_socket.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
+        await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
         logger.LogDebug("WebSocket \'{ID}\' disconnected", id);
     }
 
-    private async Task<HandleEvent> HandleUserMessage(string id, Guid room_id, WebSocket web_socket, string message,
-        string? initial_username = null)
+    private async Task<HandleEvent> HandleUserMessage(string id, Guid roomID, WebSocket webSocket, string message,
+        string? initialUsername = null)
     {
         logger.LogDebug("WebSocket \'{ID}\' received: \'{Message}\'", id, message);
 
         await Semaphore.WaitAsync();
-        var room = Manager.GetRoom(room_id);
+        var room = manager.GetRoom(roomID);
         Semaphore.Release();
 
         if (room is null) return HandleEvent.RoomClosed;
 
-        var user = await room.GetOrAddUser(id, web_socket, initial_username);
+        var user = await room.GetOrAddUser(id, webSocket, initialUsername);
         await room.HandleUserMessage(user, message);
 
         return HandleEvent.None;

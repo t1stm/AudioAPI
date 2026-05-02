@@ -28,29 +28,29 @@ public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlayli
 
     protected override List<SearchProvider> SearchProviders { get; set; } =
     [
-        new YouTubeSearchProvider_Cached(YouTubeCacher),
-        new YouTubeSearchProvider_Madeyoga(),
-        new YouTubeSearchProvider_Explode()
+        new YouTubeSearchProviderCached(YouTubeCacher),
+        new YouTubeSearchProviderMadeyoga(),
+        new YouTubeSearchProviderExplode()
     ];
 
     protected override List<ContentGetter> ContentDownloaders { get; set; } =
     [
-        new Getter_LocalCache(),
-        new Getter_YouTubeExplode(),
-        new Getter_YtDLP(),
-        new Getter_VideoLibrary()
+        new GetterLocalCache(),
+        new GetterYouTubeExplode(),
+        new GetterYtDlp(),
+        new GetterVideoLibrary()
     ];
 
     public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchPlaylist(string playlist,
-        CancellationToken cancellation_token = default)
+        CancellationToken cancellationToken = default)
     {
-        foreach (var search_provider in
-                 SearchProviders.Where(search_provider => search_provider is ISupportsPlaylist)
+        foreach (var searchProvider in
+                 SearchProviders.Where(searchProvider => searchProvider is ISupportsPlaylist)
                      .Cast<ISupportsPlaylist>())
         {
-            var result = await search_provider.TrySearchPlaylist(playlist, cancellation_token);
+            var result = await searchProvider.TrySearchPlaylist(playlist, cancellationToken);
             _ = PopulateYouTubeCache(result);
-            if (result == Status.OK) return result;
+            if (result == Status.Ok) return result;
         }
 
         return Result<IEnumerable<PlatformResult>, SearchError>.Error(default);
@@ -62,15 +62,15 @@ public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlayli
     }
 
     public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchKeywords(string keywords,
-        CancellationToken cancellation_token = default)
+        CancellationToken cancellationToken = default)
     {
-        foreach (var search_provider in
-                 SearchProviders.Where(search_provider => search_provider is ISupportsSearch)
+        foreach (var searchProvider in
+                 SearchProviders.Where(searchProvider => searchProvider is ISupportsSearch)
                      .Cast<ISupportsSearch>())
         {
-            var result = await search_provider.TrySearchKeywords(keywords, cancellation_token);
+            var result = await searchProvider.TrySearchKeywords(keywords, cancellationToken);
             _ = PopulateYouTubeCache(result);
-            if (result == Status.OK) return result;
+            if (result == Status.Ok) return result;
         }
 
         return Result<IEnumerable<PlatformResult>, SearchError>.Error(default);
@@ -78,14 +78,14 @@ public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlayli
 
     public override void Initialize()
     {
-        foreach (var search_provider in SearchProviders) search_provider.RegisterContentDownloaders(ContentDownloaders);
+        foreach (var searchProvider in SearchProviders) searchProvider.RegisterContentDownloaders(ContentDownloaders);
         base.Initialize();
     }
 
     private static async Task PopulateYouTubeCache(Result<IEnumerable<PlatformResult>, SearchError> results)
     {
         if (results == Status.Error) return;
-        await YouTubeCacher.AddToCacheAsync(results.GetOK()
+        await YouTubeCacher.AddToCacheAsync(results.GetOk()
             .Where(r => r is YouTubeResult)
             .Cast<YouTubeResult>());
     }

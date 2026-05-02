@@ -6,6 +6,6 @@ namespace Result.Objects;
 /// </summary>
 public enum Status
 {
-    OK,
+    Ok,
     Error
 }

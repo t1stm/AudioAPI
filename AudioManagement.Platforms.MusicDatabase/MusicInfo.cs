@@ -75,12 +75,12 @@ public class MusicInfo
 
     public string UpdateRandomId()
     {
-        var artist_part = (RomanizedAuthor?.Length > 2 ? RomanizedAuthor?[..2] : RomanizedAuthor)?.ToLower();
-        var title_part =
+        var artistPart = (RomanizedAuthor?.Length > 2 ? RomanizedAuthor?[..2] : RomanizedAuthor)?.ToLower();
+        var titlePart =
             (RomanizedTitle?.Length > 6
                 ? RomanizedTitle?[..6]
                 : RomanizedTitle + new string('0', 6 - RomanizedTitle?.Length ?? 0))?.ToLower()
             .Replace(' ', '-');
-        return $"{artist_part}{title_part}-{Generation.RandomString(2)}";
+        return $"{artistPart}{titlePart}-{Generation.RandomString(2)}";
     }
 }

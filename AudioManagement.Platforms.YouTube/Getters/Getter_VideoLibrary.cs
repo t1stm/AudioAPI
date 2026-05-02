@@ -5,37 +5,37 @@ using VideoLibrary;
 
 namespace AudioManagement.Platforms.YouTube.Getters;
 
-public class Getter_VideoLibrary : ContentGetter
+public class GetterVideoLibrary : ContentGetter
 {
     public override int Priority => 0;
 
     public override async Task<Result<StreamSpreader, DownloadError>> TryGetContentData(PlatformResult result,
-        CancellationToken cancellation_token)
+        CancellationToken cancellationToken)
     {
         try
         {
             var client = Client.For(VideoLibrary.YouTube.Default);
             var video = await client.GetAllVideosAsync(result.GetDownloadUrl());
 
-            var best_audio = video
+            var bestAudio = video
                 .OrderByDescending(a => a.AudioBitrate)
                 .ThenBy(a => a.AudioFormat is AudioFormat.Opus)
                 .FirstOrDefault();
 
-            if (best_audio is null)
+            if (bestAudio is null)
                 return Result<StreamSpreader, DownloadError>
                     .Error(DownloadError.NotFound);
 
-            var stream_spreader = new StreamSpreader();
+            var streamSpreader = new StreamSpreader();
 
             _ = Task.Run(async () =>
             {
-                var stream = await best_audio.StreamAsync();
-                await stream.CopyToAsync(stream_spreader, cancellation_token);
-                await stream_spreader.CloseAsync();
-            }, cancellation_token);
+                var stream = await bestAudio.StreamAsync();
+                await stream.CopyToAsync(streamSpreader, cancellationToken);
+                await streamSpreader.CloseAsync();
+            }, cancellationToken);
 
-            return Result<StreamSpreader, DownloadError>.Success(stream_spreader);
+            return Result<StreamSpreader, DownloadError>.Success(streamSpreader);
         }
         catch (Exception e)
         {

@@ -4,7 +4,7 @@ using Result;
 
 namespace AudioManagement.Platforms.YouTube.Getters;
 
-public class Getter_LocalCache : ContentGetter
+public class GetterLocalCache : ContentGetter
 {
     public string CacheLocation = "./YouTube Cache";
     public override int Priority => 99;
@@ -20,12 +20,12 @@ public class Getter_LocalCache : ContentGetter
     }
 
     public override Task<Result<StreamSpreader, DownloadError>> TryGetContentData(
-        PlatformResult result, CancellationToken cancellation_token)
+        PlatformResult result, CancellationToken cancellationToken)
     {
-        if (result is not YouTubeResult youtube_result)
+        if (result is not YouTubeResult youtubeResult)
             return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(DownloadError.WrongType));
 
-        var file = youtube_result.GetPureID().ToString() + ".webm";
+        var file = youtubeResult.GetPureID().ToString() + ".webm";
         Directory.CreateDirectory(CacheLocation);
 
         var path = Path.Combine(CacheLocation, file);
@@ -33,14 +33,14 @@ public class Getter_LocalCache : ContentGetter
             return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(
                 DownloadError.FileReadFailure));
 
-        var stream_spreader = new StreamSpreader();
+        var streamSpreader = new StreamSpreader();
         _ = Task.Run(async () =>
         {
             await using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.None);
-            await stream.CopyToAsync(stream_spreader, cancellation_token);
-            await stream_spreader.CloseAsync();
-        }, cancellation_token);
+            await stream.CopyToAsync(streamSpreader, cancellationToken);
+            await streamSpreader.CloseAsync();
+        }, cancellationToken);
 
-        return Task.FromResult(Result<StreamSpreader, DownloadError>.Success(stream_spreader));
+        return Task.FromResult(Result<StreamSpreader, DownloadError>.Success(streamSpreader));
     }
 }

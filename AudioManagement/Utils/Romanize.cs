@@ -4,10 +4,10 @@ namespace AudioManagement.Utils;
 
 public static class Romanize
 {
-    public static string FromCyrillic(ReadOnlySpan<char> cyrillic_text)
+    public static string FromCyrillic(ReadOnlySpan<char> cyrillicText)
     {
         var builder = new StringBuilder();
-        foreach (var c in cyrillic_text)
+        foreach (var c in cyrillicText)
         {
             var romanized = CyrillicToRomanSwitch(c);
             builder.Append(char.IsLower(c) ? romanized :

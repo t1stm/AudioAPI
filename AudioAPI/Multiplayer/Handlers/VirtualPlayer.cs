@@ -3,7 +3,7 @@ using AudioManagement.Platforms;
 
 namespace AudioAPI.Multiplayer;
 
-public class VirtualPlayer(MessageQueue MessageQueue)
+public class VirtualPlayer(MessageQueue messageQueue)
 {
     protected readonly AddedUserHandler Finished = new();
 
@@ -39,10 +39,10 @@ public class VirtualPlayer(MessageQueue MessageQueue)
     public async Task Remove(int index)
     {
         if (index < 0 || index >= Items.Count) return;
-        var old_current = CurrentIndex;
+        var oldCurrent = CurrentIndex;
         Items.RemoveAt(index);
 
-        if (old_current > index)
+        if (oldCurrent > index)
             CurrentIndex--;
 
         await Broadcast(Queue());
@@ -79,7 +79,7 @@ public class VirtualPlayer(MessageQueue MessageQueue)
 
     public async Task HandleFinished()
     {
-        if (!Finished.Fulfilled(MessageQueue)) return;
+        if (!Finished.Fulfilled(messageQueue)) return;
         await Next();
     }
 
@@ -155,15 +155,15 @@ public class VirtualPlayer(MessageQueue MessageQueue)
     {
         await Sync.WaitAsync();
 
-        var wanted_time = TimeSpan.FromSeconds(seconds);
-        var current_time = Stopwatch.GetTimestamp();
-        var delta_time = current_time - TimeSpanToTimestamp(wanted_time);
+        var wantedTime = TimeSpan.FromSeconds(seconds);
+        var currentTime = Stopwatch.GetTimestamp();
+        var deltaTime = currentTime - TimeSpanToTimestamp(wantedTime);
 
-        StartTime = delta_time;
+        StartTime = deltaTime;
         Sync.Release();
 
-        var seconds_broadcast = Stopwatch.GetElapsedTime(StartTime.Value).TotalSeconds;
-        await Broadcast(Time(seconds_broadcast));
+        var secondsBroadcast = Stopwatch.GetElapsedTime(StartTime.Value).TotalSeconds;
+        await Broadcast(Time(secondsBroadcast));
     }
 
     public async Task SetLoaded(User user)
@@ -174,7 +174,7 @@ public class VirtualPlayer(MessageQueue MessageQueue)
 
     public async Task HandleLoaded()
     {
-        if (!Loaded.Fulfilled(MessageQueue)) return;
+        if (!Loaded.Fulfilled(messageQueue)) return;
         StartTime = Stopwatch.GetTimestamp();
 
         await Broadcast(Time(0));
@@ -212,7 +212,7 @@ public class VirtualPlayer(MessageQueue MessageQueue)
 
     protected string Queue()
     {
-        return $"queue {Items.ToJSON()}";
+        return $"queue {Items.ToJson()}";
     }
 
     protected string Current()
@@ -227,13 +227,13 @@ public class VirtualPlayer(MessageQueue MessageQueue)
 
     protected async Task Broadcast(string message)
     {
-        await MessageQueue.Add(message);
-        await MessageQueue.Update();
+        await messageQueue.Add(message);
+        await messageQueue.Update();
     }
 
-    private static long TimeSpanToTimestamp(TimeSpan time_span)
+    private static long TimeSpanToTimestamp(TimeSpan timeSpan)
     {
-        return TicksToStopwatchTimestamp(time_span.Ticks);
+        return TicksToStopwatchTimestamp(timeSpan.Ticks);
     }
 
     private static long TicksToStopwatchTimestamp(long ticks)

@@ -12,7 +12,7 @@ public static class CustomSerializer
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    public static string ToJSON(this IEnumerable<PlatformResult> results)
+    public static string ToJson(this IEnumerable<PlatformResult> results)
     {
         return '[' + string.Join(',', results.Select(r => r.SerializeSelf())) + ']';
     }

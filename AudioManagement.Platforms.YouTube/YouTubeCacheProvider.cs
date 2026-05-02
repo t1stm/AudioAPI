@@ -7,23 +7,23 @@ public static class YouTubeCacheProvider
     public static readonly SemaphoreSlim CacheLock = new(1, 1);
     public static readonly Dictionary<string, StreamSpreader> CurrentCache = new();
 
-    public static async Task UpdateCache(PlatformResult result, StreamSpreader stream_spreader)
+    public static async Task UpdateCache(PlatformResult result, StreamSpreader streamSpreader)
     {
         var alternativeLookup = CurrentCache.GetAlternateLookup<ReadOnlySpan<char>>();
 
-        if (result is not YouTubeResult youtube_result) return;
-        var export_directory =
+        if (result is not YouTubeResult youtubeResult) return;
+        var exportDirectory =
             Environment.GetEnvironmentVariable("YOUTUBE_CACHE", EnvironmentVariableTarget.Process);
 
-        if (export_directory is null) return;
+        if (exportDirectory is null) return;
 
-        Directory.CreateDirectory(export_directory);
-        var file_path = Path.Combine(export_directory, $"{youtube_result.GetPureID()}.webm");
+        Directory.CreateDirectory(exportDirectory);
+        var filePath = Path.Combine(exportDirectory, $"{youtubeResult.GetPureID()}.webm");
 
-        if (File.Exists(file_path)) return;
+        if (File.Exists(filePath)) return;
 
         await CacheLock.WaitAsync();
-        if (!alternativeLookup.TryAdd(file_path, stream_spreader))
+        if (!alternativeLookup.TryAdd(filePath, streamSpreader))
         {
             CacheLock.Release();
             return;
@@ -31,12 +31,12 @@ public static class YouTubeCacheProvider
 
         CacheLock.Release();
 
-        var new_file = File.Create(file_path);
+        var newFile = File.Create(filePath);
 
         var queue = new Queue<(byte[], int, int)>();
-        var sync_semaphore = new SemaphoreSlim(1, 1);
+        var syncSemaphore = new SemaphoreSlim(1, 1);
 
-        var stream_subscriber = new StreamSubscriber
+        var streamSubscriber = new StreamSubscriber
         {
             WriteCall = (bytes, offset, length) =>
             {
@@ -47,29 +47,29 @@ public static class YouTubeCacheProvider
             CloseCall = async () =>
             {
                 await SyncCall();
-                await new_file.FlushAsync();
-                await new_file.DisposeAsync();
+                await newFile.FlushAsync();
+                await newFile.DisposeAsync();
 
                 await CacheLock.WaitAsync();
-                alternativeLookup.Remove(file_path);
+                alternativeLookup.Remove(filePath);
                 CacheLock.Release();
             }
         };
 
-        await stream_spreader.SubscribeAsync(stream_subscriber);
+        await streamSpreader.SubscribeAsync(streamSubscriber);
         return;
 
         async Task SyncCall()
         {
-            await sync_semaphore.WaitAsync();
+            await syncSemaphore.WaitAsync();
 
             while (queue.TryDequeue(out var entry))
             {
                 var (bytes, offset, length) = entry;
-                await new_file.WriteAsync(bytes.AsMemory(offset, length));
+                await newFile.WriteAsync(bytes.AsMemory(offset, length));
             }
 
-            sync_semaphore.Release();
+            syncSemaphore.Release();
         }
     }
 }

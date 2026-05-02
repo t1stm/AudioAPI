@@ -25,7 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AudioManagement\AudioManagement.csproj"/>
-    <ProjectReference Include="..\AudioManager.Platforms.YouTube\AudioManager.Platforms.YouTube.csproj"/>
+    <ProjectReference Include="..\AudioManagement.Platforms.YouTube\AudioManagement.Platforms.YouTube.csproj" />
   </ItemGroup>
 
 </Project>

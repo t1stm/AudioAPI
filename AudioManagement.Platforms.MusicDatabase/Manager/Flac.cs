@@ -50,12 +50,12 @@ public static class Flac
 
     public static string GetImageFiletype(byte[] data)
     {
-        Span<byte> PngHeader = [137, 80, 78, 71, 13, 10, 26, 10];
-        Span<byte> JpegHeader = [255, 216, 255];
+        Span<byte> pngHeader = [137, 80, 78, 71, 13, 10, 26, 10];
+        Span<byte> jpegHeader = [255, 216, 255];
         return data.Length switch
         {
-            > 9 when HasHeader(PngHeader, data) => "png",
-            > 5 when HasHeader(JpegHeader, data) => "jpg",
+            > 9 when HasHeader(pngHeader, data) => "png",
+            > 5 when HasHeader(jpegHeader, data) => "jpg",
             _ => ""
         };
     }

@@ -10,11 +10,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AudioManagement.CLI", "Audi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AudioManagement.Tests", "AudioManagement.Tests\AudioManagement.Tests.csproj", "{B96BFB0E-3CB8-4DCD-A6BA-881721E2649A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AudioManager.Platforms.YouTube", "AudioManager.Platforms.YouTube\AudioManager.Platforms.YouTube.csproj", "{B4163523-7F73-4C5B-BF9B-2C907DF4F6C5}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AudioManagement.Platforms.YouTube", "AudioManagement.Platforms.YouTube\AudioManagement.Platforms.YouTube.csproj", "{B4163523-7F73-4C5B-BF9B-2C907DF4F6C5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AudioManager.Platforms.MusicDatabase", "AudioManager.Platforms.MusicDatabase\AudioManager.Platforms.MusicDatabase.csproj", "{440AD383-9588-4BF2-8C85-E7A61F8E8D4F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AudioManagement.Platforms.MusicDatabase", "AudioManagement.Platforms.MusicDatabase\AudioManagement.Platforms.MusicDatabase.csproj", "{440AD383-9588-4BF2-8C85-E7A61F8E8D4F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AudioManager.Platforms.Spotify", "AudioManager.Platforms.Spotify\AudioManager.Platforms.Spotify.csproj", "{BB8CA4B8-B399-4112-9858-26393B2D848A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AudioManagement.Platforms.Spotify", "AudioManagement.Platforms.Spotify\AudioManagement.Platforms.Spotify.csproj", "{BB8CA4B8-B399-4112-9858-26393B2D848A}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Platforms", "Platforms", "{6993D4A0-9F35-4F74-9DF3-32C2996E0027}"
 EndProject

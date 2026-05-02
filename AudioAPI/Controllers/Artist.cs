@@ -19,7 +19,7 @@ public class Artist : ControllerBase
         if (songs == Status.Error)
             yield break;
 
-        foreach (var result in songs.GetOK()) yield return result;
+        foreach (var result in songs.GetOk()) yield return result;
     }
 
     [HttpGet]
@@ -32,7 +32,7 @@ public class Artist : ControllerBase
         if (results == Status.Error)
             yield break;
 
-        foreach (var result in results.GetOK()) yield return result;
+        foreach (var result in results.GetOk()) yield return result;
     }
 
     [HttpGet]

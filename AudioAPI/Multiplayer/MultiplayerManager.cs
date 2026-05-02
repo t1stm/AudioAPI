@@ -1,6 +1,6 @@
 namespace AudioAPI.Multiplayer;
 
-public class MultiplayerManager(ManagerService ManagerService)
+public class MultiplayerManager(ManagerService managerService)
 {
     protected readonly Dictionary<Guid, Room> Rooms = new();
     protected readonly SemaphoreSlim Sync = new(1);
@@ -11,7 +11,7 @@ public class MultiplayerManager(ManagerService ManagerService)
         await Sync.WaitAsync();
         var guid = Guid.NewGuid();
 
-        Rooms.Add(guid, new Room(guid, ManagerService)
+        Rooms.Add(guid, new Room(guid, managerService)
         {
             OnInfoModified = () => ChangeId++
         });
@@ -26,9 +26,9 @@ public class MultiplayerManager(ManagerService ManagerService)
         return ChangeId;
     }
 
-    public Room? GetRoom(Guid room_id)
+    public Room? GetRoom(Guid roomID)
     {
-        return Rooms.GetValueOrDefault(room_id);
+        return Rooms.GetValueOrDefault(roomID);
     }
 
     public ICollection<Room> GetRooms()

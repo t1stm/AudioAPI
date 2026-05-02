@@ -75,11 +75,11 @@ public class StreamSpreader : Stream
         }
     }
 
-    public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellation_token)
+    public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
     {
         try
         {
-            await Semaphore.WaitAsync(cancellation_token);
+            await Semaphore.WaitAsync(cancellationToken);
             Data.Add((buffer.ToArray(), offset, count));
             await SyncSubscribers();
         }
@@ -90,14 +90,14 @@ public class StreamSpreader : Stream
     }
 
     public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer,
-        CancellationToken cancellation_token = default)
+        CancellationToken cancellationToken = default)
     {
         try
         {
-            await Semaphore.WaitAsync(cancellation_token);
-            var new_array = new byte[buffer.Length];
-            buffer.CopyTo(new_array);
-            Data.Add((new_array, 0, new_array.Length));
+            await Semaphore.WaitAsync(cancellationToken);
+            var newArray = new byte[buffer.Length];
+            buffer.CopyTo(newArray);
+            Data.Add((newArray, 0, newArray.Length));
             await SyncSubscribers();
         }
         finally
@@ -112,15 +112,15 @@ public class StreamSpreader : Stream
 
         foreach (var subscriber in Subscribers)
         {
-            var starting_index = subscriber.CachedDataIndex;
-            var data_length = Data.Count;
+            var startingIndex = subscriber.CachedDataIndex;
+            var dataLength = Data.Count;
 
-            for (subscriber.CachedDataIndex = starting_index;
-                 subscriber.CachedDataIndex < data_length;
+            for (subscriber.CachedDataIndex = startingIndex;
+                 subscriber.CachedDataIndex < dataLength;
                  subscriber.CachedDataIndex++)
             {
-                var current_slice = Data[subscriber.CachedDataIndex];
-                var (bytes, offset, length) = current_slice;
+                var currentSlice = Data[subscriber.CachedDataIndex];
+                var (bytes, offset, length) = currentSlice;
                 var status = await subscriber.WriteCall.Invoke(bytes, offset, length);
 
                 if (!status.HasFlag(StreamStatus.Closed)) continue;

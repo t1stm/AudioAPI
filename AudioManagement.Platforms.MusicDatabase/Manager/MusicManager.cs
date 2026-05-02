@@ -25,8 +25,8 @@ public partial class MusicManager
         var storage = Environment.GetEnvironmentVariable("STORAGE", EnvironmentVariableTarget.Process);
         if (storage is not null) Directory.CreateDirectory(storage);
 
-        var album_covers = Environment.GetEnvironmentVariable("ALBUM_COVERS", EnvironmentVariableTarget.Process);
-        if (album_covers is not null) Directory.CreateDirectory(album_covers);
+        var albumCovers = Environment.GetEnvironmentVariable("ALBUM_COVERS", EnvironmentVariableTarget.Process);
+        if (albumCovers is not null) Directory.CreateDirectory(albumCovers);
 
         await Load();
         CoverExtractor.Extract(StorageDirectory);
@@ -58,8 +58,8 @@ public partial class MusicManager
     private static async Task<IEnumerable<MusicInfo>> ParseArtistFolder(string artist)
     {
         Console.WriteLine($"Loading artist: \'{artist}\'");
-        var artist_name = artist.Split(Path.PathSeparator)[^1];
-        var json_file = Path.Combine(artist, "Info.json");
+        var artistName = artist.Split(Path.PathSeparator)[^1];
+        var jsonFile = Path.Combine(artist, "Info.json");
 
         var songs = Directory.GetFiles($"{artist}", "*", SearchOption.TopDirectoryOnly)
             .Where(song => IsAudioBasedOnFileExtension(song)).ToList();
@@ -70,11 +70,11 @@ public partial class MusicManager
             StringEscapeHandling = StringEscapeHandling.EscapeHtml
         };
 
-        await using var file_stream = File.Open(json_file, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        await using var fileStream = File.Open(jsonFile, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
 
-        if (File.Exists(json_file))
+        if (File.Exists(jsonFile))
         {
-            using var sr = new StreamReader(file_stream, Encoding.UTF8, true, 4096, true);
+            using var sr = new StreamReader(fileStream, Encoding.UTF8, true, 4096, true);
             var json = await sr.ReadToEndAsync();
 
             try
@@ -84,13 +84,13 @@ public partial class MusicManager
                 if (items.Count == songs.Count) return items;
 
                 var update = UpdateData(items, songs);
-                file_stream.SetLength(0);
-                file_stream.Flush();
-                file_stream.Seek(0, SeekOrigin.Begin);
+                fileStream.SetLength(0);
+                fileStream.Flush();
+                fileStream.Seek(0, SeekOrigin.Begin);
 
                 var blocking = update.ToBlockingEnumerable();
 
-                await using var writer = new StreamWriter(file_stream, Encoding.UTF8);
+                await using var writer = new StreamWriter(fileStream, Encoding.UTF8);
                 serializer.Serialize(writer, blocking);
 
                 return blocking;
@@ -107,10 +107,10 @@ public partial class MusicManager
                 .Select(ParseFile);
 
             var awaited = await Task.WhenAll(list);
-            await using var writer = new StreamWriter(file_stream, Encoding.UTF8);
+            await using var writer = new StreamWriter(fileStream, Encoding.UTF8);
 
             serializer.Serialize(writer, awaited);
-            file_stream.Close();
+            fileStream.Close();
 
             return awaited;
         }
@@ -120,15 +120,15 @@ public partial class MusicManager
     {
         foreach (var info in existing) yield return info;
 
-        var new_files = files.Where(location =>
+        var newFiles = files.Where(location =>
             IsAudioBasedOnFileExtension(location) &&
             existing.All(m =>
             {
-                var relative_location = string.Join('/', location.Split('/')[^3..]);
-                return m.RelativeLocation != relative_location;
+                var relativeLocation = string.Join('/', location.Split('/')[^3..]);
+                return m.RelativeLocation != relativeLocation;
             }));
 
-        foreach (var file in new_files)
+        foreach (var file in newFiles)
             yield return await ParseFile(file);
     }
 
@@ -136,41 +136,41 @@ public partial class MusicManager
     {
         var split = location.Split('/');
         var filename = split[^1];
-        var romanized_author = split[^2];
+        var romanizedAuthor = split[^2];
 
-        var filename_split = filename.Split(" - ");
-        var author = filename_split[0];
+        var filenameSplit = filename.Split(" - ");
+        var author = filenameSplit[0];
         var title = string.Join('.',
-            string.Join('-', filename_split[1..]).Split('.')[..^1]);
+            string.Join('-', filenameSplit[1..]).Split('.')[..^1]);
 
         var entry = await MediaInfo.GetInformation(location);
         entry.OriginalTitle ??= title.Trim();
         entry.OriginalAuthor ??= author.Trim();
         entry.RomanizedTitle ??= Romanize.FromCyrillic(title).Trim();
-        entry.RomanizedAuthor ??= romanized_author.Trim();
+        entry.RomanizedAuthor ??= romanizedAuthor.Trim();
         entry.RelativeLocation ??= string.Join('/', split[^3..]);
         entry.ID = entry.UpdateRandomId();
 
         return entry;
     }
 
-    protected static bool IsAudioBasedOnFileExtension(ReadOnlySpan<char> file_name)
+    protected static bool IsAudioBasedOnFileExtension(ReadOnlySpan<char> fileName)
     {
-        return file_name.EndsWith(".flac") || file_name.EndsWith(".ogg") ||
-               file_name.EndsWith(".mp3") || file_name.EndsWith(".wav") ||
-               file_name.EndsWith(".mka") || file_name.EndsWith(".adts") ||
-               file_name.EndsWith(".wma") || file_name.EndsWith(".wv");
+        return fileName.EndsWith(".flac") || fileName.EndsWith(".ogg") ||
+               fileName.EndsWith(".mp3") || fileName.EndsWith(".wav") ||
+               fileName.EndsWith(".mka") || fileName.EndsWith(".adts") ||
+               fileName.EndsWith(".wma") || fileName.EndsWith(".wv");
     }
 
     public Result<IEnumerable<MusicInfo>, Empty> SearchByTerm(string term)
     {
-        var term_clean = LevenshteinDistance.RemoveFormatting(
+        var termClean = LevenshteinDistance.RemoveFormatting(
             ParentesisRegex().Replace(term, string.Empty));
 
-        if (string.IsNullOrEmpty(term_clean))
+        if (string.IsNullOrEmpty(termClean))
             return Result<IEnumerable<MusicInfo>, Empty>.Error(new Empty());
 
-        var found = Songs.Where(r => ScoreSingleTerm(term_clean, r));
+        var found = Songs.Where(r => ScoreSingleTerm(termClean, r));
         return Result<IEnumerable<MusicInfo>, Empty>.Success(found);
     }
 
@@ -180,34 +180,34 @@ public partial class MusicManager
         return Result<IEnumerable<MusicInfo>, Empty>.Success(songs);
     }
 
-    private static bool ScoreSingleTerm(string term_clean, MusicInfo r)
+    private static bool ScoreSingleTerm(string termClean, MusicInfo r)
     {
-        var romanized_title_clean = r.RomanizedTitle is null
+        var romanizedTitleClean = r.RomanizedTitle is null
             ? null
             : LevenshteinDistance.RemoveFormatting(ParentesisRegex().Replace(r.RomanizedTitle, string.Empty));
 
-        var original_title_clean = r.OriginalTitle is null
+        var originalTitleClean = r.OriginalTitle is null
             ? null
             : LevenshteinDistance.RemoveFormatting(ParentesisRegex().Replace(r.OriginalTitle, string.Empty));
 
-        var romanized_artist_clean =
+        var romanizedArtistClean =
             r.RomanizedAuthor is null ? null : LevenshteinDistance.RemoveFormatting(r.RomanizedAuthor);
 
-        var original_artist_clean =
+        var originalArtistClean =
             r.OriginalAuthor is null ? null : LevenshteinDistance.RemoveFormatting(r.OriginalAuthor);
 
         var eval =
-            (romanized_title_clean != null &&
-             (LevenshteinDistance.ComputeStrict(romanized_title_clean, term_clean) < 2 ||
-              LevenshteinDistance.ComputeStrict($"{romanized_title_clean}{romanized_artist_clean}", term_clean) < 3 ||
-              LevenshteinDistance.ComputeStrict($"{romanized_artist_clean}{romanized_title_clean}", term_clean) < 3 ||
-              LevenshteinDistance.ComputeStrict($"{romanized_title_clean}{original_artist_clean}", term_clean) < 3))
+            (romanizedTitleClean != null &&
+             (LevenshteinDistance.ComputeStrict(romanizedTitleClean, termClean) < 2 ||
+              LevenshteinDistance.ComputeStrict($"{romanizedTitleClean}{romanizedArtistClean}", termClean) < 3 ||
+              LevenshteinDistance.ComputeStrict($"{romanizedArtistClean}{romanizedTitleClean}", termClean) < 3 ||
+              LevenshteinDistance.ComputeStrict($"{romanizedTitleClean}{originalArtistClean}", termClean) < 3))
             ||
-            (original_title_clean != null &&
-             (LevenshteinDistance.ComputeStrict(original_title_clean, term_clean) < 2 ||
-              LevenshteinDistance.ComputeStrict($"{original_title_clean}{original_artist_clean}", term_clean) < 3 ||
-              LevenshteinDistance.ComputeStrict($"{original_artist_clean}{original_title_clean}", term_clean) < 3 ||
-              LevenshteinDistance.ComputeStrict($"{original_title_clean}{romanized_artist_clean}", term_clean) < 3));
+            (originalTitleClean != null &&
+             (LevenshteinDistance.ComputeStrict(originalTitleClean, termClean) < 2 ||
+              LevenshteinDistance.ComputeStrict($"{originalTitleClean}{originalArtistClean}", termClean) < 3 ||
+              LevenshteinDistance.ComputeStrict($"{originalArtistClean}{originalTitleClean}", termClean) < 3 ||
+              LevenshteinDistance.ComputeStrict($"{originalTitleClean}{romanizedArtistClean}", termClean) < 3));
         return eval;
     }
 
@@ -225,26 +225,26 @@ public partial class MusicManager
 
     private static bool IsArtistPartOfSong(string artist, MusicInfo song)
     {
-        var song_artist_formatted = LevenshteinDistance.RemoveFormatting(song.OriginalAuthor) ?? "";
-        var song_artist_romanized = LevenshteinDistance.RemoveFormatting(song.RomanizedAuthor) ?? "";
+        var songArtistFormatted = LevenshteinDistance.RemoveFormatting(song.OriginalAuthor) ?? "";
+        var songArtistRomanized = LevenshteinDistance.RemoveFormatting(song.RomanizedAuthor) ?? "";
 
-        ReadOnlySpan<char> artist_span = artist;
-        ReadOnlySpan<char> formatted_span = song_artist_formatted;
-        ReadOnlySpan<char> romanized_span = song_artist_romanized;
+        ReadOnlySpan<char> artistSpan = artist;
+        ReadOnlySpan<char> formattedSpan = songArtistFormatted;
+        ReadOnlySpan<char> romanizedSpan = songArtistRomanized;
 
-        return (formatted_span.Length != 0 || romanized_span.Length != 0) &&
-               (formatted_span.IndexOf(artist_span) != -1 || romanized_span.IndexOf(artist_span) != -1);
+        return (formattedSpan.Length != 0 || romanizedSpan.Length != 0) &&
+               (formattedSpan.IndexOf(artistSpan) != -1 || romanizedSpan.IndexOf(artistSpan) != -1);
     }
 
     public Result<IEnumerable<MusicInfo>, Empty> GetArtistSongs(string artist)
     {
-        var artist_removed_formatting = LevenshteinDistance.RemoveFormatting(artist);
-        if (string.IsNullOrEmpty(artist_removed_formatting))
+        var artistRemovedFormatting = LevenshteinDistance.RemoveFormatting(artist);
+        if (string.IsNullOrEmpty(artistRemovedFormatting))
             return Result<IEnumerable<MusicInfo>, Empty>.Error(default);
 
-        var artist_songs = Songs.AsParallel()
-            .Where(song => IsArtistPartOfSong(artist_removed_formatting, song));
+        var artistSongs = Songs.AsParallel()
+            .Where(song => IsArtistPartOfSong(artistRemovedFormatting, song));
 
-        return Result<IEnumerable<MusicInfo>, Empty>.Success(artist_songs);
+        return Result<IEnumerable<MusicInfo>, Empty>.Success(artistSongs);
     }
 }

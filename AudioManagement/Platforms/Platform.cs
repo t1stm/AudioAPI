@@ -28,14 +28,14 @@ public abstract class Platform : ISupportsID
     protected abstract List<ContentGetter> ContentDownloaders { get; set; }
 
     public virtual async Task<Result<PlatformResult, SearchError>> TryID(string id,
-        CancellationToken cancellation_token = default)
+        CancellationToken cancellationToken = default)
     {
-        foreach (var search_provider in
-                 SearchProviders.Where(search_provider => search_provider is ISupportsID)
+        foreach (var searchProvider in
+                 SearchProviders.Where(searchProvider => searchProvider is ISupportsID)
                      .Cast<ISupportsID>())
         {
-            var result = await search_provider.TryID(id, cancellation_token);
-            if (result == Status.OK) return result;
+            var result = await searchProvider.TryID(id, cancellationToken);
+            if (result == Status.Ok) return result;
         }
 
         return Result<PlatformResult, SearchError>.Error(default);

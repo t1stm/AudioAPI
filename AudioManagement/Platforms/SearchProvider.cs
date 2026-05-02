@@ -7,9 +7,9 @@ public abstract class SearchProvider
     public abstract int Priority { get; }
     protected virtual List<ContentGetter> ContentDownloaders { get; set; } = [];
 
-    public virtual void RegisterContentDownloaders(List<ContentGetter> content_downloaders)
+    public virtual void RegisterContentDownloaders(List<ContentGetter> contentDownloaders)
     {
-        ContentDownloaders = content_downloaders;
+        ContentDownloaders = contentDownloaders;
         Initialize();
     }
 

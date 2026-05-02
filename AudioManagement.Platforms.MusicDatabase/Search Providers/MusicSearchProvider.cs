@@ -13,13 +13,13 @@ public class MusicSearchProvider : SearchProvider, ISupportsID, ISupportsSearch,
     public override string PlatformIdentifier => "audio://";
     public override int Priority => 99;
 
-    public Task<Result<PlatformResult, SearchError>> TryID(string id, CancellationToken cancellation_token = default)
+    public Task<Result<PlatformResult, SearchError>> TryID(string id, CancellationToken cancellationToken = default)
     {
         var found = MusicManager.SearchById(id);
         if (found == Status.Error)
             return Task.FromResult(Result<PlatformResult, SearchError>.Error(SearchError.NotFound));
 
-        var result = found.GetOK();
+        var result = found.GetOk();
         return Task.FromResult(Result<PlatformResult, SearchError>
             .Success(result.ToMusicResult(ContentDownloaders)));
     }
@@ -30,20 +30,20 @@ public class MusicSearchProvider : SearchProvider, ISupportsID, ISupportsSearch,
         if (results == Status.Error)
             return Task.FromResult(Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.NotFound));
 
-        var ok = results.GetOK();
+        var ok = results.GetOk();
         return Task.FromResult(
             Result<IEnumerable<PlatformResult>, SearchError>.Success(ok.Select(song =>
                 song.ToMusicResult(ContentDownloaders))));
     }
 
     public Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchKeywords(string keywords,
-        CancellationToken cancellation_token = default)
+        CancellationToken cancellationToken = default)
     {
         var search = MusicManager.SearchByTerm(keywords);
         if (search == Status.Error)
             return Task.FromResult(Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.NotFound));
 
-        var results = search.GetOK();
+        var results = search.GetOk();
         return Task.FromResult(
             Result<IEnumerable<PlatformResult>, SearchError>.Success(results.Select(r =>
                 r.ToMusicResult(ContentDownloaders))));
@@ -61,7 +61,7 @@ public class MusicSearchProvider : SearchProvider, ISupportsID, ISupportsSearch,
         if (results == Status.Error)
             return Task.FromResult(Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.NotFound));
 
-        var ok = results.GetOK();
+        var ok = results.GetOk();
         return Task.FromResult(
             Result<IEnumerable<PlatformResult>, SearchError>.Success(ok.Select(song =>
                 song.ToMusicResult(ContentDownloaders))));

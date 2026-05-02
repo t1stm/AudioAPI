@@ -11,8 +11,8 @@ public class StreamSpreaderTests(ITestOutputHelper output)
     [Fact]
     public void CorrectDataOrder()
     {
-        var stream_spreader = new StreamSpreader();
-        var random_bytes = RandomNumberGenerator.GetBytes(1048576);
+        var streamSpreader = new StreamSpreader();
+        var randomBytes = RandomNumberGenerator.GetBytes(1048576);
 
         output.WriteLine("Set up random bytes.");
 
@@ -20,8 +20,8 @@ public class StreamSpreaderTests(ITestOutputHelper output)
         for (var i = 0; i < tuples.Length; i++)
         {
             var stream = new MemoryStream();
-            var waiting_semaphore = new SemaphoreSlim(0, 1);
-            var stream_subscriber = new StreamSubscriber
+            var waitingSemaphore = new SemaphoreSlim(0, 1);
+            var streamSubscriber = new StreamSubscriber
             {
                 WriteCall = async (bytes, offset, length) =>
                 {
@@ -32,20 +32,20 @@ public class StreamSpreaderTests(ITestOutputHelper output)
                 SyncCall = () => Task.CompletedTask,
                 CloseCall = () =>
                 {
-                    waiting_semaphore.Release();
+                    waitingSemaphore.Release();
                     return Task.CompletedTask;
                 }
             };
 
-            stream_spreader.Subscribe(stream_subscriber);
-            tuples[i] = (stream, waiting_semaphore);
+            streamSpreader.Subscribe(streamSubscriber);
+            tuples[i] = (stream, waitingSemaphore);
         }
 
         output.WriteLine("Set up destinations.");
 
-        var memory_stream = new MemoryStream(random_bytes);
-        memory_stream.CopyTo(stream_spreader, 1 << 12);
-        stream_spreader.Close();
+        var memoryStream = new MemoryStream(randomBytes);
+        memoryStream.CopyTo(streamSpreader, 1 << 12);
+        streamSpreader.Close();
 
         output.WriteLine("Copied and closed stream.");
 
@@ -56,10 +56,10 @@ public class StreamSpreaderTests(ITestOutputHelper output)
         var index = 0;
         foreach (var (stream, _) in tuples)
         {
-            var stream_array = stream.ToArray();
+            var streamArray = stream.ToArray();
 
-            Assert.Equal(random_bytes.Length, stream_array.Length);
-            Assert.Equal(random_bytes, stream_array);
+            Assert.Equal(randomBytes.Length, streamArray.Length);
+            Assert.Equal(randomBytes, streamArray);
 
             output.WriteLine($"Stream check [{index++}] is successful.");
         }
@@ -68,64 +68,64 @@ public class StreamSpreaderTests(ITestOutputHelper output)
     [Fact]
     public async Task TestDownloading()
     {
-        const int stream_count = 16;
+        const int streamCount = 16;
         output.WriteLine("Starting download test.");
-        var audio_manager = new AudioManager();
+        var audioManager = new AudioManager();
 
-        audio_manager.Initialize();
-        audio_manager.RegisterPlatform<YouTube>();
+        audioManager.Initialize();
+        audioManager.RegisterPlatform<YouTube>();
 
-        var found = await audio_manager.SearchID("yt://dQw4w9WgXcQ");
-        Assert.True(found == Status.OK, "YouTube search for \'dQw4w9WgXcQ\' failed.");
+        var found = await audioManager.SearchID("yt://dQw4w9WgXcQ");
+        Assert.True(found == Status.Ok, "YouTube search for \'dQw4w9WgXcQ\' failed.");
 
         output.WriteLine("Found YouTube result.");
 
-        var result = found.GetOK();
+        var result = found.GetOk();
         var download = await result.TryGetContentData();
-        Assert.True(download == Status.OK, "YouTube download failed.");
+        Assert.True(download == Status.Ok, "YouTube download failed.");
 
         output.WriteLine("Downloading result.");
-        var stream_spreader = download.GetOK();
+        var streamSpreader = download.GetOk();
 
-        var tuples = new (MemoryStream, SemaphoreSlim)[stream_count];
-        for (var i = 0; i < stream_count; i++)
+        var tuples = new (MemoryStream, SemaphoreSlim)[streamCount];
+        for (var i = 0; i < streamCount; i++)
         {
-            var waiting_semaphore = new SemaphoreSlim(0, 1);
+            var waitingSemaphore = new SemaphoreSlim(0, 1);
 
             var stream = new MemoryStream();
             Assert.False(stream == null, $"Stream {i} is null.");
 
-            tuples[i] = (stream, waiting_semaphore);
+            tuples[i] = (stream, waitingSemaphore);
 
-            var local_i = i;
-            var data_queue = new ConcurrentQueue<(byte[], int, int)>();
+            var localI = i;
+            var dataQueue = new ConcurrentQueue<(byte[], int, int)>();
 
-            var update_semaphore = new SemaphoreSlim(1, 1);
-            var stream_subscriber = new StreamSubscriber
+            var updateSemaphore = new SemaphoreSlim(1, 1);
+            var streamSubscriber = new StreamSubscriber
             {
                 WriteCall = (bytes, offset, length) =>
                 {
-                    data_queue.Enqueue((bytes, offset, length));
+                    dataQueue.Enqueue((bytes, offset, length));
                     return Task.FromResult(StreamStatus.Open);
                 },
                 SyncCall = () => Task.CompletedTask,
                 CloseCall = async () =>
                 {
-                    output.WriteLine($"Releasing waiting semaphore for stream [{local_i}].");
+                    output.WriteLine($"Releasing waiting semaphore for stream [{localI}].");
                     await SyncCall();
-                    waiting_semaphore.Release();
+                    waitingSemaphore.Release();
                 }
             };
 
-            stream_spreader.Subscribe(stream_subscriber);
+            streamSpreader.Subscribe(streamSubscriber);
             continue;
 
             async Task SyncCall()
             {
-                if (data_queue.IsEmpty) return;
-                await update_semaphore.WaitAsync();
+                if (dataQueue.IsEmpty) return;
+                await updateSemaphore.WaitAsync();
 
-                while (data_queue.TryDequeue(out var tuple))
+                while (dataQueue.TryDequeue(out var tuple))
                 {
                     var (bytes, offset, length) = tuple;
 
@@ -134,7 +134,7 @@ public class StreamSpreaderTests(ITestOutputHelper output)
                 }
 
                 await stream.FlushAsync();
-                update_semaphore.Release();
+                updateSemaphore.Release();
             }
         }
 
@@ -147,14 +147,14 @@ public class StreamSpreaderTests(ITestOutputHelper output)
             await semaphore.WaitAsync();
         }
 
-        var (first_stream, _) = tuples.First();
-        var first_array = first_stream.ToArray();
+        var (firstStream, _) = tuples.First();
+        var firstArray = firstStream.ToArray();
 
         var index = 0;
         foreach (var (stream, _) in tuples)
         {
             var array = stream.ToArray();
-            Assert.Equal(first_array, array);
+            Assert.Equal(firstArray, array);
             output.WriteLine($"Equality check for [{index++}] is successful.");
         }
     }
@@ -162,33 +162,33 @@ public class StreamSpreaderTests(ITestOutputHelper output)
     [Fact]
     public async Task ClosedCopyTest()
     {
-        var stream_spreader = new StreamSpreader();
-        var random_bytes = RandomNumberGenerator.GetBytes(4096);
+        var streamSpreader = new StreamSpreader();
+        var randomBytes = RandomNumberGenerator.GetBytes(4096);
 
-        var memory_stream = new MemoryStream();
-        var waiting_semaphore = new SemaphoreSlim(0, 1);
-        var stream_subscriber = new StreamSubscriber
+        var memoryStream = new MemoryStream();
+        var waitingSemaphore = new SemaphoreSlim(0, 1);
+        var streamSubscriber = new StreamSubscriber
         {
             WriteCall = async (bytes, offset, length) =>
             {
-                await memory_stream.WriteAsync(bytes.AsMemory(offset, length));
+                await memoryStream.WriteAsync(bytes.AsMemory(offset, length));
                 return StreamStatus.Open;
             },
             SyncCall = () => Task.CompletedTask,
             CloseCall = () =>
             {
-                waiting_semaphore.Release();
+                waitingSemaphore.Release();
                 return Task.CompletedTask;
             }
         };
 
-        await stream_spreader.WriteAsync(random_bytes);
-        await stream_spreader.CloseAsync();
+        await streamSpreader.WriteAsync(randomBytes);
+        await streamSpreader.CloseAsync();
         await Task.Delay(2000);
 
-        await stream_spreader.SubscribeAsync(stream_subscriber);
+        await streamSpreader.SubscribeAsync(streamSubscriber);
         await Task.Delay(2000);
 
-        Assert.False(memory_stream.ToArray().Length == 0, "No data copied to the MemoryStream.");
+        Assert.False(memoryStream.ToArray().Length == 0, "No data copied to the MemoryStream.");
     }
 }

@@ -8,7 +8,7 @@ using YoutubeSearchApi.Net.Objects;
 
 namespace AudioManagement.Platforms.YouTube.Search_Providers;
 
-public class YouTubeSearchProvider_Madeyoga : SearchProvider,
+public class YouTubeSearchProviderMadeyoga : SearchProvider,
     ISupportsSearch
 {
     public override string Name => "YouTubeSearchAPI.Net";
@@ -17,7 +17,7 @@ public class YouTubeSearchProvider_Madeyoga : SearchProvider,
     protected DefaultSearchClient Client { get; } = new(new YoutubeSearchBackend());
 
     public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchKeywords(string keywords,
-        CancellationToken cancellation_token = default)
+        CancellationToken cancellationToken = default)
     {
         var search = await Client.SearchAsync(HttpClientManager.GetHttpClient(), keywords, 15);
         if (search == null) return Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.NotFound);

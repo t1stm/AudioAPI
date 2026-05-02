@@ -13,10 +13,10 @@ public static class LevenshteinDistance
         if (string.IsNullOrEmpty(s)) return string.IsNullOrEmpty(t) ? 0 : t.Length;
         if (string.IsNullOrEmpty(t)) return s.Length;
 
-        var source_span = s.AsSpan();
-        var target_span = t.AsSpan();
+        var sourceSpan = s.AsSpan();
+        var targetSpan = t.AsSpan();
 
-        return ComputeStrict(source_span, target_span);
+        return ComputeStrict(sourceSpan, targetSpan);
     }
 
     public static int ComputeStrict(ReadOnlySpan<char> s, ReadOnlySpan<char> t)
@@ -28,10 +28,10 @@ public static class LevenshteinDistance
         if (m == 0) return n;
 
         var m1 = m + 1;
-        const int MAX_STACK_SIZE = 1 << 10;
+        const int maxStackSize = 1 << 10;
 
-        var prev = m1 > MAX_STACK_SIZE ? new int[m1] : stackalloc int[m1];
-        var curr = m1 > MAX_STACK_SIZE ? new int[m1] : stackalloc int[m1];
+        var prev = m1 > maxStackSize ? new int[m1] : stackalloc int[m1];
+        var curr = m1 > maxStackSize ? new int[m1] : stackalloc int[m1];
 
         for (var j = 0; j <= m; j++)
             prev[j] = j;

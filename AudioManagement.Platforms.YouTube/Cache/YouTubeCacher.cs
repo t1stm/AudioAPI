@@ -11,8 +11,8 @@ public class YouTubeCacher
     private const string FileName = "YouTube.json";
     private const string CachePath = $"{CacheFolder}/{FileName}";
     protected readonly Dictionary<string, YouTubeResult> Cache = new();
-    private readonly byte[] comma_bytes = ","u8.ToArray();
-    private readonly byte[] end_bytes = "]"u8.ToArray();
+    private readonly byte[] _commaBytes = ","u8.ToArray();
+    private readonly byte[] _endBytes = "]"u8.ToArray();
 
     protected readonly JsonSerializerOptions JsonSerializerOptions = new()
     {
@@ -20,7 +20,7 @@ public class YouTubeCacher
         WriteIndented = true
     };
 
-    private readonly byte[] start_bytes = "["u8.ToArray();
+    private readonly byte[] _startBytes = "["u8.ToArray();
     protected readonly SemaphoreSlim Sync = new(1, 1);
 
     protected async Task SaveAsync(IEnumerable<YouTubeResult>? delta = null)
@@ -28,16 +28,16 @@ public class YouTubeCacher
         await Sync.WaitAsync();
         Directory.CreateDirectory(CacheFolder);
 
-        var file_info = new FileInfo(CachePath);
-        if (delta is not null && file_info is { Exists: true, Length: > 32 })
+        var fileInfo = new FileInfo(CachePath);
+        if (delta is not null && fileInfo is { Exists: true, Length: > 32 })
         {
             await using var file = File.Open(CachePath, FileMode.Open);
-            file.SetLength(file.Length - end_bytes.Length);
+            file.SetLength(file.Length - _endBytes.Length);
             file.Seek(0, SeekOrigin.End);
-            await file.WriteAsync(comma_bytes);
+            await file.WriteAsync(_commaBytes);
 
-            var json_bytes = JsonSerializer.SerializeToUtf8Bytes(delta, JsonSerializerOptions);
-            await file.WriteAsync(json_bytes.AsMemory()[start_bytes.Length..]);
+            var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(delta, JsonSerializerOptions);
+            await file.WriteAsync(jsonBytes.AsMemory()[_startBytes.Length..]);
             await file.FlushAsync();
         }
         else
@@ -85,12 +85,12 @@ public class YouTubeCacher
         var cache = Cache.GetAlternateLookup<ReadOnlySpan<char>>();
         await Sync.WaitAsync();
 
-        var youtube_results = results.Where(r => !cache.ContainsKey(r.GetPureID())).ToArray();
-        foreach (var result in youtube_results) cache.TryAdd(result.GetPureID(), result);
+        var youtubeResults = results.Where(r => !cache.ContainsKey(r.GetPureID())).ToArray();
+        foreach (var result in youtubeResults) cache.TryAdd(result.GetPureID(), result);
         Sync.Release();
 
-        if (youtube_results.Length > 0)
-            await SaveAsync(youtube_results);
+        if (youtubeResults.Length > 0)
+            await SaveAsync(youtubeResults);
     }
 
     public async Task<Result<YouTubeResult, SearchError>> GetFromCacheAsync(string id)

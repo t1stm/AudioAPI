@@ -14,10 +14,10 @@ public class Room
     [JsonIgnore] protected readonly UserStore Store;
     [JsonIgnore] protected readonly Timer Timer;
 
-    public Room(Guid guid, ManagerService manager_service)
+    public Room(Guid guid, ManagerService managerService)
     {
         RoomID = guid;
-        ManagerService = manager_service;
+        ManagerService = managerService;
         RoomName = guid.ToString();
 
         Store = new UserStore();
@@ -52,11 +52,11 @@ public class Room
         await Queue.Update();
     }
 
-    public async Task<User> GetOrAddUser(string id, WebSocket web_socket, string? initial_username)
+    public async Task<User> GetOrAddUser(string id, WebSocket webSocket, string? initialUsername)
     {
-        return await Store.GetOrAddUser(id, web_socket, user =>
+        return await Store.GetOrAddUser(id, webSocket, user =>
         {
-            user.Username = initial_username;
+            user.Username = initialUsername;
             return Player.Joined(user);
         });
     }
@@ -72,10 +72,10 @@ public class Room
 
     public async Task HandleUserMessage(User user, string message)
     {
-        var split_index = message.IndexOf(' ');
-        if (split_index != -1)
+        var splitIndex = message.IndexOf(' ');
+        if (splitIndex != -1)
         {
-            await HandleParameterMessages(message[..split_index], message[split_index..], user);
+            await HandleParameterMessages(message[..splitIndex], message[splitIndex..], user);
             return;
         }
 
@@ -90,27 +90,27 @@ public class Room
                 var result = await ManagerService.Manager.SearchID(value);
                 if (result == Status.Error) return;
 
-                await Player.Enqueue(result.GetOK());
+                await Player.Enqueue(result.GetOk());
                 break;
 
             case "setnext":
-                if (!int.TryParse(value, out var next_index)) return;
-                await Player.SetNext(next_index);
+                if (!int.TryParse(value, out var nextIndex)) return;
+                await Player.SetNext(nextIndex);
                 break;
 
             case "skipto":
-                if (!int.TryParse(value, out var skip_index)) return;
-                await Player.SkipTo(skip_index);
+                if (!int.TryParse(value, out var skipIndex)) return;
+                await Player.SkipTo(skipIndex);
                 break;
 
             case "seek":
-                if (!double.TryParse(value, out var seek_seconds)) return;
-                await Player.SeekTo(seek_seconds);
+                if (!double.TryParse(value, out var seekSeconds)) return;
+                await Player.SeekTo(seekSeconds);
                 break;
 
             case "remove":
-                if (!int.TryParse(value, out var remove_index)) return;
-                await Player.Remove(remove_index);
+                if (!int.TryParse(value, out var removeIndex)) return;
+                await Player.Remove(removeIndex);
                 break;
 
             case "chat":
@@ -126,23 +126,23 @@ public class Room
     protected async Task HandleUpdateRoom(string value, User user)
     {
         var action = value.Trim();
-        var split_index = action.IndexOf(' ');
-        if (split_index == -1 || split_index + 1 >= value.Length) return;
+        var splitIndex = action.IndexOf(' ');
+        if (splitIndex == -1 || splitIndex + 1 >= value.Length) return;
 
-        var parameter_key = action[..split_index];
-        var parameter_value = action[split_index..];
+        var parameterKey = action[..splitIndex];
+        var parameterValue = action[splitIndex..];
 
-        switch (parameter_key)
+        switch (parameterKey)
         {
             case "name":
-                RoomName = parameter_value;
+                RoomName = parameterValue;
                 OnInfoModified?.Invoke();
 
                 await user.SendMessageAsync($"room name {RoomName}");
                 break;
 
             case "description":
-                RoomDescription = parameter_value;
+                RoomDescription = parameterValue;
                 OnInfoModified?.Invoke();
 
                 await user.SendMessageAsync($"room description {RoomDescription}");

@@ -2,10 +2,10 @@ using Result.Objects;
 
 namespace Result;
 
-public readonly struct Result<T_OK, T_Error> : IEquatable<Result<T_OK, T_Error>>
+public readonly struct Result<TOk, TError> : IEquatable<Result<TOk, TError>>
 {
-    public readonly T_Error? ErrorValue;
-    public readonly T_OK? OkValue;
+    public readonly TError? ErrorValue;
+    public readonly TOk? OkValue;
     public readonly Status Status;
 
     /// <summary>
@@ -14,7 +14,7 @@ public readonly struct Result<T_OK, T_Error> : IEquatable<Result<T_OK, T_Error>>
     /// <param name="okValue">Value when successfully returned.</param>
     /// <param name="errorValue">Value returned when failed.</param>
     /// <param name="status">The status code of the result.</param>
-    public Result(T_OK? okValue, T_Error? errorValue, Status status)
+    public Result(TOk? okValue, TError? errorValue, Status status)
     {
         OkValue = okValue;
         ErrorValue = errorValue;
@@ -27,9 +27,9 @@ public readonly struct Result<T_OK, T_Error> : IEquatable<Result<T_OK, T_Error>>
     /// <returns></returns>
     /// <exception cref="NullReferenceException">Thrown when the OK object is null. This ensures null safety.</exception>
     /// <exception cref="InvalidResultAccessException">Thrown when the status isn't Status.OK</exception>
-    public T_OK GetOK()
+    public TOk GetOk()
     {
-        return this == Status.OK
+        return this == Status.Ok
             ? OkValue ?? throw new NullReferenceException("OK value is null.")
             : throw new InvalidResultAccessException("Tried to get OK result when status is \'Error\'.");
     }
@@ -40,7 +40,7 @@ public readonly struct Result<T_OK, T_Error> : IEquatable<Result<T_OK, T_Error>>
     /// <returns></returns>
     /// <exception cref="NullReferenceException">Thrown when the Error object is null. This ensures null safety.</exception>
     /// <exception cref="InvalidResultAccessException">Thrown when the status isn't Status.Error</exception>
-    public T_Error GetError()
+    public TError GetError()
     {
         return this == Status.Error
             ? ErrorValue ?? throw new NullReferenceException("Error value is null.")
@@ -52,9 +52,9 @@ public readonly struct Result<T_OK, T_Error> : IEquatable<Result<T_OK, T_Error>>
     /// </summary>
     /// <param name="ok">The object to assign to T_OK</param>
     /// <returns>The created Result object.</returns>
-    public static Result<T_OK, T_Error> Success(T_OK ok)
+    public static Result<TOk, TError> Success(TOk ok)
     {
-        return new Result<T_OK, T_Error>(ok, default, Status.OK);
+        return new Result<TOk, TError>(ok, default, Status.Ok);
     }
 
     /// <summary>
@@ -62,9 +62,9 @@ public readonly struct Result<T_OK, T_Error> : IEquatable<Result<T_OK, T_Error>>
     /// </summary>
     /// <param name="error">The object to assign to T_Error</param>
     /// <returns>The created Result object.</returns>
-    public static Result<T_OK, T_Error> Error(T_Error error)
+    public static Result<TOk, TError> Error(TError error)
     {
-        return new Result<T_OK, T_Error>(default, error, Status.Error);
+        return new Result<TOk, TError>(default, error, Status.Error);
     }
 
     /// <summary>
@@ -73,7 +73,7 @@ public readonly struct Result<T_OK, T_Error> : IEquatable<Result<T_OK, T_Error>>
     /// <param name="source">The source Result object.</param>
     /// <param name="status">The status code to compare.</param>
     /// <returns>Whether the Result object has a matching status.</returns>
-    public static bool operator ==(Result<T_OK, T_Error> source, Status status)
+    public static bool operator ==(Result<TOk, TError> source, Status status)
     {
         return source.Status == status;
     }
@@ -84,22 +84,22 @@ public readonly struct Result<T_OK, T_Error> : IEquatable<Result<T_OK, T_Error>>
     /// <param name="source">The source Result object.</param>
     /// <param name="status">The status code to compare.</param>
     /// <returns>Whether the Result object doesn't have a matching status.</returns>
-    public static bool operator !=(Result<T_OK, T_Error> source, Status status)
+    public static bool operator !=(Result<TOk, TError> source, Status status)
     {
         return !(source == status);
     }
 
 
-    public bool Equals(Result<T_OK, T_Error> other)
+    public bool Equals(Result<TOk, TError> other)
     {
         return
-            EqualityComparer<T_Error?>.Default.Equals(ErrorValue, other.ErrorValue) &&
-            EqualityComparer<T_OK?>.Default.Equals(OkValue, other.OkValue) && Status == other.Status;
+            EqualityComparer<TError?>.Default.Equals(ErrorValue, other.ErrorValue) &&
+            EqualityComparer<TOk?>.Default.Equals(OkValue, other.OkValue) && Status == other.Status;
     }
 
     public override bool Equals(object? obj)
     {
-        return obj is Result<T_OK, T_Error> other && Equals(other);
+        return obj is Result<TOk, TError> other && Equals(other);
     }
 
     public override int GetHashCode()

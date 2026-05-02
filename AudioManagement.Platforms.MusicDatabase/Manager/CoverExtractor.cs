@@ -14,9 +14,9 @@ public class CoverExtractor
                          ExportLocation;
 
         if (!Directory.Exists(ExportLocation)) Directory.CreateDirectory(ExportLocation);
-        foreach (var genre_directory in Directory.GetDirectories(location))
-        foreach (var artist_directory in Directory.GetDirectories(genre_directory))
-            ParseFolder(artist_directory);
+        foreach (var genreDirectory in Directory.GetDirectories(location))
+        foreach (var artistDirectory in Directory.GetDirectories(genreDirectory))
+            ParseFolder(artistDirectory);
     }
 
     public void ParseFolder(string folder)
@@ -27,10 +27,10 @@ public class CoverExtractor
             StringEscapeHandling = StringEscapeHandling.EscapeHtml
         };
 
-        using var file_stream = File.Open($"{folder}/Info.json", FileMode.OpenOrCreate, FileAccess.ReadWrite,
+        using var fileStream = File.Open($"{folder}/Info.json", FileMode.OpenOrCreate, FileAccess.ReadWrite,
             FileShare.ReadWrite);
 
-        using var reader = new StreamReader(file_stream, Encoding.UTF8, true, 1024, true);
+        using var reader = new StreamReader(fileStream, Encoding.UTF8, true, 1024, true);
 
         var json = reader.ReadToEnd();
         var items = JsonConvert.DeserializeObject<List<MusicInfo>>(json) ?? [];
@@ -43,7 +43,7 @@ public class CoverExtractor
 
             if (!image.HasData)
             {
-                image = Id3v2.GetImageFromTag(location);
+                image = Id3V2.GetImageFromTag(location);
                 if (!image.HasData) continue;
             }
 
@@ -58,10 +58,10 @@ public class CoverExtractor
         }
 
         if (!change) return;
-        file_stream.Position = 0;
-        file_stream.SetLength(0);
+        fileStream.Position = 0;
+        fileStream.SetLength(0);
 
-        using var writer = new StreamWriter(file_stream, Encoding.UTF8);
+        using var writer = new StreamWriter(fileStream, Encoding.UTF8);
         serializer.Serialize(writer, items);
     }
 }

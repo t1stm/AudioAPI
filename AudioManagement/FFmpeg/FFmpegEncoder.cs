@@ -11,27 +11,27 @@ public class FFmpegEncoder
     protected Process? Process;
 
     public Result<StreamSubscriber, FFmpegError> Convert(int bitrate, string codec = "-c:a libopus",
-        string output_format = "-f mka")
+        string outputFormat = "-f mka")
     {
         var queue = new ConcurrentQueue<(byte[], int, int)>();
-        var update_semaphore = new SemaphoreSlim(1, 1);
+        var updateSemaphore = new SemaphoreSlim(1, 1);
 
-        var process_start_info = new ProcessStartInfo
+        var processStartInfo = new ProcessStartInfo
         {
             FileName = "ffmpeg",
-            Arguments = $"-v quiet -nostats -i - {codec} -b:a {bitrate}k -vn -d copy {output_format} pipe:1",
+            Arguments = $"-v quiet -nostats -i - {codec} -b:a {bitrate}k -vn -d copy {outputFormat} pipe:1",
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = false,
             UseShellExecute = false
         };
 
-        Process = Process.Start(process_start_info);
+        Process = Process.Start(processStartInfo);
         if (Process == null)
             return Result<StreamSubscriber, FFmpegError>
                 .Error(FFmpegError.UnableToOpen);
 
-        var stream_subscriber = new StreamSubscriber
+        var streamSubscriber = new StreamSubscriber
         {
             WriteCall = (bytes, offset, length) =>
             {
@@ -49,7 +49,7 @@ public class FFmpegEncoder
         });
 
         return Result<StreamSubscriber, FFmpegError>.Success(
-            stream_subscriber);
+            streamSubscriber);
 
         async Task CloseCall()
         {
@@ -59,7 +59,7 @@ public class FFmpegEncoder
 
         async Task SyncCall()
         {
-            await update_semaphore.WaitAsync();
+            await updateSemaphore.WaitAsync();
 
             while (queue.TryDequeue(out var entry))
             {
@@ -68,7 +68,7 @@ public class FFmpegEncoder
                     bytes.AsMemory(offset, length));
             }
 
-            update_semaphore.Release();
+            updateSemaphore.Release();
         }
     }
 

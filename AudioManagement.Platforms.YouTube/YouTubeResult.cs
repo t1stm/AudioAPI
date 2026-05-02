@@ -19,9 +19,9 @@ public sealed class YouTubeResult : PlatformResult, ISupportsCaching
         }
     }
 
-    public async Task RunCacheProcess(StreamSpreader stream_spreader)
+    public async Task RunCacheProcess(StreamSpreader streamSpreader)
     {
-        await YouTubeCacheProvider.UpdateCache(this, stream_spreader);
+        await YouTubeCacheProvider.UpdateCache(this, streamSpreader);
     }
 
     public override string GetDownloadUrl()

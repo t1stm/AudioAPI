@@ -14,12 +14,12 @@ public class UserStore
         return Users.Values;
     }
 
-    public async Task<User> GetOrAddUser(string id, WebSocket web_socket, Func<User, Task>? onAdd = default)
+    public async Task<User> GetOrAddUser(string id, WebSocket webSocket, Func<User, Task>? onAdd = default)
     {
         await Sync.WaitAsync();
         if (!Users.TryGetValue(id, out var user))
         {
-            Users.Add(id, user = new User { ID = id, WebSocket = web_socket });
+            Users.Add(id, user = new User { ID = id, WebSocket = webSocket });
             Sync.Release();
             var task = onAdd?.Invoke(user);
             if (task != null)

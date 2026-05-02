@@ -7,34 +7,34 @@ namespace AudioAPI.Controllers.Helpers;
 
 public class WebSocketTextReader(ILogger<Multiplayer> logger)
 {
-    protected readonly StringBuilder _builder = new();
+    protected readonly StringBuilder Builder = new();
 
-    public async Task<Result<string, WebSocketReadStatus>> ReadWholeMessageAsync(WebSocket web_socket,
-        CancellationToken? cancellation_token = null)
+    public async Task<Result<string, WebSocketReadStatus>> ReadWholeMessageAsync(WebSocket webSocket,
+        CancellationToken? cancellationToken = null)
     {
         try
         {
-            cancellation_token ??= CancellationToken.None;
-            _builder.Clear();
-            if (web_socket.State != WebSocketState.Open)
+            cancellationToken ??= CancellationToken.None;
+            Builder.Clear();
+            if (webSocket.State != WebSocketState.Open)
                 return Result<string, WebSocketReadStatus>.Error(WebSocketReadStatus.Closed);
 
             using var buffer = MemoryPool<byte>.Shared.Rent(1024 * 32);
-            ValueWebSocketReceiveResult receive_result;
+            ValueWebSocketReceiveResult receiveResult;
 
             do
             {
-                receive_result = await web_socket.ReceiveAsync(buffer.Memory, cancellation_token.Value);
-                if (receive_result.MessageType != WebSocketMessageType.Text) continue;
+                receiveResult = await webSocket.ReceiveAsync(buffer.Memory, cancellationToken.Value);
+                if (receiveResult.MessageType != WebSocketMessageType.Text) continue;
 
-                var data_slice = buffer.Memory[..receive_result.Count];
-                _builder.Append(Encoding.UTF8.GetString(data_slice.Span));
+                var dataSlice = buffer.Memory[..receiveResult.Count];
+                Builder.Append(Encoding.UTF8.GetString(dataSlice.Span));
 
-                if (receive_result.MessageType != WebSocketMessageType.Close) continue;
+                if (receiveResult.MessageType != WebSocketMessageType.Close) continue;
                 return Result<string, WebSocketReadStatus>.Error(WebSocketReadStatus.Closed);
-            } while (!receive_result.EndOfMessage);
+            } while (!receiveResult.EndOfMessage);
 
-            return Result<string, WebSocketReadStatus>.Success(_builder.ToString());
+            return Result<string, WebSocketReadStatus>.Success(Builder.ToString());
         }
         catch (Exception e)
         {

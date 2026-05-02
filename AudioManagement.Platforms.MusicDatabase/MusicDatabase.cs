@@ -33,17 +33,17 @@ public class MusicDatabase : Platform, ISupportsSearch, ISupportsRandomResults
     }
 
     public Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchKeywords(string keywords,
-        CancellationToken cancellation_token = default)
+        CancellationToken cancellationToken = default)
     {
         var provider = (MusicSearchProvider)SearchProviders[0];
-        return provider.TrySearchKeywords(keywords, cancellation_token);
+        return provider.TrySearchKeywords(keywords, cancellationToken);
     }
 
     public override Task<Result<PlatformResult, SearchError>> TryID(string id,
-        CancellationToken cancellation_token = default)
+        CancellationToken cancellationToken = default)
     {
         var provider = (MusicSearchProvider)SearchProviders[0];
-        return provider.TryID(id, cancellation_token);
+        return provider.TryID(id, cancellationToken);
     }
 
     public Task<Result<IEnumerable<PlatformResult>, SearchError>> GetArtistSongs(string artist)

@@ -5,26 +5,26 @@ using Result;
 
 namespace AudioManagement.Platforms.Cross_Platform;
 
-public sealed class Getter_YtDLP : ContentGetter
+public sealed class GetterYtDlp : ContentGetter
 {
     public override int Priority => 20;
 
     public override Task<Result<StreamSpreader, DownloadError>> TryGetContentData(
-        PlatformResult youtube_result, CancellationToken cancellation_token)
+        PlatformResult youtubeResult, CancellationToken cancellationToken)
     {
-        var process_info = GetProcessStartInfo(youtube_result);
-        var process = Process.Start(process_info);
+        var processInfo = GetProcessStartInfo(youtubeResult);
+        var process = Process.Start(processInfo);
 
         if (process is null) return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(DownloadError.Generic));
 
-        var stream_spreader = new StreamSpreader();
+        var streamSpreader = new StreamSpreader();
         _ = Task.Run(async () =>
         {
-            await process.StandardOutput.BaseStream.CopyToAsync(stream_spreader, cancellation_token);
-            await stream_spreader.CloseAsync();
-        }, cancellation_token);
+            await process.StandardOutput.BaseStream.CopyToAsync(streamSpreader, cancellationToken);
+            await streamSpreader.CloseAsync();
+        }, cancellationToken);
 
-        return Task.FromResult(Result<StreamSpreader, DownloadError>.Success(stream_spreader));
+        return Task.FromResult(Result<StreamSpreader, DownloadError>.Success(streamSpreader));
     }
 
     private static ProcessStartInfo GetProcessStartInfo(PlatformResult result)

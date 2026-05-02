@@ -32,14 +32,14 @@ public class ManagerService
 
     protected int GetKey(ReadOnlySpan<char> codec, int bitrate, ReadOnlySpan<char> id, Span<char> destination)
     {
-        const int WANTED_MAX_LENGTH = 128;
-        const int MAX_CODEC_LENGTH = 32;
-        const int MAX_BITRATE_LENGTH = 11; // this is the max length of an int32 when stringified with a negative sign
-        const int MAX_ID_LENGTH = WANTED_MAX_LENGTH - MAX_CODEC_LENGTH - MAX_BITRATE_LENGTH;
+        const int wantedMaxLength = 128;
+        const int maxCodecLength = 32;
+        const int maxBitrateLength = 11; // this is the max length of an int32 when stringified with a negative sign
+        const int maxIDLength = wantedMaxLength - maxCodecLength - maxBitrateLength;
 
-        if (codec.Length > MAX_CODEC_LENGTH || id.Length > MAX_ID_LENGTH) return -1;
+        if (codec.Length > maxCodecLength || id.Length > maxIDLength) return -1;
 
-        Span<char> bitrateString = stackalloc char[MAX_BITRATE_LENGTH];
+        Span<char> bitrateString = stackalloc char[maxBitrateLength];
 
         codec.CopyTo(destination);
         bitrate.TryFormat(bitrateString, out _);

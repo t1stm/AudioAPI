@@ -21,9 +21,9 @@ public class SpotifySearchProvider : SearchProvider, ISupportsID
     public override int Priority => 99;
 
     public async Task<Result<PlatformResult, SearchError>> TryID(string id,
-        CancellationToken cancellation_token = default)
+        CancellationToken cancellationToken = default)
     {
-        var track = await Spotify.Value.Tracks.Get(id, cancellation_token);
+        var track = await Spotify.Value.Tracks.Get(id, cancellationToken);
         var result = new SpotifyResult
         {
             ID = track.Id,
@@ -43,8 +43,8 @@ public class SpotifySearchProvider : SearchProvider, ISupportsID
         var artist = "";
         for (var index = 0; index < artists.Count; index++)
         {
-            var simple_artist = artists[index];
-            artist += $"{index switch { 0 => "", _ => ", " }}{simple_artist.Name}";
+            var simpleArtist = artists[index];
+            artist += $"{index switch { 0 => "", _ => ", " }}{simpleArtist.Name}";
         }
 
         return artist;

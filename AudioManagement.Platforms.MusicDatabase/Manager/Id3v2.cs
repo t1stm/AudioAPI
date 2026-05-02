@@ -4,7 +4,7 @@ using File = TagLib.File;
 
 namespace AudioManagement.Platforms.MusicDatabase.Manager;
 
-public static class Id3v2
+public static class Id3V2
 {
     public static EmbeddedImage GetImageFromTag(string location)
     {

@@ -33,7 +33,7 @@ public abstract class PlatformResult
         foreach (var downloader in Downloaders)
         {
             var result = await downloader.TryGetContentData(this, token);
-            if (result == Status.OK) return result;
+            if (result == Status.Ok) return result;
         }
 
         return Result<StreamSpreader, DownloadError>.Error(default);

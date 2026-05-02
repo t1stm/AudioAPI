@@ -7,7 +7,7 @@ using YoutubeExplode.Common;
 
 namespace AudioManagement.Platforms.YouTube.Search_Providers;
 
-public sealed class YouTubeSearchProvider_Explode : SearchProvider,
+public sealed class YouTubeSearchProviderExplode : SearchProvider,
     ISupportsID, ISupportsPlaylist, ISupportsSearch
 {
     public static YoutubeClient Client { get; } = new();
@@ -19,8 +19,8 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider,
     {
         try
         {
-            var youtube_client = Client;
-            var video = await youtube_client.Videos.GetAsync(id, token);
+            var youtubeClient = Client;
+            var video = await youtubeClient.Videos.GetAsync(id, token);
 
 
             return Result<PlatformResult, SearchError>.Success(new YouTubeResult
@@ -39,21 +39,21 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider,
         }
     }
 
-    public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchPlaylist(string playlist_url,
-        CancellationToken cancellation_token)
+    public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchPlaylist(string playlistUrl,
+        CancellationToken cancellationToken)
     {
         try
         {
-            var youtube_client = new YoutubeClient();
-            var playlist_id = playlist_url
+            var youtubeClient = new YoutubeClient();
+            var playlistID = playlistUrl
                 .SliceAfter("list=")
                 .SliceTo("&");
 
-            var playlist_results = new List<PlatformResult>();
-            await foreach (var video in youtube_client.Playlists.GetVideoBatchesAsync(playlist_id, cancellation_token))
+            var playlistResults = new List<PlatformResult>();
+            await foreach (var video in youtubeClient.Playlists.GetVideoBatchesAsync(playlistID, cancellationToken))
             {
                 var items = video.Items;
-                playlist_results.AddRange(items.Select(v => new YouTubeResult
+                playlistResults.AddRange(items.Select(v => new YouTubeResult
                 {
                     ID = PlatformIdentifier + v.Id,
                     Name = v.Title,
@@ -64,7 +64,7 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider,
                 }));
             }
 
-            return Result<IEnumerable<PlatformResult>, SearchError>.Success(playlist_results);
+            return Result<IEnumerable<PlatformResult>, SearchError>.Success(playlistResults);
         }
         catch
         {
@@ -82,8 +82,8 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider,
     {
         try
         {
-            var youtube_client = new YoutubeClient();
-            var results = await youtube_client.Search.GetVideosAsync(keywords, token).CollectAsync(15);
+            var youtubeClient = new YoutubeClient();
+            var results = await youtubeClient.Search.GetVideosAsync(keywords, token).CollectAsync(15);
             return Result<IEnumerable<PlatformResult>, SearchError>.Success(
                 results.Select(video => new YouTubeResult
                 {

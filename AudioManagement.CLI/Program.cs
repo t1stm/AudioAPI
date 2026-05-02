@@ -5,38 +5,38 @@ using AudioManagement.Platforms.YouTube;
 using AudioManagement.Streams;
 using Result.Objects;
 
-var audio_manager = new AudioManager();
-audio_manager.Initialize();
+var audioManager = new AudioManager();
+audioManager.Initialize();
 
-audio_manager.RegisterPlatform<YouTube>();
-audio_manager.RegisterPlatform<MusicDatabase>();
+audioManager.RegisterPlatform<YouTube>();
+audioManager.RegisterPlatform<MusicDatabase>();
 
 // https://www.youtube.com/watch?v=dQw4w9WgXcQ
-var found = await audio_manager.SearchID("yt://dQw4w9WgXcQ");
+var found = await audioManager.SearchID("yt://dQw4w9WgXcQ");
 if (found == Status.Error)
 {
     Console.WriteLine("Status: Error");
     return;
 }
 
-var result = found.GetOK();
+var result = found.GetOk();
 Console.WriteLine("Status: OK");
 
 Console.WriteLine(JsonSerializer.Serialize(result));
 
-var download_attempt = await result.TryGetContentData();
-if (download_attempt == Status.Error)
+var downloadAttempt = await result.TryGetContentData();
+if (downloadAttempt == Status.Error)
 {
     Console.WriteLine("Download: Error");
     return;
 }
 
-var stream_spreader = download_attempt.GetOK();
+var streamSpreader = downloadAttempt.GetOk();
 var stream = File.Open("test", FileMode.Create);
 
-var waiting_semaphore = new SemaphoreSlim(0, 1);
+var waitingSemaphore = new SemaphoreSlim(0, 1);
 var total = 0;
-var stream_subscriber = new StreamSubscriber
+var streamSubscriber = new StreamSubscriber
 {
     WriteCall = async (bytes, offset, length) =>
     {
@@ -48,13 +48,13 @@ var stream_subscriber = new StreamSubscriber
     SyncCall = () => Task.CompletedTask,
     CloseCall = () =>
     {
-        waiting_semaphore.Release();
+        waitingSemaphore.Release();
         return Task.CompletedTask;
     }
 };
 
-stream_spreader.Subscribe(stream_subscriber);
-await waiting_semaphore.WaitAsync();
+streamSpreader.Subscribe(streamSubscriber);
+await waitingSemaphore.WaitAsync();
 
 await stream.FlushAsync();
 await stream.DisposeAsync();

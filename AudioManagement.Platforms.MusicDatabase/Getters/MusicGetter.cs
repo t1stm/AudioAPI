@@ -9,23 +9,23 @@ public class MusicGetter : ContentGetter
     public override int Priority => 99;
 
     public override Task<Result<StreamSpreader, DownloadError>> TryGetContentData(
-        PlatformResult result, CancellationToken cancellation_token)
+        PlatformResult result, CancellationToken cancellationToken)
     {
-        if (result is not MusicResult local_result)
+        if (result is not MusicResult localResult)
             return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(DownloadError.WrongType));
 
-        if (!File.Exists(local_result.Path))
+        if (!File.Exists(localResult.Path))
             return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(
                 DownloadError.FileReadFailure));
 
-        var stream_spreader = new StreamSpreader();
+        var streamSpreader = new StreamSpreader();
         _ = Task.Run(async () =>
         {
-            await using var stream = File.Open(local_result.Path, FileMode.Open, FileAccess.Read);
-            await stream.CopyToAsync(stream_spreader, cancellation_token);
-            await stream_spreader.CloseAsync();
-        }, cancellation_token);
+            await using var stream = File.Open(localResult.Path, FileMode.Open, FileAccess.Read);
+            await stream.CopyToAsync(streamSpreader, cancellationToken);
+            await streamSpreader.CloseAsync();
+        }, cancellationToken);
 
-        return Task.FromResult(Result<StreamSpreader, DownloadError>.Success(stream_spreader));
+        return Task.FromResult(Result<StreamSpreader, DownloadError>.Success(streamSpreader));
     }
 }
