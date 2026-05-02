@@ -21,19 +21,25 @@ public class YouTubeSearchProviderMadeyoga(ILogger logger) : SearchProvider(logg
         CancellationToken cancellationToken = default)
     {
         var search = await Client.SearchAsync(HttpClientManager.GetHttpClient(), keywords, 15);
-        if (search == null) return Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.NotFound);
+        switch (search)
+        {
+            case null:
+                Logger.Error("Failed to get YouTube search results for keywords: {Keywords}", keywords);
+                return Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.NotFound);
 
-        return Result<IEnumerable<PlatformResult>, SearchError>.Success(
-            search.Results.Where(r => r is YoutubeVideo v && !string.IsNullOrWhiteSpace(v.Duration))
-                .Cast<YoutubeVideo>()
-                .Select(v => new YouTubeResult
-                {
-                    ID = "yt://" + v.Id,
-                    Downloaders = ContentDownloaders,
-                    Name = v.Title,
-                    Artist = v.Author,
-                    Duration = TimeSpan.ParseExact(v.Duration, [@"h\:m\:s", @"m\:s", "s"], null),
-                    ThumbnailUrl = v.ThumbnailUrl.SliceTo("?") // remove tracking data
-                }));
+            default:
+                return Result<IEnumerable<PlatformResult>, SearchError>.Success(
+                    search.Results.Where(r => r is YoutubeVideo v && !string.IsNullOrWhiteSpace(v.Duration))
+                        .Cast<YoutubeVideo>()
+                        .Select(v => new YouTubeResult
+                        {
+                            ID = "yt://" + v.Id,
+                            Downloaders = ContentDownloaders,
+                            Name = v.Title,
+                            Artist = v.Author,
+                            Duration = TimeSpan.ParseExact(v.Duration, [@"h\:m\:s", @"m\:s", "s"], null),
+                            ThumbnailUrl = v.ThumbnailUrl.SliceTo("?") // remove tracking data
+                        }));
+        }
     }
 }

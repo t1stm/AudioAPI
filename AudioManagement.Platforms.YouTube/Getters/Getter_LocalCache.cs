@@ -24,22 +24,35 @@ public class GetterLocalCache(ILogger logger) : ContentGetter(logger)
         PlatformResult result, CancellationToken cancellationToken)
     {
         if (result is not YouTubeResult youtubeResult)
+        {
+            Logger.Debug("Result is not YouTubeResult, returning error");
             return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(DownloadError.WrongType));
+        }
 
         var file = youtubeResult.GetPureID().ToString() + ".webm";
         Directory.CreateDirectory(CacheLocation);
 
         var path = Path.Combine(CacheLocation, file);
         if (!File.Exists(path))
+        {
+            Logger.Debug("File not found, returning error");
             return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(
                 DownloadError.FileReadFailure));
+        };
 
         var streamSpreader = new StreamSpreader();
         _ = Task.Run(async () =>
         {
-            await using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.None);
-            await stream.CopyToAsync(streamSpreader, cancellationToken);
-            await streamSpreader.CloseAsync();
+            try
+            {
+                await using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.None);
+                await stream.CopyToAsync(streamSpreader, cancellationToken);
+                await streamSpreader.CloseAsync();
+            }
+            catch (Exception e)
+            {
+                Logger.Fatal("Error while copying local cache to StreamSpreader: '{@Exception}'", e);
+            }
         }, cancellationToken);
 
         return Task.FromResult(Result<StreamSpreader, DownloadError>.Success(streamSpreader));

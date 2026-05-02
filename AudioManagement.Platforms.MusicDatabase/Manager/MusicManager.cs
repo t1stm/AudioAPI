@@ -4,11 +4,13 @@ using AudioManagement.Utils;
 using Newtonsoft.Json;
 using Result;
 using Result.Objects;
+using Serilog;
 
 namespace AudioManagement.Platforms.MusicDatabase.Manager;
 
-public partial class MusicManager
+public partial class MusicManager(ILogger logger)
 {
+    public ILogger Logger { get; } = logger;
     protected readonly CoverExtractor CoverExtractor = new();
     protected List<MusicInfo> Songs = [];
 
@@ -55,9 +57,9 @@ public partial class MusicManager
         }
     }
 
-    private static async Task<IEnumerable<MusicInfo>> ParseArtistFolder(string artist)
+    private async Task<IEnumerable<MusicInfo>> ParseArtistFolder(string artist)
     {
-        Console.WriteLine($"Loading artist: \'{artist}\'");
+        Logger.Information("Loading artist: '{Artist}'", artist);
         var artistName = artist.Split(Path.PathSeparator)[^1];
         var jsonFile = Path.Combine(artist, "Info.json");
 
@@ -97,8 +99,7 @@ public partial class MusicManager
             }
             catch (Exception e)
             {
-                // TODO: log with logger
-                Console.WriteLine($"Error thrown for \'{artist}\': \'{e}\'");
+                Log.Fatal("Error thrown for '{Artist}': '{@Exception}'", artist, e);
             }
         }
 

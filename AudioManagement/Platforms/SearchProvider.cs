@@ -4,7 +4,7 @@ namespace AudioManagement.Platforms;
 
 public abstract class SearchProvider(ILogger logger)
 {
-    public ILogger Logger { get; } = logger;
+    protected ILogger Logger { get; } = logger;
     public abstract string Name { get; }
     public abstract string PlatformIdentifier { get; }
     public abstract int Priority { get; }

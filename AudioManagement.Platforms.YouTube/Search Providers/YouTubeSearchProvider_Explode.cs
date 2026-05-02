@@ -34,8 +34,9 @@ public sealed class YouTubeSearchProviderExplode(ILogger logger) : SearchProvide
                 Downloaders = ContentDownloaders
             });
         }
-        catch
+        catch(Exception e)
         {
+            Log.Error("Failed to get video with ID: {@Id} with exception: {Exception}", id, e);
             return Result<PlatformResult, SearchError>.Error(SearchError.GenericError);
         }
     }
@@ -67,8 +68,9 @@ public sealed class YouTubeSearchProviderExplode(ILogger logger) : SearchProvide
 
             return Result<IEnumerable<PlatformResult>, SearchError>.Success(playlistResults);
         }
-        catch
+        catch(Exception e)
         {
+            Log.Error("Failed to get playlist with URL: {@Url} with exception: {Exception}", playlistUrl, e);
             return Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.GenericError);
         }
     }
@@ -97,8 +99,9 @@ public sealed class YouTubeSearchProviderExplode(ILogger logger) : SearchProvide
                     Downloaders = ContentDownloaders
                 }));
         }
-        catch
+        catch(Exception e)
         {
+            Log.Error("Failed to search for keywords: {@Keywords} with exception: {Exception}", keywords, e);
             return Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.GenericError);
         }
     }

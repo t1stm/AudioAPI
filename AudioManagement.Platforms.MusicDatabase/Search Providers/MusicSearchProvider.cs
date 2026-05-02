@@ -9,7 +9,7 @@ namespace AudioManagement.Platforms.MusicDatabase.Search_Providers;
 
 public class MusicSearchProvider(ILogger logger) : SearchProvider(logger), ISupportsID, ISupportsSearch, ISupportsRandomResults
 {
-    protected readonly MusicManager MusicManager = new();
+    protected readonly MusicManager MusicManager = new(logger);
     public override string Name => "Music Search";
     public override string PlatformIdentifier => "audio://";
     public override int Priority => 99;

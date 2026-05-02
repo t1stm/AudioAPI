@@ -5,6 +5,7 @@ using AudioManagement.Platforms.YouTube;
 using AudioManagement.Streams;
 using Result.Objects;
 using Serilog;
+using Serilog.Core;
 
 var loggerConfiguration = new LoggerConfiguration()
     .WriteTo.Console();
@@ -20,19 +21,17 @@ audioManager.RegisterPlatform<MusicDatabase>();
 var found = await audioManager.SearchID("yt://dQw4w9WgXcQ");
 if (found == Status.Error)
 {
-    Console.WriteLine("Status: Error");
+    logger.Error("Status: Error");
     return;
 }
 
 var result = found.GetOk();
-Console.WriteLine("Status: OK");
-
-Console.WriteLine(JsonSerializer.Serialize(result));
+logger.Information("Status: OK, Result: {Result}", result.SerializeSelf());
 
 var downloadAttempt = await result.TryGetContentData();
 if (downloadAttempt == Status.Error)
 {
-    Console.WriteLine("Download: Error");
+    logger.Error("Download: Error");
     return;
 }
 
@@ -66,4 +65,4 @@ await stream.DisposeAsync();
 
 stream.Close();
 
-Console.WriteLine($"Total: {total}");
+logger.Information("Total: {Total}", total);

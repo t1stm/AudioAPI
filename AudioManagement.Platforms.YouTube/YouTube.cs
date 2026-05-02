@@ -17,8 +17,8 @@ public sealed partial class YouTube(ILogger logger) : Platform(logger), IPlatfor
     {
         return new YouTube(logger);
     }
-    
-    public static readonly YouTubeCacher YouTubeCacher = new();
+
+    private static YouTubeCacher? _youTubeCacher;
     protected override HashSet<string> SearchIDIdentifiers => ["yt://"];
     protected override HashSet<string> SearchPlaylistIdentifiers => ["yt-playlist://"];
 
@@ -34,7 +34,7 @@ public sealed partial class YouTube(ILogger logger) : Platform(logger), IPlatfor
 
     protected override List<SearchProvider> SearchProviders { get; set; } =
     [
-        new YouTubeSearchProviderCached(logger, YouTubeCacher),
+        new YouTubeSearchProviderCached(logger, _youTubeCacher ??= new YouTubeCacher(logger)),
         new YouTubeSearchProviderMadeyoga(logger),
         new YouTubeSearchProviderExplode(logger)
     ];
@@ -50,6 +50,7 @@ public sealed partial class YouTube(ILogger logger) : Platform(logger), IPlatfor
     public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchPlaylist(string playlist,
         CancellationToken cancellationToken = default)
     {
+        Logger.Debug("Searching for playlist: {Playlist}", playlist);
         foreach (var searchProvider in
                  SearchProviders.OfType<ISupportsPlaylist>())
         {
@@ -69,6 +70,7 @@ public sealed partial class YouTube(ILogger logger) : Platform(logger), IPlatfor
     public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchKeywords(string keywords,
         CancellationToken cancellationToken = default)
     {
+        Logger.Debug("Searching for keywords: {Keywords}", keywords);
         foreach (var searchProvider in
                  SearchProviders.OfType<ISupportsSearch>())
         {
@@ -86,10 +88,16 @@ public sealed partial class YouTube(ILogger logger) : Platform(logger), IPlatfor
         base.Initialize();
     }
 
-    private static async Task PopulateYouTubeCache(Result<IEnumerable<PlatformResult>, SearchError> results)
+    private async Task PopulateYouTubeCache(Result<IEnumerable<PlatformResult>, SearchError> results)
     {
-        if (results == Status.Error) return;
-        await YouTubeCacher.AddToCacheAsync(results.GetOk().OfType<YouTubeResult>());
+        if (results == Status.Error)
+        {
+            Logger.Error("Error while populating YouTube cache: {@Exception}", results.GetError());
+            return;
+        }
+        
+        if (_youTubeCacher is not null) // should always be true when this is called
+            await _youTubeCacher.AddToCacheAsync(results.GetOk().OfType<YouTubeResult>());
     }
 
     [GeneratedRegex(@"\/playlist\?list=[a-zA-Z0-9_-]+")]

@@ -18,7 +18,13 @@ public class YouTubeSearchProviderCached(ILogger logger, YouTubeCacher cacher) :
         CancellationToken cancellationToken = default)
     {
         var result = await YouTubeCacher.GetFromCacheAsync(id);
-        if (result == Status.Error) return Result<PlatformResult, SearchError>.Error(SearchError.NotFound);
+        Logger.Debug("YouTube Cached Result: {Result}", result);
+        if (result == Status.Error)
+        {
+            Logger.Error("Failed to get YouTube cached result for ID: {ID}, Error: {@Error}", id, result);
+            return Result<PlatformResult, SearchError>.Error(SearchError.NotFound);
+        }
+        
 
         var okResult = result.GetOk();
         okResult.Downloaders = ContentDownloaders;

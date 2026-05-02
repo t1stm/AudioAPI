@@ -24,23 +24,33 @@ public class GetterVideoLibrary(ILogger logger) : ContentGetter(logger)
                 .FirstOrDefault();
 
             if (bestAudio is null)
+            {
+                Logger.Error("Failed to find best audio stream for video library URL: {URL}", result.GetDownloadUrl());
                 return Result<StreamSpreader, DownloadError>
                     .Error(DownloadError.NotFound);
+            }
 
             var streamSpreader = new StreamSpreader();
 
             _ = Task.Run(async () =>
             {
-                var stream = await bestAudio.StreamAsync();
-                await stream.CopyToAsync(streamSpreader, cancellationToken);
-                await streamSpreader.CloseAsync();
+                try
+                {
+                    var stream = await bestAudio.StreamAsync();
+                    await stream.CopyToAsync(streamSpreader, cancellationToken);
+                    await streamSpreader.CloseAsync();
+                }
+                catch (Exception e)
+                {
+                    Logger.Fatal("Error while copying video library stream to StreamSpreader: '{@Exception}'", e);
+                }
             }, cancellationToken);
 
             return Result<StreamSpreader, DownloadError>.Success(streamSpreader);
         }
         catch (Exception e)
         {
-            Console.WriteLine(e);
+            Logger.Fatal("Error while processing video library: '{@Exception}'", e);
             return Result<StreamSpreader, DownloadError>.Error(DownloadError.Generic);
         }
     }

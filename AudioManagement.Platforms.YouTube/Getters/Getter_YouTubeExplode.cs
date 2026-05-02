@@ -27,7 +27,10 @@ public class GetterYouTubeExplode(ILogger logger) : ContentGetter(logger)
 
             var chosenAudioOnlyStream = audioOnlyStreams.FirstOrDefault();
             if (chosenAudioOnlyStream is null)
+            {
+                Logger.Error("Failed to find audio-only stream for YouTube video ID: {ID}", youtubeResult.ID);
                 return Result<StreamSpreader, DownloadError>.Error(DownloadError.NotFound);
+            }
 
             var streamSpreader = new StreamSpreader();
             _ = Task.Run(DownloadFunction, cancellationToken);
@@ -40,6 +43,11 @@ public class GetterYouTubeExplode(ILogger logger) : ContentGetter(logger)
                     await youtubeClient.Videos.Streams.CopyToAsync(
                         chosenAudioOnlyStream, streamSpreader,
                         cancellationToken: cancellationToken);
+                    Logger.Debug("Successfully downloaded audio-only stream for YouTube video ID: {ID}", youtubeResult.ID);
+                }
+                catch (Exception e)
+                {
+                    Logger.Fatal("Exception thrown when copying stream to StreamSpreader for YouTube video ID: {ID}, {@Exception}", youtubeResult.ID, e);
                 }
                 finally
                 {
@@ -49,7 +57,7 @@ public class GetterYouTubeExplode(ILogger logger) : ContentGetter(logger)
         }
         catch (Exception e)
         {
-            Console.WriteLine(e);
+            Logger.Fatal("Error while processing YouTube: '{@Exception}'", e);
             return Result<StreamSpreader, DownloadError>.Error(DownloadError.Generic);
         }
     }
