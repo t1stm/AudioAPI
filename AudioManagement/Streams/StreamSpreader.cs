@@ -1,5 +1,6 @@
 namespace AudioManagement.Streams;
 
+// allocation king, gc go brrrr
 public class StreamSpreader : Stream
 {
     protected readonly List<(byte[], int, int)> Data = [];
