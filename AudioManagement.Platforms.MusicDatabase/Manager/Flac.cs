@@ -60,9 +60,9 @@ public static class Flac
         };
     }
 
-    private static bool HasHeader(Span<byte> header, IReadOnlyList<byte> source)
+    private static bool HasHeader(Span<byte> header, ReadOnlySpan<byte> source)
     {
-        if (header.Length > source.Count) return false;
+        if (header.Length > source.Length) return false;
 
         for (var i = 0; i < header.Length; i++)
             if (header[i] != source[i])
