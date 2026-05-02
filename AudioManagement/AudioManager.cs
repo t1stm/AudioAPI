@@ -141,30 +141,42 @@ public class AudioManager
     {
         var expireTimestamps = ExpireTimestampLookup;
         await Semaphore.WaitAsync();
-
-        foreach (var (id, streamSpreader) in CachedResults)
+        try
         {
-            if (!streamSpreader.Closed) continue;
-            if (expireTimestamps.ContainsKey(id)) continue;
+            
+            foreach (var (id, streamSpreader) in CachedResults)
+            {
+                if (!streamSpreader.Closed) continue;
+                if (expireTimestamps.ContainsKey(id)) continue;
 
-            expireTimestamps[id] = DateTime.UtcNow.Add(ExpireTimeSpan);
+                expireTimestamps[id] = DateTime.UtcNow.Add(ExpireTimeSpan);
+            }
+
+            var cachedDictionary = ExpireTimestamps.ToDictionary();
+            var now = DateTime.UtcNow;
+
+            var cachedResults = CachedResultLookup;
+            foreach (var (id, expire) in cachedDictionary)
+            {
+                if (expire < now) continue;
+                expireTimestamps.Remove(id);
+
+                var spreader = cachedResults[id];
+                await spreader.DisposeAsync();
+                cachedResults.Remove(id);
+            }
+
+            Semaphore.Release();
         }
-
-        var cachedDictionary = ExpireTimestamps.ToDictionary();
-        var now = DateTime.UtcNow;
-
-        var cachedResults = CachedResultLookup;
-        foreach (var (id, expire) in cachedDictionary)
+        catch (Exception)
         {
-            if (expire < now) continue;
-            expireTimestamps.Remove(id);
-
-            var spreader = cachedResults[id];
-            await spreader.DisposeAsync();
-            cachedResults.Remove(id);
+            // ignored
+            // TODO log with logger
         }
-
-        Semaphore.Release();
+        finally
+        {
+            Semaphore.Release();
+        }
     }
 
     private static ReadOnlySpan<char> GetProtocolSpan(Span<char> buffer, ReadOnlySpan<char> platformID)
