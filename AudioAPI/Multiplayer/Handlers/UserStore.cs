@@ -1,6 +1,6 @@
 using System.Net.WebSockets;
 
-namespace AudioAPI.Multiplayer;
+namespace AudioAPI.Multiplayer.Handlers;
 
 public class UserStore
 {

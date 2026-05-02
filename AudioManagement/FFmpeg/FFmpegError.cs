@@ -1,4 +1,4 @@
-namespace Audio.FFmpeg;
+namespace AudioManagement.FFmpeg;
 
 public enum FFmpegError
 {

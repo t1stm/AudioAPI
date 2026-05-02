@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using AudioManagement.Platforms;
 
-namespace AudioAPI.Multiplayer;
+namespace AudioAPI.Multiplayer.Handlers;
 
 public class VirtualPlayer(MessageQueue messageQueue)
 {

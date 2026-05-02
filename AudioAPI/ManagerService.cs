@@ -1,7 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Timers;
-using Audio.FFmpeg;
 using AudioManagement;
+using AudioManagement.FFmpeg;
 using AudioManagement.Platforms.MusicDatabase;
 using AudioManagement.Platforms.YouTube;
 using Timer = System.Timers.Timer;

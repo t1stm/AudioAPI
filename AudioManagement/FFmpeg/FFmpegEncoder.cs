@@ -3,7 +3,7 @@ using System.Diagnostics;
 using AudioManagement.Streams;
 using Result;
 
-namespace Audio.FFmpeg;
+namespace AudioManagement.FFmpeg;
 
 public class FFmpegEncoder
 {

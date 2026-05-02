@@ -1,4 +1,4 @@
-namespace AudioAPI.Multiplayer;
+namespace AudioAPI.Multiplayer.Handlers;
 
 public class AddedUserHandler
 {
