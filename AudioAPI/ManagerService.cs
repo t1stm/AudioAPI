@@ -1,14 +1,15 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Timers;
 using Audio.FFmpeg;
-using AudioManager.Platforms.MusicDatabase;
-using AudioManager.Platforms.YouTube;
+using AudioManagement;
+using AudioManagement.Platforms.MusicDatabase;
+using AudioManagement.Platforms.YouTube;
 
 namespace AudioAPI;
 
 public class ManagerService
 {
-    public readonly Audio.AudioManager AudioManager;
+    public readonly AudioManager Manager;
     public readonly System.Timers.Timer ExpireTimer;
     
     protected readonly Dictionary<string, FFmpegEncoder> CachedEncoders = new();
@@ -18,11 +19,11 @@ public class ManagerService
 
     public ManagerService()
     {
-        AudioManager = new Audio.AudioManager();
-        AudioManager.Initialize();
+        Manager = new AudioManager();
+        Manager.Initialize();
 
-        AudioManager.RegisterPlatform<MusicDatabase>();
-        AudioManager.RegisterPlatform<YouTube>();
+        Manager.RegisterPlatform<MusicDatabase>();
+        Manager.RegisterPlatform<YouTube>();
 
         ExpireTimer = new System.Timers.Timer();
         ExpireTimer.Interval = 60 * 1000;
@@ -105,10 +106,10 @@ public class ManagerService
     {
         _lock.EnterWriteLock();
 
-        var expire_copy = ExpireTimes.ToDictionary();
+        var expireCopy = ExpireTimes.ToDictionary();
         var now = DateTime.Now;
 
-        foreach (var (ffmpegEncoder, expire) in expire_copy)
+        foreach (var (ffmpegEncoder, expire) in expireCopy)
         {
             if (expire > now) continue;
             ExpireTimes.Remove(ffmpegEncoder);

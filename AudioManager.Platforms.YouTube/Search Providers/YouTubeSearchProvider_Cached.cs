@@ -1,10 +1,10 @@
-using AudioManager.Platforms.Errors;
-using AudioManager.Platforms.Optional.Supports;
-using AudioManager.Platforms.YouTube.Cache;
+using AudioManagement.Platforms.Errors;
+using AudioManagement.Platforms.Optional.Supports;
+using AudioManagement.Platforms.YouTube.Cache;
 using Result;
 using Result.Objects;
 
-namespace AudioManager.Platforms.YouTube.Search_Providers;
+namespace AudioManagement.Platforms.YouTube.Search_Providers;
 
 public class YouTubeSearchProvider_Cached(YouTubeCacher cacher) : SearchProvider, ISupportsID
 {

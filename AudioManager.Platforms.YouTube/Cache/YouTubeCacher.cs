@@ -1,9 +1,9 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
-using AudioManager.Platforms.Errors;
+using AudioManagement.Platforms.Errors;
 using Result;
 
-namespace AudioManager.Platforms.YouTube.Cache;
+namespace AudioManagement.Platforms.YouTube.Cache;
 
 public class YouTubeCacher
 {

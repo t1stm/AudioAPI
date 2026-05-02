@@ -1,8 +1,8 @@
 using System.Diagnostics;
-using AudioManager.Platforms.MusicDatabase.Manager.Objects;
+using AudioManagement.Platforms.MusicDatabase.Manager.Objects;
 using File = System.IO.File;
 
-namespace AudioManager.Platforms.MusicDatabase.Manager;
+namespace AudioManagement.Platforms.MusicDatabase.Manager;
 
 public static class Flac
 {

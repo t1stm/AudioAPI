@@ -1,10 +1,10 @@
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Text.Encodings.Web;
-using Audio;
-using AudioManager.Platforms;
-using AudioManager.Platforms.MusicDatabase;
-using AudioManager.Streams;
+using AudioManagement;
+using AudioManagement.Platforms;
+using AudioManagement.Platforms.MusicDatabase;
+using AudioManagement.Streams;
 using Microsoft.AspNetCore.Mvc;
 using Result.Objects;
 
@@ -22,7 +22,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
         if (string.IsNullOrWhiteSpace(query)) yield break;
         logger.LogInformation("Searching for {Query}", query);
 
-        var query_type = manager_service.AudioManager.FindQueryType(query);
+        var query_type = manager_service.Manager.FindQueryType(query);
         
         switch (query_type)
         {
@@ -34,7 +34,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
                     var count = idSpan.Split(ranges, "://");
                     var pureId = count > 1 ? idSpan[ranges[1]]: idSpan;
 
-                    var found = await manager_service.AudioManager.SearchID(pureId.ToString()); // TODO: search methods should use ReadOnlySpan<char> wherever possible
+                    var found = await manager_service.Manager.SearchID(pureId.ToString()); // TODO: search methods should use ReadOnlySpan<char> wherever possible
                     if (found == Status.Error)
                         yield break;
                     
@@ -44,7 +44,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
 
             case QueryType.Playlist:
                 {
-                    await foreach (var result in manager_service.AudioManager.SearchPlaylist(query))
+                    await foreach (var result in manager_service.Manager.SearchPlaylist(query))
                     {
                         yield return result;
                     }
@@ -52,8 +52,9 @@ public class Content(ILogger<Content> logger) : ControllerBase
                 }
 
             case QueryType.Keywords:
+            default:
                 {
-                    await foreach (var result in manager_service.AudioManager.SearchKeywords(query))
+                    await foreach (var result in manager_service.Manager.SearchKeywords(query))
                     {
                         yield return result;
                     }
@@ -66,7 +67,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
     [Route("/Audio/RandomResults")]
     public async Task<IActionResult> RandomResults([FromServices] ManagerService manager_service, int count = 10)
     {
-        var platform = manager_service.AudioManager.GetPlatform<MusicDatabase>();
+        var platform = manager_service.Manager.GetPlatform<MusicDatabase>();
         logger.LogInformation("Returning {Count} random results", count);
         var results = await platform.GetRandomResults(count);
         if (results == Status.Error) return NotFound();
@@ -84,7 +85,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
         logger.LogInformation("Downloading Raw \'{Id}\'", id);
 
         var start = DateTime.Now;
-        var search = await manager_service.AudioManager.SearchID(id);
+        var search = await manager_service.Manager.SearchID(id);
         if (search == Status.Error) return NotFound();
 
         var result = search.GetOK();
@@ -93,7 +94,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
         logger.LogInformation("Searching \'{Id}\' took \'{Duration}\'", id, found_result - start);
 
         var content_downloader_request =
-            await manager_service.AudioManager.TryGetContentData(result);
+            await manager_service.Manager.TryGetContentData(result);
         if (content_downloader_request == Status.Error)
             return StatusCode(500);
 
@@ -203,13 +204,13 @@ public class Content(ILogger<Content> logger) : ControllerBase
         
         if (!manager_service.TryGetEncoder(codec, bitrate, id, out var encoder))
         {
-            var search = await manager_service.AudioManager.SearchID(id);
+            var search = await manager_service.Manager.SearchID(id);
             if (search == Status.Error) return NotFound("Search resulted in error");
 
             var result = search.GetOK();
 
             var content_downloader_request =
-                await manager_service.AudioManager.TryGetContentData(result);
+                await manager_service.Manager.TryGetContentData(result);
 
             if (content_downloader_request == Status.Error)
                 return StatusCode(500);

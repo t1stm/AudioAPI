@@ -1,11 +1,11 @@
-using Audio.Utils;
-using AudioManager.Platforms.Errors;
-using AudioManager.Platforms.Optional.Supports;
+using AudioManagement.Platforms.Errors;
+using AudioManagement.Platforms.Optional.Supports;
+using AudioManagement.Utils;
 using Result;
 using YoutubeExplode;
 using YoutubeExplode.Common;
 
-namespace AudioManager.Platforms.YouTube.Search_Providers;
+namespace AudioManagement.Platforms.YouTube.Search_Providers;
 
 public sealed class YouTubeSearchProvider_Explode : SearchProvider,
     ISupportsID, ISupportsPlaylist, ISupportsSearch

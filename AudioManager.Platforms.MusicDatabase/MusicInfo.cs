@@ -1,8 +1,8 @@
 using System.Text.Json.Serialization;
-using Audio.Utils;
-using AudioManager.Platforms.MusicDatabase.Manager;
+using AudioManagement.Platforms.MusicDatabase.Manager;
+using AudioManagement.Utils;
 
-namespace AudioManager.Platforms.MusicDatabase;
+namespace AudioManagement.Platforms.MusicDatabase;
 
 public class MusicInfo
 {

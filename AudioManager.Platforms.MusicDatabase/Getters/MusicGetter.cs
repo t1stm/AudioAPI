@@ -1,8 +1,8 @@
-using AudioManager.Platforms.Errors;
-using AudioManager.Streams;
+using AudioManagement.Platforms.Errors;
+using AudioManagement.Streams;
 using Result;
 
-namespace AudioManager.Platforms.MusicDatabase.Getters;
+namespace AudioManagement.Platforms.MusicDatabase.Getters;
 
 public class MusicGetter : ContentGetter
 {

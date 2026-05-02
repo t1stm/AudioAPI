@@ -1,8 +1,8 @@
-using AudioManager.Platforms.MusicDatabase.Manager.Objects;
+using AudioManagement.Platforms.MusicDatabase.Manager.Objects;
 using TagLib;
 using File = TagLib.File;
 
-namespace AudioManager.Platforms.MusicDatabase.Manager;
+namespace AudioManagement.Platforms.MusicDatabase.Manager;
 
 public static class Id3v2
 {

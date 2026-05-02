@@ -1,10 +1,10 @@
-using AudioManager.Platforms.Errors;
-using AudioManager.Platforms.MusicDatabase.Manager;
-using AudioManager.Platforms.Optional.Supports;
+using AudioManagement.Platforms.Errors;
+using AudioManagement.Platforms.MusicDatabase.Manager;
+using AudioManagement.Platforms.Optional.Supports;
 using Result;
 using Result.Objects;
 
-namespace AudioManager.Platforms.MusicDatabase.Search_Providers;
+namespace AudioManagement.Platforms.MusicDatabase.Search_Providers;
 
 public class MusicSearchProvider : SearchProvider, ISupportsID, ISupportsSearch, ISupportsRandomResults
 {

@@ -23,7 +23,7 @@ public class Room
     protected readonly VirtualPlayer Player;
     [JsonIgnore]
     protected readonly System.Timers.Timer Timer;
-    
+
     protected readonly ManagerService ManagerService;
 
     public Room(Guid guid, ManagerService manager_service)
@@ -85,7 +85,7 @@ public class Room
         switch (name)
         {
             case "add":
-                var result = await ManagerService.AudioManager.SearchID(value);
+                var result = await ManagerService.Manager.SearchID(value);
                 if (result == Status.Error) return;
 
                 await Player.Enqueue(result.GetOK());

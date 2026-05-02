@@ -1,11 +1,11 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using Audio.Utils;
+using AudioManagement.Utils;
 using Newtonsoft.Json;
 using Result;
 using Result.Objects;
 
-namespace AudioManager.Platforms.MusicDatabase.Manager;
+namespace AudioManagement.Platforms.MusicDatabase.Manager;
 
 public partial class MusicManager
 {
@@ -50,7 +50,7 @@ public partial class MusicManager
         }
 
         songs.ForEach(s => s.CoverUrl = s.CoverUrl?.Replace("$[DOMAIN]", AlbumCoverLocation));
-        
+
         lock (Songs)
         {
             Songs = songs;
@@ -91,7 +91,7 @@ public partial class MusicManager
                 file_stream.Seek(0, SeekOrigin.Begin);
 
                 var blocking = update.ToBlockingEnumerable();
-                
+
                 await using var writer = new StreamWriter(file_stream, Encoding.UTF8);
                 serializer.Serialize(writer, blocking);
 
@@ -130,7 +130,7 @@ public partial class MusicManager
                 return m.RelativeLocation != relative_location;
             }));
 
-        foreach (var file in new_files) 
+        foreach (var file in new_files)
             yield return await ParseFile(file);
     }
 
@@ -168,10 +168,10 @@ public partial class MusicManager
     {
         var term_clean = LevenshteinDistance.RemoveFormatting(
             ParentesisRegex().Replace(term, string.Empty));
-        
+
         if (string.IsNullOrEmpty(term_clean))
             return Result<IEnumerable<MusicInfo>, Empty>.Error(new Empty());
-        
+
         var found = Songs.Where(r => ScoreSingleTerm(term_clean, r));
         return Result<IEnumerable<MusicInfo>, Empty>.Success(found);
     }
@@ -239,16 +239,16 @@ public partial class MusicManager
         return (formatted_span.Length != 0 || romanized_span.Length != 0) &&
                (formatted_span.IndexOf(artist_span) != -1 || romanized_span.IndexOf(artist_span) != -1);
     }
-    
+
     public Result<IEnumerable<MusicInfo>, Empty> GetArtistSongs(string artist)
     {
         var artist_removed_formatting = LevenshteinDistance.RemoveFormatting(artist);
         if (string.IsNullOrEmpty(artist_removed_formatting))
             return Result<IEnumerable<MusicInfo>, Empty>.Error(default);
-        
+
         var artist_songs = Songs.AsParallel()
             .Where(song => IsArtistPartOfSong(artist_removed_formatting, song));
-        
+
         return Result<IEnumerable<MusicInfo>, Empty>.Success(artist_songs);
     }
 }

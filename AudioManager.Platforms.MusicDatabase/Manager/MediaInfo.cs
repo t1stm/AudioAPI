@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using System.Text.Json;
-using Audio.Utils;
+using AudioManagement.Utils;
 
-namespace AudioManager.Platforms.MusicDatabase.Manager;
+namespace AudioManagement.Platforms.MusicDatabase.Manager;
 
 public static class MediaInfo
 {
@@ -20,7 +20,7 @@ public static class MediaInfo
             Arguments = $"-v quiet -of json -show_entries format \"{processed_location}\"",
             RedirectStandardOutput = true,
         });
-    
+
         if (process == null) return music_info;
         await process.WaitForExitAsync();
 
@@ -33,15 +33,15 @@ public static class MediaInfo
         {
             return music_info;
         }
-        
+
         if (!json.RootElement.TryGetProperty("format", out var format)) return music_info;
-        
+
         if (format.TryGetProperty("duration", out var duration_string) &&
             double.TryParse(duration_string.GetString(), out var length))
         {
             music_info.Length = (ulong)(length * 1000);
         }
-            
+
         if (!format.TryGetProperty("tags", out var tags)) return music_info;
 
         if (tags.TryGetProperty("title", out var title))
@@ -51,7 +51,7 @@ public static class MediaInfo
         }
 
         if (!tags.TryGetProperty("artist", out var artist)) return music_info;
-            
+
         music_info.OriginalAuthor = artist.GetString();
         music_info.RomanizedAuthor = Romanize.FromCyrillic(music_info.OriginalAuthor ?? "");
 

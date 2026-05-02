@@ -1,8 +1,8 @@
-using AudioManager.Platforms.Errors;
-using AudioManager.Streams;
+using AudioManagement.Platforms.Errors;
+using AudioManagement.Streams;
 using Result;
 
-namespace AudioManager.Platforms.YouTube.Getters;
+namespace AudioManagement.Platforms.YouTube.Getters;
 
 public class Getter_LocalCache : ContentGetter
 {

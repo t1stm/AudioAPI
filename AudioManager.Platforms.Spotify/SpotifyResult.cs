@@ -1,4 +1,4 @@
-namespace AudioManager.Platforms.Spotify;
+namespace AudioManagement.Platforms.Spotify;
 
 public class SpotifyResult : PlatformResult
 {

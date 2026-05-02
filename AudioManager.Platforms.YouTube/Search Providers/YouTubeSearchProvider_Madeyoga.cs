@@ -1,13 +1,13 @@
 using Audio;
-using Audio.Utils;
-using AudioManager.Platforms.Errors;
-using AudioManager.Platforms.Optional.Supports;
+using AudioManagement.Platforms.Errors;
+using AudioManagement.Platforms.Optional.Supports;
+using AudioManagement.Utils;
 using Result;
 using YoutubeSearchApi.Net;
 using YoutubeSearchApi.Net.Backends;
 using YoutubeSearchApi.Net.Objects;
 
-namespace AudioManager.Platforms.YouTube.Search_Providers;
+namespace AudioManagement.Platforms.YouTube.Search_Providers;
 
 public class YouTubeSearchProvider_Madeyoga : SearchProvider,
     ISupportsSearch

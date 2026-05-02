@@ -1,14 +1,14 @@
 using System.Text.RegularExpressions;
-using AudioManager.Platforms.Cross_Platform;
-using AudioManager.Platforms.Errors;
-using AudioManager.Platforms.Optional.Supports;
-using AudioManager.Platforms.YouTube.Cache;
-using AudioManager.Platforms.YouTube.Getters;
-using AudioManager.Platforms.YouTube.Search_Providers;
+using AudioManagement.Platforms.Cross_Platform;
+using AudioManagement.Platforms.Errors;
+using AudioManagement.Platforms.Optional.Supports;
+using AudioManagement.Platforms.YouTube.Cache;
+using AudioManagement.Platforms.YouTube.Getters;
+using AudioManagement.Platforms.YouTube.Search_Providers;
 using Result;
 using Result.Objects;
 
-namespace AudioManager.Platforms.YouTube;
+namespace AudioManagement.Platforms.YouTube;
 
 public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlaylist
 {

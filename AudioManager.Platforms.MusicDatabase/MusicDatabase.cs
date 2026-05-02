@@ -1,10 +1,10 @@
-using AudioManager.Platforms.Errors;
-using AudioManager.Platforms.MusicDatabase.Getters;
-using AudioManager.Platforms.MusicDatabase.Search_Providers;
-using AudioManager.Platforms.Optional.Supports;
+using AudioManagement.Platforms.Errors;
+using AudioManagement.Platforms.MusicDatabase.Getters;
+using AudioManagement.Platforms.MusicDatabase.Search_Providers;
+using AudioManagement.Platforms.Optional.Supports;
 using Result;
 
-namespace AudioManager.Platforms.MusicDatabase;
+namespace AudioManagement.Platforms.MusicDatabase;
 
 public class MusicDatabase : Platform, ISupportsSearch, ISupportsRandomResults
 {
@@ -39,7 +39,7 @@ public class MusicDatabase : Platform, ISupportsSearch, ISupportsRandomResults
         var provider = (MusicSearchProvider)SearchProviders[0];
         return provider.GetRandomResults(count);
     }
-    
+
     public Task<Result<IEnumerable<PlatformResult>, SearchError>> GetArtistSongs(string artist)
     {
         var provider = (MusicSearchProvider)SearchProviders[0];

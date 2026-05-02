@@ -1,9 +1,9 @@
-using AudioManager.Platforms.Errors;
-using AudioManager.Platforms.Optional.Supports;
+using AudioManagement.Platforms.Errors;
+using AudioManagement.Platforms.Optional.Supports;
 using Result;
 using SpotifyAPI.Web;
 
-namespace AudioManager.Platforms.Spotify;
+namespace AudioManagement.Platforms.Spotify;
 
 public class SpotifySearchProvider : SearchProvider, ISupportsID
 {

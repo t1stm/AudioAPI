@@ -1,8 +1,8 @@
 using System.Text.Json.Serialization;
-using AudioManager.Platforms.Optional.Supports;
-using AudioManager.Streams;
+using AudioManagement.Platforms.Optional.Supports;
+using AudioManagement.Streams;
 
-namespace AudioManager.Platforms.YouTube;
+namespace AudioManagement.Platforms.YouTube;
 
 public sealed class YouTubeResult : PlatformResult, ISupportsCaching
 {

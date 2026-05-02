@@ -1,6 +1,6 @@
-using AudioManager.Streams;
+using AudioManagement.Streams;
 
-namespace AudioManager.Platforms.YouTube;
+namespace AudioManagement.Platforms.YouTube;
 
 public static class YouTubeCacheProvider
 {
