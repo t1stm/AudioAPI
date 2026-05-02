@@ -5,8 +5,7 @@ public static class LevenshteinDistance
     public static string? RemoveFormatting(string? str)
     {
         return
-            str is null ? null :
-            string.Concat(str.Where(char.IsLetterOrDigit)).ToLower();
+            str is null ? null : string.Concat(str.Where(char.IsLetterOrDigit)).ToLower();
     }
 
     public static int ComputeStrict(string? s, string? t)

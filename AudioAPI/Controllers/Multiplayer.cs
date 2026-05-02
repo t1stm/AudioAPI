@@ -1,10 +1,10 @@
 using System.Net.WebSockets;
 using System.Text.Json;
 using AudioAPI.Controllers.Helpers;
+using AudioAPI.Multiplayer;
 using Microsoft.AspNetCore.Mvc;
 using Result;
 using Result.Objects;
-using AudioAPI.Multiplayer;
 
 namespace AudioAPI.Controllers;
 
@@ -27,10 +27,7 @@ public class Multiplayer(ILogger<Multiplayer> logger, MultiplayerManager Manager
     {
         try
         {
-            if (!HttpContext.WebSockets.IsWebSocketRequest)
-            {
-                return new BadRequestResult();
-            }
+            if (!HttpContext.WebSockets.IsWebSocketRequest) return new BadRequestResult();
 
             using var web_socket = await HttpContext.WebSockets.AcceptWebSocketAsync();
             logger.LogDebug("Room update websocket \'{ID}\' connected, with IP: {IP}", HttpContext.TraceIdentifier,
@@ -52,15 +49,13 @@ public class Multiplayer(ILogger<Multiplayer> logger, MultiplayerManager Manager
     {
         try
         {
-            if (!HttpContext.WebSockets.IsWebSocketRequest || !Guid.TryParse(room, out var guid))
-            {
-                return BadRequest();
-            }
+            if (!HttpContext.WebSockets.IsWebSocketRequest || !Guid.TryParse(room, out var guid)) return BadRequest();
 
             using var web_socket = await HttpContext.WebSockets.AcceptWebSocketAsync();
             logger.LogDebug("WebSocket \'{ID}\' connected, with IP: {IP}", HttpContext.TraceIdentifier,
                 HttpContext.Connection.RemoteIpAddress);
-            await HandleRoomJoinWebSocket(web_socket, guid, username, HttpContext.TraceIdentifier, HttpContext.RequestAborted);
+            await HandleRoomJoinWebSocket(web_socket, guid, username, HttpContext.TraceIdentifier,
+                HttpContext.RequestAborted);
         }
         catch (Exception e)
         {
@@ -90,11 +85,11 @@ public class Multiplayer(ILogger<Multiplayer> logger, MultiplayerManager Manager
                 await Task.Delay(166);
                 continue;
             }
+
             change_id = new_id;
 
             await SendRooms();
-        }
-        while (web_socket.State == WebSocketState.Open && !cancellation_token.Value.IsCancellationRequested);
+        } while (web_socket.State == WebSocketState.Open && !cancellation_token.Value.IsCancellationRequested);
 
 
         await web_socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
@@ -122,7 +117,6 @@ public class Multiplayer(ILogger<Multiplayer> logger, MultiplayerManager Manager
 
             var handle = await HandleUserMessage(id, room_id, web_socket, response.GetOK());
             if (handle != HandleEvent.None) break;
-
         } while (response == Status.OK);
 
         var room = Manager.GetRoom(room_id);
@@ -132,7 +126,8 @@ public class Multiplayer(ILogger<Multiplayer> logger, MultiplayerManager Manager
         logger.LogDebug("WebSocket \'{ID}\' disconnected", id);
     }
 
-    private async Task<HandleEvent> HandleUserMessage(string id, Guid room_id, WebSocket web_socket, string message, string? initial_username = null)
+    private async Task<HandleEvent> HandleUserMessage(string id, Guid room_id, WebSocket web_socket, string message,
+        string? initial_username = null)
     {
         logger.LogDebug("WebSocket \'{ID}\' received: \'{Message}\'", id, message);
 

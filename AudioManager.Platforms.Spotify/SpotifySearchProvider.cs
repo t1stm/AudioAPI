@@ -7,10 +7,6 @@ namespace AudioManagement.Platforms.Spotify;
 
 public class SpotifySearchProvider : SearchProvider, ISupportsID
 {
-    public override string Name => "Spotify";
-    public override string PlatformIdentifier => "spotify://";
-    public override int Priority => 99;
-
     private static readonly SpotifyClientConfig SpotifyConfig = SpotifyClientConfig
         .CreateDefault()
         .WithAuthenticator(new ClientCredentialsAuthenticator
@@ -20,18 +16,9 @@ public class SpotifySearchProvider : SearchProvider, ISupportsID
             throw new ArgumentNullException(nameof(SpotifyConfig), "Environment variable SPOTIFY_SECRET is not set")));
 
     private static readonly Lazy<SpotifyClient> Spotify = new(() => new SpotifyClient(SpotifyConfig));
-
-    protected static string ArtistsNameCombine(List<SimpleArtist> artists)
-    {
-        var artist = "";
-        for (var index = 0; index < artists.Count; index++)
-        {
-            var simple_artist = artists[index];
-            artist += $"{index switch { 0 => "", _ => ", " }}{simple_artist.Name}";
-        }
-
-        return artist;
-    }
+    public override string Name => "Spotify";
+    public override string PlatformIdentifier => "spotify://";
+    public override int Priority => 99;
 
     public async Task<Result<PlatformResult, SearchError>> TryID(string id,
         CancellationToken cancellation_token = default)
@@ -49,5 +36,17 @@ public class SpotifySearchProvider : SearchProvider, ISupportsID
         };
 
         return Result<PlatformResult, SearchError>.Success(result);
+    }
+
+    protected static string ArtistsNameCombine(List<SimpleArtist> artists)
+    {
+        var artist = "";
+        for (var index = 0; index < artists.Count; index++)
+        {
+            var simple_artist = artists[index];
+            artist += $"{index switch { 0 => "", _ => ", " }}{simple_artist.Name}";
+        }
+
+        return artist;
     }
 }

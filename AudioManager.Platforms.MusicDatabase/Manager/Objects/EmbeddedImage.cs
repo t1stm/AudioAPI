@@ -2,7 +2,7 @@ namespace AudioManagement.Platforms.MusicDatabase.Manager.Objects;
 
 public class EmbeddedImage
 {
-    public bool HasData;
     public byte[]? Data;
+    public bool HasData;
     public string? MimeType;
 }

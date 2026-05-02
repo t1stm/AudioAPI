@@ -2,10 +2,13 @@ namespace AudioAPI.Multiplayer;
 
 public class AddedUserHandler
 {
-    protected readonly Queue<User> Users = new();
     protected readonly SemaphoreSlim Sync = new(1);
+    protected readonly Queue<User> Users = new();
 
-    public void Clear() => Users.Clear();
+    public void Clear()
+    {
+        Users.Clear();
+    }
 
     public async Task Add(User user)
     {

@@ -15,29 +15,35 @@ public class MusicDatabase : Platform, ISupportsSearch, ISupportsRandomResults
     public override string Name => "Music Database";
     public override string Description => "Locally stored music";
     public override int Priority => 99;
-    protected override List<SearchProvider> SearchProviders { get; set; } = [
+
+    protected override List<SearchProvider> SearchProviders { get; set; } =
+    [
         new MusicSearchProvider()
     ];
-    protected override List<ContentGetter> ContentDownloaders { get; set; } = [
+
+    protected override List<ContentGetter> ContentDownloaders { get; set; } =
+    [
         new MusicGetter()
     ];
-
-    public override Task<Result<PlatformResult, SearchError>> TryID(string id, CancellationToken cancellation_token = default)
-    {
-        var provider = (MusicSearchProvider)SearchProviders[0];
-        return provider.TryID(id, cancellation_token);
-    }
-
-    public Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchKeywords(string keywords, CancellationToken cancellation_token = default)
-    {
-        var provider = (MusicSearchProvider)SearchProviders[0];
-        return provider.TrySearchKeywords(keywords, cancellation_token);
-    }
 
     public Task<Result<IEnumerable<PlatformResult>, SearchError>> GetRandomResults(int count)
     {
         var provider = (MusicSearchProvider)SearchProviders[0];
         return provider.GetRandomResults(count);
+    }
+
+    public Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchKeywords(string keywords,
+        CancellationToken cancellation_token = default)
+    {
+        var provider = (MusicSearchProvider)SearchProviders[0];
+        return provider.TrySearchKeywords(keywords, cancellation_token);
+    }
+
+    public override Task<Result<PlatformResult, SearchError>> TryID(string id,
+        CancellationToken cancellation_token = default)
+    {
+        var provider = (MusicSearchProvider)SearchProviders[0];
+        return provider.TryID(id, cancellation_token);
     }
 
     public Task<Result<IEnumerable<PlatformResult>, SearchError>> GetArtistSongs(string artist)

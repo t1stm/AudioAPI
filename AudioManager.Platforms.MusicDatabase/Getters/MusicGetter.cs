@@ -14,8 +14,9 @@ public class MusicGetter : ContentGetter
         if (result is not MusicResult local_result)
             return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(DownloadError.WrongType));
 
-        if (!File.Exists(local_result.Path)) return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(
-            DownloadError.FileReadFailure));
+        if (!File.Exists(local_result.Path))
+            return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(
+                DownloadError.FileReadFailure));
 
         var stream_spreader = new StreamSpreader();
         _ = Task.Run(async () =>

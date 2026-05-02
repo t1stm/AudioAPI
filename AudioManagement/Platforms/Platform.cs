@@ -27,6 +27,20 @@ public abstract class Platform : ISupportsID
     protected abstract List<SearchProvider> SearchProviders { get; set; }
     protected abstract List<ContentGetter> ContentDownloaders { get; set; }
 
+    public virtual async Task<Result<PlatformResult, SearchError>> TryID(string id,
+        CancellationToken cancellation_token = default)
+    {
+        foreach (var search_provider in
+                 SearchProviders.Where(search_provider => search_provider is ISupportsID)
+                     .Cast<ISupportsID>())
+        {
+            var result = await search_provider.TryID(id, cancellation_token);
+            if (result == Status.OK) return result;
+        }
+
+        return Result<PlatformResult, SearchError>.Error(default);
+    }
+
     public virtual void Initialize()
     {
         SortProviders();
@@ -42,19 +56,5 @@ public abstract class Platform : ISupportsID
     protected virtual void SetupSearchProviders()
     {
         SearchProviders.ForEach(s => s.RegisterContentDownloaders(ContentDownloaders));
-    }
-
-    public virtual async Task<Result<PlatformResult, SearchError>> TryID(string id,
-        CancellationToken cancellation_token = default)
-    {
-        foreach (var search_provider in
-                 SearchProviders.Where(search_provider => search_provider is ISupportsID)
-                     .Cast<ISupportsID>())
-        {
-            var result = await search_provider.TryID(id, cancellation_token);
-            if (result == Status.OK) return result;
-        }
-
-        return Result<PlatformResult, SearchError>.Error(default);
     }
 }

@@ -9,7 +9,7 @@ public readonly struct Result<T_OK, T_Error> : IEquatable<Result<T_OK, T_Error>>
     public readonly Status Status;
 
     /// <summary>
-    /// Creates a result object.
+    ///     Creates a result object.
     /// </summary>
     /// <param name="okValue">Value when successfully returned.</param>
     /// <param name="errorValue">Value returned when failed.</param>
@@ -22,7 +22,7 @@ public readonly struct Result<T_OK, T_Error> : IEquatable<Result<T_OK, T_Error>>
     }
 
     /// <summary>
-    /// Gets the OK object when the status is OK.
+    ///     Gets the OK object when the status is OK.
     /// </summary>
     /// <returns></returns>
     /// <exception cref="NullReferenceException">Thrown when the OK object is null. This ensures null safety.</exception>
@@ -35,7 +35,7 @@ public readonly struct Result<T_OK, T_Error> : IEquatable<Result<T_OK, T_Error>>
     }
 
     /// <summary>
-    /// Gets the Error object when the status is Error.
+    ///     Gets the Error object when the status is Error.
     /// </summary>
     /// <returns></returns>
     /// <exception cref="NullReferenceException">Thrown when the Error object is null. This ensures null safety.</exception>
@@ -48,7 +48,7 @@ public readonly struct Result<T_OK, T_Error> : IEquatable<Result<T_OK, T_Error>>
     }
 
     /// <summary>
-    /// Creates a new Result object with the status: Status.OK
+    ///     Creates a new Result object with the status: Status.OK
     /// </summary>
     /// <param name="ok">The object to assign to T_OK</param>
     /// <returns>The created Result object.</returns>
@@ -58,7 +58,7 @@ public readonly struct Result<T_OK, T_Error> : IEquatable<Result<T_OK, T_Error>>
     }
 
     /// <summary>
-    /// Creates a new Result object with the status: Status.Error
+    ///     Creates a new Result object with the status: Status.Error
     /// </summary>
     /// <param name="error">The object to assign to T_Error</param>
     /// <returns>The created Result object.</returns>
@@ -68,7 +68,7 @@ public readonly struct Result<T_OK, T_Error> : IEquatable<Result<T_OK, T_Error>>
     }
 
     /// <summary>
-    /// Compare the current result with a status code.
+    ///     Compare the current result with a status code.
     /// </summary>
     /// <param name="source">The source Result object.</param>
     /// <param name="status">The status code to compare.</param>
@@ -79,7 +79,7 @@ public readonly struct Result<T_OK, T_Error> : IEquatable<Result<T_OK, T_Error>>
     }
 
     /// <summary>
-    /// Compare the current result with a status code.
+    ///     Compare the current result with a status code.
     /// </summary>
     /// <param name="source">The source Result object.</param>
     /// <param name="status">The status code to compare.</param>

@@ -18,7 +18,7 @@ public static class MediaInfo
         {
             FileName = "ffprobe",
             Arguments = $"-v quiet -of json -show_entries format \"{processed_location}\"",
-            RedirectStandardOutput = true,
+            RedirectStandardOutput = true
         });
 
         if (process == null) return music_info;
@@ -38,9 +38,7 @@ public static class MediaInfo
 
         if (format.TryGetProperty("duration", out var duration_string) &&
             double.TryParse(duration_string.GetString(), out var length))
-        {
             music_info.Length = (ulong)(length * 1000);
-        }
 
         if (!format.TryGetProperty("tags", out var tags)) return music_info;
 

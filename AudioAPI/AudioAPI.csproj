@@ -1,20 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
-    <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
-        <Nullable>enable</Nullable>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <RootNamespace>AudioAPI</RootNamespace>
-    </PropertyGroup>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>AudioAPI</RootNamespace>
+  </PropertyGroup>
 
-    <ItemGroup>
-        <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.6" />
-    </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.6"/>
+  </ItemGroup>
 
-    <ItemGroup>
-      <ProjectReference Include="..\AudioManagement\AudioManagement.csproj" />
-      <ProjectReference Include="..\AudioManager.Platforms.YouTube\AudioManager.Platforms.YouTube.csproj" />
-      <ProjectReference Include="..\AudioManager.Platforms.MusicDatabase\AudioManager.Platforms.MusicDatabase.csproj" />
-    </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\AudioManagement\AudioManagement.csproj"/>
+    <ProjectReference Include="..\AudioManager.Platforms.YouTube\AudioManager.Platforms.YouTube.csproj"/>
+    <ProjectReference Include="..\AudioManager.Platforms.MusicDatabase\AudioManager.Platforms.MusicDatabase.csproj"/>
+  </ItemGroup>
 
 </Project>

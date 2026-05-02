@@ -49,10 +49,7 @@ public class StreamSpreaderTests(ITestOutputHelper output)
 
         output.WriteLine("Copied and closed stream.");
 
-        foreach (var (_, semaphore) in tuples)
-        {
-            semaphore.Wait();
-        }
+        foreach (var (_, semaphore) in tuples) semaphore.Wait();
 
         output.WriteLine("Destinations finished copying.");
 

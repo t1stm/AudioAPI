@@ -2,8 +2,8 @@ namespace AudioAPI.Multiplayer;
 
 public class MultiplayerManager(ManagerService ManagerService)
 {
-    protected readonly SemaphoreSlim Sync = new(1);
     protected readonly Dictionary<Guid, Room> Rooms = new();
+    protected readonly SemaphoreSlim Sync = new(1);
     protected long ChangeId;
 
     public async Task<Guid> CreateNewRoom()
@@ -21,7 +21,10 @@ public class MultiplayerManager(ManagerService ManagerService)
         return guid;
     }
 
-    public long GetChangeId() => ChangeId;
+    public long GetChangeId()
+    {
+        return ChangeId;
+    }
 
     public Room? GetRoom(Guid room_id)
     {

@@ -13,5 +13,6 @@ public class Spotify : Platform
     [
         new SpotifySearchProvider()
     ];
+
     protected override List<ContentGetter> ContentDownloaders { get; set; } = [];
 }

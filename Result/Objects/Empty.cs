@@ -1,8 +1,8 @@
 namespace Result.Objects;
 
 /// <summary>
-/// Struct with no entries.
-/// Made to imitate () in Rust. (probably doesn't fully)
+///     Struct with no entries.
+///     Made to imitate () in Rust. (probably doesn't fully)
 /// </summary>
 public struct Empty
 {

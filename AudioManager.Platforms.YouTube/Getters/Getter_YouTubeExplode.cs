@@ -11,7 +11,8 @@ public class Getter_YouTubeExplode : ContentGetter
     public override int Priority => 40;
     protected static YoutubeClient Client => YouTubeSearchProvider_Explode.Client;
 
-    public override async Task<Result<StreamSpreader, DownloadError>> TryGetContentData(PlatformResult result, CancellationToken cancellation_token)
+    public override async Task<Result<StreamSpreader, DownloadError>> TryGetContentData(PlatformResult result,
+        CancellationToken cancellation_token)
     {
         try
         {

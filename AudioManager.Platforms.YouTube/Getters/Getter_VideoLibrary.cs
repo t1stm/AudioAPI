@@ -9,7 +9,8 @@ public class Getter_VideoLibrary : ContentGetter
 {
     public override int Priority => 0;
 
-    public override async Task<Result<StreamSpreader, DownloadError>> TryGetContentData(PlatformResult result, CancellationToken cancellation_token)
+    public override async Task<Result<StreamSpreader, DownloadError>> TryGetContentData(PlatformResult result,
+        CancellationToken cancellation_token)
     {
         try
         {

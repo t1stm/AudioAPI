@@ -5,5 +5,5 @@ public enum StreamStatus
 {
     Open = 1,
     Closed = 1 << 1,
-    Error = 1 << 1 | 1 << 2
+    Error = (1 << 1) | (1 << 2)
 }

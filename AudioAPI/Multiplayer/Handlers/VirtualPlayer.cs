@@ -1,22 +1,20 @@
 using System.Diagnostics;
-using System.Text.Encodings.Web;
-using System.Text.Json;
 using AudioManagement.Platforms;
 
 namespace AudioAPI.Multiplayer;
 
 public class VirtualPlayer(MessageQueue MessageQueue)
 {
-    public List<PlatformResult> Items { get; set; } = [];
+    protected readonly AddedUserHandler Finished = new();
 
     protected readonly AddedUserHandler Loaded = new();
-    protected readonly AddedUserHandler Finished = new();
     protected readonly SemaphoreSlim Sync = new(1);
     protected int CurrentIndex;
-
-    protected long? StartTime;
     protected TimeSpan? PauseTime;
     protected bool Playing = true;
+
+    protected long? StartTime;
+    public List<PlatformResult> Items { get; set; } = [];
 
     public async Task Next()
     {
@@ -233,6 +231,13 @@ public class VirtualPlayer(MessageQueue MessageQueue)
         await MessageQueue.Update();
     }
 
-    private static long TimeSpanToTimestamp(TimeSpan time_span) => TicksToStopwatchTimestamp(time_span.Ticks);
-    private static long TicksToStopwatchTimestamp(long ticks) => ticks * Stopwatch.Frequency / 10000000;
+    private static long TimeSpanToTimestamp(TimeSpan time_span)
+    {
+        return TicksToStopwatchTimestamp(time_span.Ticks);
+    }
+
+    private static long TicksToStopwatchTimestamp(long ticks)
+    {
+        return ticks * Stopwatch.Frequency / 10000000;
+    }
 }

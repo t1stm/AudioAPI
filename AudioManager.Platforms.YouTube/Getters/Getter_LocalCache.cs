@@ -6,17 +6,14 @@ namespace AudioManagement.Platforms.YouTube.Getters;
 
 public class Getter_LocalCache : ContentGetter
 {
-    public override int Priority => 99;
     public string CacheLocation = "./YouTube Cache";
+    public override int Priority => 99;
 
     public override void Initialize()
     {
         var env = Environment.GetEnvironmentVariable("YOUTUBE_CACHE", EnvironmentVariableTarget.Process);
 
-        if (env is null)
-        {
-            Environment.SetEnvironmentVariable("YOUTUBE_CACHE", CacheLocation);
-        }
+        if (env is null) Environment.SetEnvironmentVariable("YOUTUBE_CACHE", CacheLocation);
         CacheLocation = env ?? CacheLocation;
 
         base.Initialize();
@@ -32,8 +29,9 @@ public class Getter_LocalCache : ContentGetter
         Directory.CreateDirectory(CacheLocation);
 
         var path = Path.Combine(CacheLocation, file);
-        if (!File.Exists(path)) return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(
-            DownloadError.FileReadFailure));
+        if (!File.Exists(path))
+            return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(
+                DownloadError.FileReadFailure));
 
         var stream_spreader = new StreamSpreader();
         _ = Task.Run(async () =>

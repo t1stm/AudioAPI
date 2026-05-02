@@ -27,8 +27,9 @@ public class FFmpegEncoder
         };
 
         Process = Process.Start(process_start_info);
-        if (Process == null) return Result<StreamSubscriber, FFmpegError>
-            .Error(FFmpegError.UnableToOpen);
+        if (Process == null)
+            return Result<StreamSubscriber, FFmpegError>
+                .Error(FFmpegError.UnableToOpen);
 
         var stream_subscriber = new StreamSubscriber
         {
@@ -71,7 +72,10 @@ public class FFmpegEncoder
         }
     }
 
-    public StreamSpreader GetStreamSpreader() => InnerStreamSpreader;
+    public StreamSpreader GetStreamSpreader()
+    {
+        return InnerStreamSpreader;
+    }
 
     public void Cleanup()
     {

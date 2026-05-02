@@ -4,11 +4,16 @@ namespace AudioAPI.Multiplayer;
 
 public class UserStore
 {
-    protected readonly Dictionary<string, User> Users = [];
     protected readonly SemaphoreSlim Sync = new(1);
+    protected readonly Dictionary<string, User> Users = [];
 
-    public ICollection<User> GetUsers() => Users.Values;
     public int Count => Users.Count;
+
+    public ICollection<User> GetUsers()
+    {
+        return Users.Values;
+    }
+
     public async Task<User> GetOrAddUser(string id, WebSocket web_socket, Func<User, Task>? onAdd = default)
     {
         await Sync.WaitAsync();

@@ -9,26 +9,24 @@ namespace AudioManagement.Platforms.MusicDatabase.Manager;
 
 public partial class MusicManager
 {
-    public static string Domain => Environment.GetEnvironmentVariable("DOMAIN", EnvironmentVariableTarget.Process) ?? string.Empty;
-    public static string StorageDirectory => Environment.GetEnvironmentVariable("STORAGE", EnvironmentVariableTarget.Process) ?? "./";
-    public static string AlbumCoverLocation => Domain + "/Album_Covers";
-
     protected readonly CoverExtractor CoverExtractor = new();
     protected List<MusicInfo> Songs = [];
+
+    public static string Domain =>
+        Environment.GetEnvironmentVariable("DOMAIN", EnvironmentVariableTarget.Process) ?? string.Empty;
+
+    public static string StorageDirectory =>
+        Environment.GetEnvironmentVariable("STORAGE", EnvironmentVariableTarget.Process) ?? "./";
+
+    public static string AlbumCoverLocation => Domain + "/Album_Covers";
 
     public async Task Initialize()
     {
         var storage = Environment.GetEnvironmentVariable("STORAGE", EnvironmentVariableTarget.Process);
-        if (storage is not null)
-        {
-            Directory.CreateDirectory(storage);
-        }
+        if (storage is not null) Directory.CreateDirectory(storage);
 
         var album_covers = Environment.GetEnvironmentVariable("ALBUM_COVERS", EnvironmentVariableTarget.Process);
-        if (album_covers is not null)
-        {
-            Directory.CreateDirectory(album_covers);
-        }
+        if (album_covers is not null) Directory.CreateDirectory(album_covers);
 
         await Load();
         CoverExtractor.Extract(StorageDirectory);
@@ -184,32 +182,32 @@ public partial class MusicManager
 
     private static bool ScoreSingleTerm(string term_clean, MusicInfo r)
     {
-        var romanized_title_clean = r.RomanizedTitle is null ? null :
-            LevenshteinDistance.RemoveFormatting(ParentesisRegex().Replace(r.RomanizedTitle, string.Empty));
+        var romanized_title_clean = r.RomanizedTitle is null
+            ? null
+            : LevenshteinDistance.RemoveFormatting(ParentesisRegex().Replace(r.RomanizedTitle, string.Empty));
 
-        var original_title_clean = r.OriginalTitle is null ? null :
-            LevenshteinDistance.RemoveFormatting(ParentesisRegex().Replace(r.OriginalTitle, string.Empty));
+        var original_title_clean = r.OriginalTitle is null
+            ? null
+            : LevenshteinDistance.RemoveFormatting(ParentesisRegex().Replace(r.OriginalTitle, string.Empty));
 
-        var romanized_artist_clean = r.RomanizedAuthor is null ? null :
-            LevenshteinDistance.RemoveFormatting(r.RomanizedAuthor);
+        var romanized_artist_clean =
+            r.RomanizedAuthor is null ? null : LevenshteinDistance.RemoveFormatting(r.RomanizedAuthor);
 
-        var original_artist_clean = r.OriginalAuthor is null ? null :
-            LevenshteinDistance.RemoveFormatting(r.OriginalAuthor);
+        var original_artist_clean =
+            r.OriginalAuthor is null ? null : LevenshteinDistance.RemoveFormatting(r.OriginalAuthor);
 
         var eval =
-                    romanized_title_clean != null &&
-                    (LevenshteinDistance.ComputeStrict(romanized_title_clean, term_clean) < 2 ||
-                    LevenshteinDistance.ComputeStrict($"{romanized_title_clean}{romanized_artist_clean}", term_clean) < 3 ||
-                    LevenshteinDistance.ComputeStrict($"{romanized_artist_clean}{romanized_title_clean}", term_clean) < 3 ||
-                    LevenshteinDistance.ComputeStrict($"{romanized_title_clean}{original_artist_clean}", term_clean) < 3)
-
-                    ||
-
-                    original_title_clean != null &&
-                   (LevenshteinDistance.ComputeStrict(original_title_clean, term_clean) < 2 ||
-                    LevenshteinDistance.ComputeStrict($"{original_title_clean}{original_artist_clean}", term_clean) < 3 ||
-                    LevenshteinDistance.ComputeStrict($"{original_artist_clean}{original_title_clean}", term_clean) < 3 ||
-                    LevenshteinDistance.ComputeStrict($"{original_title_clean}{romanized_artist_clean}", term_clean) < 3);
+            (romanized_title_clean != null &&
+             (LevenshteinDistance.ComputeStrict(romanized_title_clean, term_clean) < 2 ||
+              LevenshteinDistance.ComputeStrict($"{romanized_title_clean}{romanized_artist_clean}", term_clean) < 3 ||
+              LevenshteinDistance.ComputeStrict($"{romanized_artist_clean}{romanized_title_clean}", term_clean) < 3 ||
+              LevenshteinDistance.ComputeStrict($"{romanized_title_clean}{original_artist_clean}", term_clean) < 3))
+            ||
+            (original_title_clean != null &&
+             (LevenshteinDistance.ComputeStrict(original_title_clean, term_clean) < 2 ||
+              LevenshteinDistance.ComputeStrict($"{original_title_clean}{original_artist_clean}", term_clean) < 3 ||
+              LevenshteinDistance.ComputeStrict($"{original_artist_clean}{original_title_clean}", term_clean) < 3 ||
+              LevenshteinDistance.ComputeStrict($"{original_title_clean}{romanized_artist_clean}", term_clean) < 3));
         return eval;
     }
 
@@ -219,9 +217,7 @@ public partial class MusicManager
                      // Second pass for regenerated infos.
                      Songs.AsParallel().FirstOrDefault(r => (r.ID ?? "  ")[..^2] == id[..^2]);
 
-        return search != null ?
-            Result<MusicInfo, Empty>.Success(search) :
-            Result<MusicInfo, Empty>.Error(default);
+        return search != null ? Result<MusicInfo, Empty>.Success(search) : Result<MusicInfo, Empty>.Error(default);
     }
 
     [GeneratedRegex(@"\(.*?\)")]

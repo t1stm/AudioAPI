@@ -2,11 +2,17 @@ namespace AudioManagement.Streams;
 
 public class StreamSpreader : Stream
 {
+    protected readonly List<(byte[], int, int)> Data = [];
+    protected readonly Queue<StreamSubscriber> RemoveQueue = new();
     protected readonly SemaphoreSlim Semaphore = new(1, 1);
     protected readonly List<StreamSubscriber> Subscribers = [];
-    protected readonly Queue<StreamSubscriber> RemoveQueue = new();
-    protected readonly List<(byte[], int, int)> Data = [];
     public bool Closed { get; protected set; }
+
+    public override bool CanRead => false;
+    public override bool CanSeek => false;
+    public override bool CanWrite => true;
+    public override long Length => Position;
+    public override long Position { get; set; }
 
     public void Subscribe(StreamSubscriber subscriber)
     {
@@ -83,7 +89,8 @@ public class StreamSpreader : Stream
         }
     }
 
-    public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellation_token = default)
+    public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer,
+        CancellationToken cancellation_token = default)
     {
         try
         {
@@ -101,17 +108,16 @@ public class StreamSpreader : Stream
 
     protected async Task SyncSubscribers()
     {
-        while (RemoveQueue.TryDequeue(out var subscriber))
-        {
-            Subscribers.Remove(subscriber);
-        }
+        while (RemoveQueue.TryDequeue(out var subscriber)) Subscribers.Remove(subscriber);
 
         foreach (var subscriber in Subscribers)
         {
             var starting_index = subscriber.CachedDataIndex;
             var data_length = Data.Count;
 
-            for (subscriber.CachedDataIndex = starting_index; subscriber.CachedDataIndex < data_length; subscriber.CachedDataIndex++)
+            for (subscriber.CachedDataIndex = starting_index;
+                 subscriber.CachedDataIndex < data_length;
+                 subscriber.CachedDataIndex++)
             {
                 var current_slice = Data[subscriber.CachedDataIndex];
                 var (bytes, offset, length) = current_slice;
@@ -148,12 +154,6 @@ public class StreamSpreader : Stream
     {
         Data.Clear();
     }
-
-    public override bool CanRead => false;
-    public override bool CanSeek => false;
-    public override bool CanWrite => true;
-    public override long Length => Position;
-    public override long Position { get; set; }
 
     #region Not Supported
 

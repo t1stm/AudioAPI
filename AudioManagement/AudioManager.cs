@@ -5,24 +5,35 @@ using AudioManagement.Platforms.Optional.Supports;
 using AudioManagement.Streams;
 using Result;
 using Result.Objects;
+using Timer = System.Timers.Timer;
 
 namespace AudioManagement;
 
 public class AudioManager
 {
-    protected readonly Dictionary<string, Platform> SearchIDMap = [];
     protected readonly Dictionary<string, StreamSpreader> CachedResults = [];
-    protected readonly Dictionary<string, DateTime> ExpireTimestamps = [];
 
-    protected readonly SemaphoreSlim Semaphore = new(1, 1);
-    protected readonly TimeSpan ExpireTimeSpan = TimeSpan.FromMinutes(45);
-
-    protected readonly System.Timers.Timer ExpireTimer = new()
+    protected readonly Timer ExpireTimer = new()
     {
         Interval = 60 * 1000
     };
 
+    protected readonly TimeSpan ExpireTimeSpan = TimeSpan.FromMinutes(45);
+    protected readonly Dictionary<string, DateTime> ExpireTimestamps = [];
+    protected readonly Dictionary<string, Platform> SearchIDMap = [];
+
+    protected readonly SemaphoreSlim Semaphore = new(1, 1);
+
     public List<Platform> Platforms { get; } = [];
+
+    protected Dictionary<string, Platform>.AlternateLookup<ReadOnlySpan<char>> SearchIDLookup =>
+        SearchIDMap.GetAlternateLookup<ReadOnlySpan<char>>();
+
+    protected Dictionary<string, StreamSpreader>.AlternateLookup<ReadOnlySpan<char>> CachedResultLookup =>
+        CachedResults.GetAlternateLookup<ReadOnlySpan<char>>();
+
+    protected Dictionary<string, DateTime>.AlternateLookup<ReadOnlySpan<char>> ExpireTimestampLookup =>
+        ExpireTimestamps.GetAlternateLookup<ReadOnlySpan<char>>();
 
     public void Initialize()
     {
@@ -33,10 +44,6 @@ public class AudioManager
         ExpireTimer.Start();
     }
 
-    protected Dictionary<string,Platform>.AlternateLookup<ReadOnlySpan<char>> SearchIDLookup => SearchIDMap.GetAlternateLookup<ReadOnlySpan<char>>();
-    protected Dictionary<string,StreamSpreader>.AlternateLookup<ReadOnlySpan<char>> CachedResultLookup => CachedResults.GetAlternateLookup<ReadOnlySpan<char>>();
-    protected Dictionary<string,DateTime>.AlternateLookup<ReadOnlySpan<char>> ExpireTimestampLookup => ExpireTimestamps.GetAlternateLookup<ReadOnlySpan<char>>();
-    
     public void RegisterPlatform<T>() where T : Platform, new()
     {
         var platform = new T();
@@ -55,10 +62,7 @@ public class AudioManager
 
     protected void MapPlatformIdentifiers(Platform platform)
     {
-        foreach (var identifier in platform.SearchIDIdentifiersLookup.Set)
-        {
-            SearchIDLookup.TryAdd(identifier, platform);
-        }
+        foreach (var identifier in platform.SearchIDIdentifiersLookup.Set) SearchIDLookup.TryAdd(identifier, platform);
     }
 
     public Task<Result<PlatformResult, SearchError>> SearchID(string id, CancellationToken cancellation_token = default)
@@ -87,10 +91,7 @@ public class AudioManager
             var search = await task;
             if (search == Status.Error) continue;
 
-            foreach (var result in search.GetOK())
-            {
-                yield return result;
-            }
+            foreach (var result in search.GetOK()) yield return result;
         }
     }
 
@@ -105,10 +106,7 @@ public class AudioManager
         {
             var search = await task;
             if (search == Status.Error) continue;
-            foreach (var result in search.GetOK())
-            {
-                yield return result;
-            }
+            foreach (var result in search.GetOK()) yield return result;
         }
     }
 
@@ -118,12 +116,10 @@ public class AudioManager
         try
         {
             var cachedResults = CachedResultLookup;
-            
+
             await Semaphore.WaitAsync(cancellation_token);
             if (cachedResults.TryGetValue(result.ID, out var stream_spreader))
-            {
                 return Result<StreamSpreader, DownloadError>.Success(stream_spreader);
-            }
 
             var downloader = await result.TryGetContentData(cancellation_token);
             if (downloader == Status.Error)
@@ -133,10 +129,7 @@ public class AudioManager
             CachedResults.Add(result.ID, stream_spreader);
             ExpireTimestamps.Add(result.ID, DateTime.UtcNow.Add(ExpireTimeSpan));
 
-            if (result is ISupportsCaching caching)
-            {
-                await caching.RunCacheProcess(stream_spreader);
-            }
+            if (result is ISupportsCaching caching) await caching.RunCacheProcess(stream_spreader);
 
             return Result<StreamSpreader, DownloadError>.Success(stream_spreader);
         }
@@ -200,9 +193,7 @@ public class AudioManager
         if (playlist_platforms
             .Cast<ISupportsPlaylist>()
             .Any(platform => platform.IsPlaylistUrl(query)))
-        {
             return QueryType.Playlist;
-        }
 
         Span<Range> platformSplit = stackalloc Range[2];
         foreach (var platform in playlist_platforms)

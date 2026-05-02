@@ -10,33 +10,29 @@ public class Artist : ControllerBase
 {
     [HttpGet]
     [Route("/Audio/Artist/Local")]
-    public async IAsyncEnumerable<PlatformResult> GetArtistLocal(string term, [FromServices] ManagerService manager_service)
+    public async IAsyncEnumerable<PlatformResult> GetArtistLocal(string term,
+        [FromServices] ManagerService managerService)
     {
-        var platform = manager_service.Manager.GetPlatform<MusicDatabase>();
+        var platform = managerService.Manager.GetPlatform<MusicDatabase>();
         var songs = await platform.GetArtistSongs(term);
 
         if (songs == Status.Error)
             yield break;
 
-        foreach (var result in songs.GetOK())
-        {
-            yield return result;
-        }
+        foreach (var result in songs.GetOK()) yield return result;
     }
 
     [HttpGet]
     [Route("/Audio/Artist/YouTube")]
-    public async IAsyncEnumerable<PlatformResult> GetArtistYouTube(string term, [FromServices] ManagerService manager_service)
+    public async IAsyncEnumerable<PlatformResult> GetArtistYouTube(string term,
+        [FromServices] ManagerService managerService)
     {
-        var platform = manager_service.Manager.GetPlatform<YouTube>();
+        var platform = managerService.Manager.GetPlatform<YouTube>();
         var results = await platform.TrySearchKeywords(term);
         if (results == Status.Error)
             yield break;
 
-        foreach (var result in results.GetOK())
-        {
-            yield return result;
-        }
+        foreach (var result in results.GetOK()) yield return result;
     }
 
     [HttpGet]

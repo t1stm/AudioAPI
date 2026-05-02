@@ -65,9 +65,8 @@ public static class Flac
         if (header.Length > source.Count) return false;
 
         for (var i = 0; i < header.Length; i++)
-        {
-            if (header[i] != source[i]) return false;
-        }
+            if (header[i] != source[i])
+                return false;
 
         return true;
     }

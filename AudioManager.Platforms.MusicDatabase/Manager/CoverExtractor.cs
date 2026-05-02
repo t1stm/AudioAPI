@@ -10,12 +10,13 @@ public class CoverExtractor
 
     public void Extract(string location)
     {
-        ExportLocation = Environment.GetEnvironmentVariable("ALBUM_COVERS", EnvironmentVariableTarget.Process) ?? ExportLocation;
+        ExportLocation = Environment.GetEnvironmentVariable("ALBUM_COVERS", EnvironmentVariableTarget.Process) ??
+                         ExportLocation;
 
         if (!Directory.Exists(ExportLocation)) Directory.CreateDirectory(ExportLocation);
         foreach (var genre_directory in Directory.GetDirectories(location))
-            foreach (var artist_directory in Directory.GetDirectories(genre_directory))
-                ParseFolder(artist_directory);
+        foreach (var artist_directory in Directory.GetDirectories(genre_directory))
+            ParseFolder(artist_directory);
     }
 
     public void ParseFolder(string folder)

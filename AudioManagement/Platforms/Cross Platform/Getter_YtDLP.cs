@@ -8,16 +8,14 @@ namespace AudioManagement.Platforms.Cross_Platform;
 public sealed class Getter_YtDLP : ContentGetter
 {
     public override int Priority => 20;
+
     public override Task<Result<StreamSpreader, DownloadError>> TryGetContentData(
         PlatformResult youtube_result, CancellationToken cancellation_token)
     {
         var process_info = GetProcessStartInfo(youtube_result);
         var process = Process.Start(process_info);
 
-        if (process is null)
-        {
-            return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(DownloadError.Generic));
-        }
+        if (process is null) return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(DownloadError.Generic));
 
         var stream_spreader = new StreamSpreader();
         _ = Task.Run(async () =>

@@ -7,21 +7,21 @@ namespace AudioManagement.Platforms.YouTube.Cache;
 
 public class YouTubeCacher
 {
-    protected readonly SemaphoreSlim Sync = new(1, 1);
+    private const string CacheFolder = "./cache";
+    private const string FileName = "YouTube.json";
+    private const string CachePath = $"{CacheFolder}/{FileName}";
     protected readonly Dictionary<string, YouTubeResult> Cache = new();
+    private readonly byte[] comma_bytes = ","u8.ToArray();
+    private readonly byte[] end_bytes = "]"u8.ToArray();
+
     protected readonly JsonSerializerOptions JsonSerializerOptions = new()
     {
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         WriteIndented = true
     };
 
-    private const string CacheFolder = "./cache";
-    private const string FileName = "YouTube.json";
-    private const string CachePath = $"{CacheFolder}/{FileName}";
-
     private readonly byte[] start_bytes = "["u8.ToArray();
-    private readonly byte[] end_bytes = "]"u8.ToArray();
-    private readonly byte[] comma_bytes = ","u8.ToArray();
+    protected readonly SemaphoreSlim Sync = new(1, 1);
 
     protected async Task SaveAsync(IEnumerable<YouTubeResult>? delta = null)
     {
@@ -46,6 +46,7 @@ public class YouTubeCacher
             await JsonSerializer.SerializeAsync(file, Cache.Values, JsonSerializerOptions);
             await file.FlushAsync();
         }
+
         Sync.Release();
     }
 
@@ -53,7 +54,7 @@ public class YouTubeCacher
     {
         var alternativeLookup = Cache.GetAlternateLookup<ReadOnlySpan<char>>();
         var duplicate = false;
-        
+
         await Sync.WaitAsync();
         try
         {
@@ -68,32 +69,24 @@ public class YouTubeCacher
                 return;
 
             foreach (var result in deserialized)
-            {
                 if (!alternativeLookup.TryAdd(result.GetPureID(), result))
                     duplicate = true;
-            }
         }
         finally
         {
             Sync.Release();
         }
 
-        if (duplicate)
-        {
-            await SaveAsync();
-        }
+        if (duplicate) await SaveAsync();
     }
 
     public async Task AddToCacheAsync(IEnumerable<YouTubeResult> results)
     {
         var cache = Cache.GetAlternateLookup<ReadOnlySpan<char>>();
         await Sync.WaitAsync();
-        
+
         var youtube_results = results.Where(r => !cache.ContainsKey(r.GetPureID())).ToArray();
-        foreach (var result in youtube_results)
-        {
-            cache.TryAdd(result.GetPureID(), result);
-        }
+        foreach (var result in youtube_results) cache.TryAdd(result.GetPureID(), result);
         Sync.Release();
 
         if (youtube_results.Length > 0)
@@ -107,7 +100,8 @@ public class YouTubeCacher
         var found = alternateLookup.TryGetValue(id, out var result);
         Sync.Release();
 
-        return found && result is not null ? Result<YouTubeResult, SearchError>.Success(result) :
-            Result<YouTubeResult, SearchError>.Error(default);
+        return found && result is not null
+            ? Result<YouTubeResult, SearchError>.Success(result)
+            : Result<YouTubeResult, SearchError>.Error(default);
     }
 }

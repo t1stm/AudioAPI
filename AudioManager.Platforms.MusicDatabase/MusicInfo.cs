@@ -6,9 +6,19 @@ namespace AudioManagement.Platforms.MusicDatabase;
 
 public class MusicInfo
 {
-    [JsonInclude]
-    [JsonPropertyName("id")]
-    public string? ID { get; set; }
+    [JsonInclude] [JsonPropertyName("romanizedGuestArtists")]
+    public string[]? OriginalGuestArtists;
+
+    [JsonInclude] [JsonPropertyName("romanizedGuestArtists")]
+    public string[]? OriginalOtherTitles;
+
+    [JsonInclude] [JsonPropertyName("romanizedGuestArtists")]
+    public string[]? RomanizedGuestArtists;
+
+    [JsonInclude] [JsonPropertyName("romanizedGuestArtists")]
+    public string[]? RomanizedOtherTitles;
+
+    [JsonInclude] [JsonPropertyName("id")] public string? ID { get; set; }
 
     [JsonInclude]
     [JsonPropertyName("titleRomanized")]
@@ -18,11 +28,9 @@ public class MusicInfo
     [JsonPropertyName("authorRomanized")]
     public string? RomanizedAuthor { get; set; }
 
-    [JsonInclude]
-    public string? Album { get; set; }
+    [JsonInclude] public string? Album { get; set; }
 
-    [JsonInclude]
-    public TimeSpan Duration { get; set; }
+    [JsonInclude] public TimeSpan Duration { get; set; }
 
     [JsonInclude]
     [JsonPropertyName("coverUrl")]
@@ -42,23 +50,11 @@ public class MusicInfo
 
     [JsonInclude]
     [JsonPropertyName("length")]
-    public double Length { get => Duration.TotalMilliseconds; set => Duration = TimeSpan.FromMilliseconds(value); }
-
-    [JsonInclude]
-    [JsonPropertyName("romanizedGuestArtists")]
-    public string[]? RomanizedGuestArtists;
-
-    [JsonInclude]
-    [JsonPropertyName("romanizedGuestArtists")]
-    public string[]? OriginalGuestArtists;
-
-    [JsonInclude]
-    [JsonPropertyName("romanizedGuestArtists")]
-    public string[]? RomanizedOtherTitles;
-
-    [JsonInclude]
-    [JsonPropertyName("romanizedGuestArtists")]
-    public string[]? OriginalOtherTitles;
+    public double Length
+    {
+        get => Duration.TotalMilliseconds;
+        set => Duration = TimeSpan.FromMilliseconds(value);
+    }
 
     public MusicResult ToMusicResult(IReadOnlyList<ContentGetter> getters)
     {
@@ -80,7 +76,10 @@ public class MusicInfo
     public string UpdateRandomId()
     {
         var artist_part = (RomanizedAuthor?.Length > 2 ? RomanizedAuthor?[..2] : RomanizedAuthor)?.ToLower();
-        var title_part = (RomanizedTitle?.Length > 6 ? RomanizedTitle?[..6] : RomanizedTitle + new string('0', 6 - RomanizedTitle?.Length ?? 0))?.ToLower()
+        var title_part =
+            (RomanizedTitle?.Length > 6
+                ? RomanizedTitle?[..6]
+                : RomanizedTitle + new string('0', 6 - RomanizedTitle?.Length ?? 0))?.ToLower()
             .Replace(' ', '-');
         return $"{artist_part}{title_part}-{Generation.RandomString(2)}";
     }

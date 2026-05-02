@@ -23,43 +23,39 @@ public class Content(ILogger<Content> logger) : ControllerBase
         logger.LogInformation("Searching for {Query}", query);
 
         var query_type = manager_service.Manager.FindQueryType(query);
-        
+
         switch (query_type)
         {
             case QueryType.ID:
-                {
-                    var idSpan = query.AsSpan();
-                    Span<Range> ranges = stackalloc Range[2];
-        
-                    var count = idSpan.Split(ranges, "://");
-                    var pureId = count > 1 ? idSpan[ranges[1]]: idSpan;
+            {
+                var idSpan = query.AsSpan();
+                Span<Range> ranges = stackalloc Range[2];
 
-                    var found = await manager_service.Manager.SearchID(pureId.ToString()); // TODO: search methods should use ReadOnlySpan<char> wherever possible
-                    if (found == Status.Error)
-                        yield break;
-                    
-                    yield return found.GetOK();
-                    break;
-                }
+                var count = idSpan.Split(ranges, "://");
+                var pureId = count > 1 ? idSpan[ranges[1]] : idSpan;
+
+                var found = await manager_service.Manager
+                    .SearchID(pureId
+                        .ToString()); // TODO: search methods should use ReadOnlySpan<char> wherever possible
+                if (found == Status.Error)
+                    yield break;
+
+                yield return found.GetOK();
+                break;
+            }
 
             case QueryType.Playlist:
-                {
-                    await foreach (var result in manager_service.Manager.SearchPlaylist(query))
-                    {
-                        yield return result;
-                    }
-                    break;
-                }
+            {
+                await foreach (var result in manager_service.Manager.SearchPlaylist(query)) yield return result;
+                break;
+            }
 
             case QueryType.Keywords:
             default:
-                {
-                    await foreach (var result in manager_service.Manager.SearchKeywords(query))
-                    {
-                        yield return result;
-                    }
-                    break;
-                }
+            {
+                await foreach (var result in manager_service.Manager.SearchKeywords(query)) yield return result;
+                break;
+            }
         }
     }
 
@@ -103,9 +99,9 @@ public class Content(ILogger<Content> logger) : ControllerBase
 
         var idSpan = id.AsSpan();
         Span<Range> ranges = stackalloc Range[2];
-        
+
         var count = idSpan.Split(ranges, "://");
-        var pureId = count > 1 ? idSpan[ranges[1]]: idSpan;
+        var pureId = count > 1 ? idSpan[ranges[1]] : idSpan;
 
         var rentArray = ArrayPool<char>.Shared.Rent(pureId.Length);
         var rentBuffer = rentArray.AsSpan();
@@ -113,7 +109,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
 
         urlEncoder.Encode(pureId, rentBuffer, out _, out var written);
         ReadOnlySpan<char> fileId = rentBuffer[..written];
-        
+
         Response.Headers.Append("Content-Disposition", (string)$"attachment; filename={fileId}");
         Response.Headers.Append("Cache-Control", "public, max-age=31536000, immutable");
         Response.Headers.ETag = (string)$"raw-{fileId}";
@@ -126,8 +122,9 @@ public class Content(ILogger<Content> logger) : ControllerBase
             WriteCall = (bytes, offset, length) =>
             {
                 cache.Enqueue((bytes, offset, length));
-                return Task.FromResult(HttpContext.RequestAborted.IsCancellationRequested ?
-                    StreamStatus.Closed : StreamStatus.Open);
+                return Task.FromResult(HttpContext.RequestAborted.IsCancellationRequested
+                    ? StreamStatus.Closed
+                    : StreamStatus.Open);
             },
             SyncCall = SyncCall,
             CloseCall = () =>
@@ -167,7 +164,8 @@ public class Content(ILogger<Content> logger) : ControllerBase
     [HttpGet]
     [Route("/Audio/Download/{codec:required}/{bitrate:int:required}")]
     [Produces("audio/ogg", "audio/mp3", "audio/aac", "audio/flac", "audio/mka", "audio/webm", "text/plain")]
-    public async Task<IActionResult> Download(string codec, int bitrate, string id, [FromServices] ManagerService manager_service)
+    public async Task<IActionResult> Download(string codec, int bitrate, string id,
+        [FromServices] ManagerService manager_service)
     {
         if (bitrate < 8) return BadRequest("Bitrate must be greater than 8");
         if (string.IsNullOrWhiteSpace(id)) return NotFound("No ID provided");
@@ -201,7 +199,7 @@ public class Content(ILogger<Content> logger) : ControllerBase
         };
 
         var extension = ffmpegOutputFormat[3..];
-        
+
         if (!manager_service.TryGetEncoder(codec, bitrate, id, out var encoder))
         {
             var search = await manager_service.Manager.SearchID(id);
@@ -230,12 +228,12 @@ public class Content(ILogger<Content> logger) : ControllerBase
         var waiting_semaphore = new SemaphoreSlim(0);
         var sync_semaphore = new SemaphoreSlim(1);
         var encoder_stream_spreader = encoder.GetStreamSpreader();
-        
+
         var idSpan = id.AsSpan();
         Span<Range> ranges = stackalloc Range[2];
-        
+
         var count = idSpan.Split(ranges, "://");
-        var pureId = count > 1 ? idSpan[ranges[1]]: idSpan;
+        var pureId = count > 1 ? idSpan[ranges[1]] : idSpan;
 
         var rentArray = ArrayPool<char>.Shared.Rent(pureId.Length);
         var rentBuffer = rentArray.AsSpan();
@@ -243,19 +241,20 @@ public class Content(ILogger<Content> logger) : ControllerBase
 
         urlEncoder.Encode(pureId, rentBuffer, out _, out var written);
         ReadOnlySpan<char> fileId = rentBuffer[..written];
-        
+
         Response.Headers.Append("Content-Disposition", (string)$"attachment; filename={fileId}.{extension}");
         Response.Headers.Append("Cache-Control", "public, max-age=31536000, immutable");
         Response.Headers.ETag = (string)$"{type}-{bitrate}-{fileId}";
-        
+
         ArrayPool<char>.Shared.Return(rentArray);
         var stream_subscriber = new StreamSubscriber
         {
             WriteCall = (bytes, offset, length) =>
             {
                 cache.Enqueue((bytes, offset, length));
-                return Task.FromResult(HttpContext.RequestAborted.IsCancellationRequested ?
-                    StreamStatus.Closed : StreamStatus.Open);
+                return Task.FromResult(HttpContext.RequestAborted.IsCancellationRequested
+                    ? StreamStatus.Closed
+                    : StreamStatus.Open);
             },
             SyncCall = SyncCall,
             CloseCall = CloseCall

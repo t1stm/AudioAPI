@@ -15,11 +15,6 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider,
     public override string PlatformIdentifier => "yt://";
     public override int Priority => 40;
 
-    private static string RemoveTracking(string thumbnailUrl)
-    {
-        return thumbnailUrl.SliceTo("?");
-    }
-
     public async Task<Result<PlatformResult, SearchError>> TryID(string id, CancellationToken token)
     {
         try
@@ -44,31 +39,8 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider,
         }
     }
 
-    public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchKeywords(string keywords,
-        CancellationToken token)
-    {
-        try
-        {
-            var youtube_client = new YoutubeClient();
-            var results = await youtube_client.Search.GetVideosAsync(keywords, token).CollectAsync(15);
-            return Result<IEnumerable<PlatformResult>, SearchError>.Success(
-                results.Select(video => new YouTubeResult
-                {
-                    ID = PlatformIdentifier + video.Id,
-                    Name = video.Title,
-                    Artist = video.Author.ChannelTitle,
-                    Duration = video.Duration.GetValueOrDefault(TimeSpan.Zero),
-                    ThumbnailUrl = RemoveTracking(video.Thumbnails.OrderByDescending(t => t.Resolution.Area).First().Url),
-                    Downloaders = ContentDownloaders
-                }));
-        }
-        catch
-        {
-            return Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.GenericError);
-        }
-    }
-
-    public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchPlaylist(string playlist_url, CancellationToken cancellation_token)
+    public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchPlaylist(string playlist_url,
+        CancellationToken cancellation_token)
     {
         try
         {
@@ -103,5 +75,35 @@ public sealed class YouTubeSearchProvider_Explode : SearchProvider,
     public bool IsPlaylistUrl(ReadOnlySpan<char> query)
     {
         throw new NotSupportedException();
+    }
+
+    public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchKeywords(string keywords,
+        CancellationToken token)
+    {
+        try
+        {
+            var youtube_client = new YoutubeClient();
+            var results = await youtube_client.Search.GetVideosAsync(keywords, token).CollectAsync(15);
+            return Result<IEnumerable<PlatformResult>, SearchError>.Success(
+                results.Select(video => new YouTubeResult
+                {
+                    ID = PlatformIdentifier + video.Id,
+                    Name = video.Title,
+                    Artist = video.Author.ChannelTitle,
+                    Duration = video.Duration.GetValueOrDefault(TimeSpan.Zero),
+                    ThumbnailUrl =
+                        RemoveTracking(video.Thumbnails.OrderByDescending(t => t.Resolution.Area).First().Url),
+                    Downloaders = ContentDownloaders
+                }));
+        }
+        catch
+        {
+            return Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.GenericError);
+        }
+    }
+
+    private static string RemoveTracking(string thumbnailUrl)
+    {
+        return thumbnailUrl.SliceTo("?");
     }
 }

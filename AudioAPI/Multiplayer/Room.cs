@@ -1,30 +1,18 @@
 using System.Net.WebSockets;
 using System.Text.Json.Serialization;
 using Result.Objects;
+using Timer = System.Timers.Timer;
 
 namespace AudioAPI.Multiplayer;
 
 public class Room
 {
-    [JsonInclude, JsonPropertyName("roomID")]
-    public Guid RoomID { get; init; }
-    [JsonInclude, JsonPropertyName("name")]
-    public string RoomName { get; set; }
-    [JsonInclude, JsonPropertyName("description")]
-    public string RoomDescription { get; set; } = "";
-    [JsonIgnore]
-    public Action? OnInfoModified { get; init; }
-
-    [JsonIgnore]
-    protected readonly UserStore Store;
-    [JsonIgnore]
-    protected readonly MessageQueue Queue;
-    [JsonIgnore]
-    protected readonly VirtualPlayer Player;
-    [JsonIgnore]
-    protected readonly System.Timers.Timer Timer;
-
     protected readonly ManagerService ManagerService;
+    [JsonIgnore] protected readonly VirtualPlayer Player;
+    [JsonIgnore] protected readonly MessageQueue Queue;
+
+    [JsonIgnore] protected readonly UserStore Store;
+    [JsonIgnore] protected readonly Timer Timer;
 
     public Room(Guid guid, ManagerService manager_service)
     {
@@ -36,7 +24,7 @@ public class Room
         Queue = new MessageQueue(Store);
         Player = new VirtualPlayer(Queue);
 
-        Timer = new System.Timers.Timer
+        Timer = new Timer
         {
             Enabled = true,
             Interval = 133
@@ -44,6 +32,20 @@ public class Room
 
         Timer.Elapsed += Timer_Tick;
     }
+
+    [JsonInclude]
+    [JsonPropertyName("roomID")]
+    public Guid RoomID { get; init; }
+
+    [JsonInclude]
+    [JsonPropertyName("name")]
+    public string RoomName { get; set; }
+
+    [JsonInclude]
+    [JsonPropertyName("description")]
+    public string RoomDescription { get; set; } = "";
+
+    [JsonIgnore] public Action? OnInfoModified { get; init; }
 
     protected async void Timer_Tick(object? sender, EventArgs e)
     {

@@ -1,4 +1,3 @@
-using Audio;
 using AudioManagement.Platforms.Errors;
 using AudioManagement.Platforms.Optional.Supports;
 using AudioManagement.Utils;
@@ -17,7 +16,8 @@ public class YouTubeSearchProvider_Madeyoga : SearchProvider,
     public override int Priority => 20;
     protected DefaultSearchClient Client { get; } = new(new YoutubeSearchBackend());
 
-    public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchKeywords(string keywords, CancellationToken cancellation_token = default)
+    public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchKeywords(string keywords,
+        CancellationToken cancellation_token = default)
     {
         var search = await Client.SearchAsync(HttpClientManager.GetHttpClient(), keywords, 15);
         if (search == null) return Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.NotFound);
@@ -32,7 +32,7 @@ public class YouTubeSearchProvider_Madeyoga : SearchProvider,
                     Name = v.Title,
                     Artist = v.Author,
                     Duration = TimeSpan.ParseExact(v.Duration, [@"h\:m\:s", @"m\:s", "s"], null),
-                    ThumbnailUrl = v.ThumbnailUrl.SliceTo("?")// remove tracking data
+                    ThumbnailUrl = v.ThumbnailUrl.SliceTo("?") // remove tracking data
                 }));
     }
 }
