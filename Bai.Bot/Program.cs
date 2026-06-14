@@ -1,7 +1,7 @@
-﻿using AudioManagement;
-using AudioManagement.Platforms.MusicDatabase;
-using AudioManagement.Platforms.Spotify;
-using AudioManagement.Platforms.YouTube;
+﻿using Gaida.Core;
+using Gaida.Platforms.MusicDatabase;
+using Gaida.Platforms.Spotify;
+using Gaida.Platforms.YouTube;
 using Serilog;
 
 var loggerConfiguration = new LoggerConfiguration()

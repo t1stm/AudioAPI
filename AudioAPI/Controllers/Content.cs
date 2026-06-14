@@ -1,10 +1,10 @@
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Text.Encodings.Web;
-using AudioManagement;
-using AudioManagement.Platforms;
-using AudioManagement.Platforms.MusicDatabase;
-using AudioManagement.Streams;
+using Gaida.Core;
+using Gaida.Core.Platforms;
+using Gaida.Platforms.MusicDatabase;
+using Gaida.Core.Streams;
 using Microsoft.AspNetCore.Mvc;
 using Result.Objects;
 

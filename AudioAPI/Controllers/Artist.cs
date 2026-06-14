@@ -1,6 +1,6 @@
-using AudioManagement.Platforms;
-using AudioManagement.Platforms.MusicDatabase;
-using AudioManagement.Platforms.YouTube;
+using Gaida.Core.Platforms;
+using Gaida.Platforms.MusicDatabase;
+using Gaida.Platforms.YouTube;
 using Microsoft.AspNetCore.Mvc;
 using Result.Objects;
 

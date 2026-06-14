@@ -1,6 +1,18 @@
 using AudioAPI;
 using AudioAPI.Multiplayer;
 using Serilog;
+using Serilog.Templates;
+using Serilog.Templates.Themes;
+
+var tmpLogger = new LoggerConfiguration()
+    .Enrich.FromLogContext()
+    .WriteTo.Console(new ExpressionTemplate(
+        "[{@t:HH:mm:ss} {@l:u3}" +
+        "{#if SourceContext is not null} {Substring(SourceContext, LastIndexOf(SourceContext, '.') + 1)}{#end}] {@m}\n{@x}",
+        theme: TemplateTheme.Code));
+
+Log.Logger = tmpLogger
+    .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +23,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSerilog();
 
+builder.Services.AddSingleton(Log.Logger);
 builder.Services.AddSingleton<ManagerService>();
 builder.Services.AddSingleton<MultiplayerManager>();
 

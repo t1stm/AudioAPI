@@ -1,0 +1,87 @@
+using System.Text.Json.Serialization;
+using Gaida.Platforms.MusicDatabase.Manager;
+using Gaida.Core.Utils;
+using Gaida.Core.Platforms;
+
+namespace Gaida.Platforms.MusicDatabase;
+
+public class MusicInfo
+{
+    [JsonInclude] [JsonPropertyName("romanizedGuestArtists")]
+    public string[]? OriginalGuestArtists;
+
+    [JsonInclude] [JsonPropertyName("romanizedGuestArtists")]
+    public string[]? OriginalOtherTitles;
+
+    [JsonInclude] [JsonPropertyName("romanizedGuestArtists")]
+    public string[]? RomanizedGuestArtists;
+
+    [JsonInclude] [JsonPropertyName("romanizedGuestArtists")]
+    public string[]? RomanizedOtherTitles;
+
+    [JsonInclude] [JsonPropertyName("id")] public string? ID { get; set; }
+
+    [JsonInclude]
+    [JsonPropertyName("titleRomanized")]
+    public string? RomanizedTitle { get; set; }
+
+    [JsonInclude]
+    [JsonPropertyName("authorRomanized")]
+    public string? RomanizedAuthor { get; set; }
+
+    [JsonInclude] public string? Album { get; set; }
+
+    [JsonInclude] public TimeSpan Duration { get; set; }
+
+    [JsonInclude]
+    [JsonPropertyName("coverUrl")]
+    public string? CoverUrl { get; set; }
+
+    [JsonInclude]
+    [JsonPropertyName("location")]
+    public string? RelativeLocation { get; set; }
+
+    [JsonInclude]
+    [JsonPropertyName("authorOriginal")]
+    public string? OriginalAuthor { get; set; }
+
+    [JsonInclude]
+    [JsonPropertyName("titleOriginal")]
+    public string? OriginalTitle { get; set; }
+
+    [JsonInclude]
+    [JsonPropertyName("length")]
+    public double Length
+    {
+        get => Duration.TotalMilliseconds;
+        set => Duration = TimeSpan.FromMilliseconds(value);
+    }
+
+    public MusicResult ToMusicResult(IReadOnlyList<ContentGetter> getters)
+    {
+        return new MusicResult
+        {
+            ID = "audio://" + (ID ??= UpdateRandomId()),
+            Downloaders = getters,
+            Name = RomanizedTitle,
+            Artist = RomanizedAuthor,
+            Album = Album,
+            Duration = Duration,
+            Path = MusicManager.StorageDirectory + "/" + RelativeLocation,
+            ThumbnailUrl = CoverUrl,
+            OriginalTitle = OriginalTitle,
+            OriginalArtist = OriginalAuthor
+        };
+    }
+
+    public string UpdateRandomId()
+    {
+        var artistPart = (RomanizedAuthor?.Length > 2 ? RomanizedAuthor?[..2] : RomanizedAuthor)?.ToLower();
+        var titlePart =
+            (RomanizedTitle?.Length > 6
+                ? RomanizedTitle?[..6]
+                : RomanizedTitle + new string('0', 6 - RomanizedTitle?.Length ?? 0))?.ToLower()
+            .Replace(' ', '-');
+        return $"{artistPart}{titlePart}-{Generation.RandomString(2)}";
+    }
+}

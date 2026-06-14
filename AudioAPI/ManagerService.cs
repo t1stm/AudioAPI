@@ -1,9 +1,9 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Timers;
-using AudioManagement;
-using AudioManagement.FFmpeg;
-using AudioManagement.Platforms.MusicDatabase;
-using AudioManagement.Platforms.YouTube;
+using Gaida.Core;
+using Gaida.Core.FFmpeg;
+using Gaida.Platforms.MusicDatabase;
+using Gaida.Platforms.YouTube;
 using Timer = System.Timers.Timer;
 using ILogger = Serilog.ILogger;
 
