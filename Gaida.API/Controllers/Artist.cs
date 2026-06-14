@@ -4,7 +4,7 @@ using Gaida.Platforms.YouTube;
 using Microsoft.AspNetCore.Mvc;
 using Result.Objects;
 
-namespace AudioAPI.Controllers;
+namespace Gaida.API.Controllers;
 
 public class Artist : ControllerBase
 {

@@ -1,4 +1,4 @@
-namespace AudioAPI.Multiplayer.Handlers;
+namespace Gaida.API.Multiplayer.Handlers;
 
 public class AddedUserHandler
 {

@@ -1,10 +1,10 @@
 using System.Net.WebSockets;
 using System.Text.Json.Serialization;
-using AudioAPI.Multiplayer.Handlers;
+using Gaida.API.Multiplayer.Handlers;
 using Result.Objects;
 using Timer = System.Timers.Timer;
 
-namespace AudioAPI.Multiplayer;
+namespace Gaida.API.Multiplayer;
 
 public class Room
 {

@@ -1,4 +1,4 @@
-namespace AudioAPI.Controllers;
+namespace Gaida.API.Controllers;
 
 internal enum HandleEvent
 {

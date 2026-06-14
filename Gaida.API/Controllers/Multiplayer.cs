@@ -1,12 +1,12 @@
 using System.Net.WebSockets;
 using System.Text.Json;
-using AudioAPI.Controllers.Helpers;
-using AudioAPI.Multiplayer;
+using Gaida.API.Controllers.Helpers;
+using Gaida.API.Multiplayer;
 using Microsoft.AspNetCore.Mvc;
 using Result;
 using Result.Objects;
 
-namespace AudioAPI.Controllers;
+namespace Gaida.API.Controllers;
 
 public class Multiplayer(ILogger<Multiplayer> logger, MultiplayerManager manager) : ControllerBase
 {

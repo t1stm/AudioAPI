@@ -1,7 +1,7 @@
 using System.Net.WebSockets;
 using System.Text;
 
-namespace AudioAPI.Multiplayer;
+namespace Gaida.API.Multiplayer;
 
 public class User
 {

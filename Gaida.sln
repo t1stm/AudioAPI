@@ -1,6 +1,6 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AudioAPI", "AudioAPI\AudioAPI.csproj", "{E5C36C12-EAA1-4261-A2E9-E32C8FA2485C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Gaida.API", "Gaida.API\Gaida.API.csproj", "{E5C36C12-EAA1-4261-A2E9-E32C8FA2485C}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Gaida.Core", "Gaida\Gaida.Core\Gaida.Core.csproj", "{793CEFC8-4DC3-4D92-8335-C15B490E9EB6}"
 EndProject
@@ -18,7 +18,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Gaida.Platforms.Spotify", "
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Platforms", "Platforms", "{6993D4A0-9F35-4F74-9DF3-32C2996E0027}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bai.Bot", "Bai.Bot\Bai.Bot.csproj", "{A56791E8-B00E-4A04-B60A-F4BFC88DBB6A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Gaida.Bot", "Gaida.Bot\Gaida.Bot.csproj", "{A56791E8-B00E-4A04-B60A-F4BFC88DBB6A}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Gaida", "Gaida", "{EC04031C-5365-4FE7-9D03-A7FB86F775D8}"
 EndProject

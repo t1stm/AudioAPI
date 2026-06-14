@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace AudioAPI.Multiplayer.Handlers;
+namespace Gaida.API.Multiplayer.Handlers;
 
 public class MessageQueue(UserStore store)
 {

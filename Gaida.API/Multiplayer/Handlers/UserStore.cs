@@ -1,6 +1,6 @@
 using System.Net.WebSockets;
 
-namespace AudioAPI.Multiplayer.Handlers;
+namespace Gaida.API.Multiplayer.Handlers;
 
 public class UserStore
 {

@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using Gaida.Core.Platforms;
 
-namespace AudioAPI.Multiplayer.Handlers;
+namespace Gaida.API.Multiplayer.Handlers;
 
 public class VirtualPlayer(MessageQueue messageQueue)
 {

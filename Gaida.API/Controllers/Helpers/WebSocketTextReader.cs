@@ -3,7 +3,7 @@ using System.Net.WebSockets;
 using System.Text;
 using Result;
 
-namespace AudioAPI.Controllers.Helpers;
+namespace Gaida.API.Controllers.Helpers;
 
 public class WebSocketTextReader(ILogger<Multiplayer> logger)
 {

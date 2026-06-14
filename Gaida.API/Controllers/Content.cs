@@ -8,7 +8,7 @@ using Gaida.Core.Streams;
 using Microsoft.AspNetCore.Mvc;
 using Result.Objects;
 
-namespace AudioAPI.Controllers;
+namespace Gaida.API.Controllers;
 
 [ApiController]
 [Route("[controller]")]

@@ -1,5 +1,5 @@
-using AudioAPI;
-using AudioAPI.Multiplayer;
+using Gaida.API;
+using Gaida.API.Multiplayer;
 using Serilog;
 using Serilog.Templates;
 using Serilog.Templates.Themes;

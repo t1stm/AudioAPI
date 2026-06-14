@@ -7,7 +7,7 @@ using Gaida.Platforms.YouTube;
 using Timer = System.Timers.Timer;
 using ILogger = Serilog.ILogger;
 
-namespace AudioAPI;
+namespace Gaida.API;
 
 public class ManagerService
 {

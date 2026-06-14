@@ -1,4 +1,4 @@
-namespace AudioAPI.Multiplayer;
+namespace Gaida.API.Multiplayer;
 
 public class MultiplayerManager(ManagerService managerService)
 {
