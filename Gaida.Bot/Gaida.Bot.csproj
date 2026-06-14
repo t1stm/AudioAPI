@@ -12,8 +12,7 @@
     <ProjectReference Include="..\Gaida\Platforms\Gaida.Platforms.Spotify\Gaida.Platforms.Spotify.csproj" />
     <ProjectReference Include="..\Gaida\Platforms\Gaida.Platforms.YouTube\Gaida.Platforms.YouTube.csproj" />
     <ProjectReference Include="..\Gaida\Gaida.Core\Gaida.Core.csproj" />
-    <ProjectReference Include="../../DSharpPlus/DSharpPlus/DSharpPlus.csproj" />
-    <ProjectReference Include="../../DSharpPlus/DSharpPlus.Voice/DSharpPlus.Voice.csproj" />
+    <ProjectReference Include="../DSharpPlus/DSharpPlus/DSharpPlus.csproj" />
   </ItemGroup>
 
   <ItemGroup>
