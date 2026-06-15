@@ -13,13 +13,18 @@ public class FFmpegEncoder
     public Result<StreamSubscriber, FFmpegError> Convert(int bitrate, string codec = "-c:a libopus",
         string outputFormat = "-f mka")
     {
+        return Convert($"{codec} -b:a {bitrate}k -vn -d copy {outputFormat}");
+    }
+
+    public Result<StreamSubscriber, FFmpegError> Convert(string ffmpegArguments)
+    {
         var queue = new ConcurrentQueue<(byte[], int, int)>();
         var updateSemaphore = new SemaphoreSlim(1, 1);
 
         var processStartInfo = new ProcessStartInfo
         {
             FileName = "ffmpeg",
-            Arguments = $"-v quiet -nostats -i - {codec} -b:a {bitrate}k -vn -d copy {outputFormat} pipe:1",
+            Arguments = "-v quiet -nostats -i - " + ffmpegArguments + " pipe:1",
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = false,
