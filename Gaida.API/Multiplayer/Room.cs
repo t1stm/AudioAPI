@@ -1,8 +1,6 @@
 using System.Net.WebSockets;
 using System.Text.Json.Serialization;
 using Gaida.API.Multiplayer.Handlers;
-using Result.Objects;
-using Timer = System.Timers.Timer;
 
 namespace Gaida.API.Multiplayer;
 
@@ -13,7 +11,6 @@ public class Room
     [JsonIgnore] protected readonly MessageQueue Queue;
 
     [JsonIgnore] protected readonly UserStore Store;
-    [JsonIgnore] protected readonly Timer Timer;
 
     public Room(Guid guid, ManagerService managerService)
     {
@@ -24,14 +21,6 @@ public class Room
         Store = new UserStore();
         Queue = new MessageQueue(Store);
         Player = new VirtualPlayer(Queue);
-
-        Timer = new Timer
-        {
-            Enabled = true,
-            Interval = 133
-        };
-
-        Timer.Elapsed += Timer_Tick;
     }
 
     [JsonInclude]
@@ -48,11 +37,6 @@ public class Room
 
     [JsonIgnore] public Action? OnInfoModified { get; init; }
 
-    protected async void Timer_Tick(object? sender, EventArgs e)
-    {
-        await Queue.Update();
-    }
-
     public async Task<User> GetOrAddUser(string id, WebSocket webSocket, string? initialUsername)
     {
         return await Store.GetOrAddUser(id, webSocket, user =>
@@ -66,7 +50,7 @@ public class Room
     {
         var user = await Store.GetUser(id);
         await Store.RemoveUser(id);
-        await Queue.Add($"chat System %% User \'{user.ChatUsername}\' left from the session.");
+        await Queue.Add($"chat System %% User '{user.ChatUsername}' left from the session.");
         await Player.HandleLoaded();
         await Player.HandleFinished();
     }
@@ -89,9 +73,9 @@ public class Room
         {
             case "add":
                 var result = await ManagerService.Manager.SearchID(value);
-                if (result == Status.Error) return;
+                if (result is null) return;
 
-                await Player.Enqueue(result.GetOk());
+                await Player.Enqueue(result);
                 break;
 
             case "setnext":
@@ -156,7 +140,7 @@ public class Room
         switch (name)
         {
             case "end":
-                await Player.SetFinished(user);
+                await Player.SetFinished();
                 return;
 
             case "next":
@@ -180,7 +164,7 @@ public class Room
                 return;
 
             case "loaded":
-                await Player.SetLoaded(user);
+                await Player.SetLoaded();
                 break;
 
             case "sync":

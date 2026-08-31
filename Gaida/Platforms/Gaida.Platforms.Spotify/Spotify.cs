@@ -1,26 +1,19 @@
-using Serilog;
 using Gaida.Core.Platforms;
+using Serilog;
 
 namespace Gaida.Platforms.Spotify;
 
-public class Spotify(ILogger logger) : Platform(logger), IPlatformFactory<Spotify>
+public class Spotify : Platform
 {
-    public static Spotify CreateNew(ILogger logger)
+    public Spotify(ILogger logger) : base(logger)
     {
-        return new Spotify(logger);
+        SearchProviders = [new SpotifySearchProvider(logger)];
+        ContentDownloaders = [];
     }
 
     protected override HashSet<string> SearchIDIdentifiers { get; } = ["spotify://"];
-    protected override HashSet<string> PlatformDomains { get; } = ["spotify.com"];
     protected override HashSet<string> SearchPlaylistIdentifiers { get; } = ["spotify-playlist://"];
-    public override string Name => "Spotify";
-    public override string Description => "The Spotify music streaming platform.";
-    public override int Priority => 20;
 
-    protected override List<SearchProvider> SearchProviders { get; set; } =
-    [
-        new SpotifySearchProvider(logger)
-    ];
-
-    protected override List<ContentGetter> ContentDownloaders { get; set; } = [];
+    protected override List<SearchProvider> SearchProviders { get; set; }
+    protected override List<ContentGetter> ContentDownloaders { get; set; }
 }

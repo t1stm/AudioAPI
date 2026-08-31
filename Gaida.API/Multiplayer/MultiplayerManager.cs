@@ -4,7 +4,9 @@ public class MultiplayerManager(ManagerService managerService)
 {
     protected readonly Dictionary<Guid, Room> Rooms = new();
     protected readonly SemaphoreSlim Sync = new(1);
-    protected long ChangeId;
+
+    /// <summary>Raised when the room list or any room's info changes.</summary>
+    public event Func<Task>? RoomsChanged;
 
     public async Task<Guid> CreateNewRoom()
     {
@@ -13,17 +15,12 @@ public class MultiplayerManager(ManagerService managerService)
 
         Rooms.Add(guid, new Room(guid, managerService)
         {
-            OnInfoModified = () => ChangeId++
+            OnInfoModified = () => RoomsChanged?.Invoke()
         });
-        ChangeId++;
-
         Sync.Release();
-        return guid;
-    }
 
-    public long GetChangeId()
-    {
-        return ChangeId;
+        RoomsChanged?.Invoke();
+        return guid;
     }
 
     public Room? GetRoom(Guid roomID)

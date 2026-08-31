@@ -1,12 +1,8 @@
-using Gaida.Core.Platforms.Errors;
-using Result;
-
 namespace Gaida.Core.Platforms.Optional.Supports;
 
 public interface ISupportsPlaylist
 {
-    public Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchPlaylist(string playlist,
+    /// <returns>Playlist entries as they arrive. An empty sequence means nothing was found.</returns>
+    public IAsyncEnumerable<PlatformResult> SearchPlaylist(string playlist,
         CancellationToken cancellationToken = default);
-
-    public bool IsPlaylistUrl(ReadOnlySpan<char> query);
 }

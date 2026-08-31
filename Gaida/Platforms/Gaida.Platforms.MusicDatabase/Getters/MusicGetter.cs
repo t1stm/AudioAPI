@@ -1,8 +1,6 @@
-using Gaida.Core.Platforms.Errors;
-using Gaida.Core.Streams;
-using Result;
-using Serilog;
 using Gaida.Core.Platforms;
+using Gaida.Core.Streams;
+using Serilog;
 
 namespace Gaida.Platforms.MusicDatabase.Getters;
 
@@ -10,21 +8,20 @@ public class MusicGetter(ILogger logger) : ContentGetter(logger)
 {
     public override int Priority => 99;
 
-    public override Task<Result<StreamSpreader, DownloadError>> TryGetContentData(
-        PlatformResult result, CancellationToken cancellationToken)
+    public override Task<StreamSpreader?> GetContentDataAsync(PlatformResult result,
+        CancellationToken cancellationToken)
     {
         if (result is not MusicResult localResult)
         {
             Logger.Error("MusicGetter: Wrong result type. Expected MusicResult, got {Type}", result.GetType().Name);
-            return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(DownloadError.WrongType));
+            return Task.FromResult<StreamSpreader?>(null);
         }
 
         Logger.Debug("MusicGetter: Attempting to get content data for: {Path}", localResult.Path);
         if (!File.Exists(localResult.Path))
         {
             Logger.Error("MusicGetter: File not found at path: {Path}", localResult.Path);
-            return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(
-                DownloadError.FileReadFailure));
+            return Task.FromResult<StreamSpreader?>(null);
         }
 
         var streamSpreader = new StreamSpreader();
@@ -39,7 +36,7 @@ public class MusicGetter(ILogger logger) : ContentGetter(logger)
             }
             catch (Exception e)
             {
-                Logger.Error("MusicGetter: Error while streaming file {Path}: {@Exception}", localResult.Path, e);
+                Logger.Error(e, "MusicGetter: Error while streaming file {Path}", localResult.Path);
             }
             finally
             {
@@ -47,6 +44,6 @@ public class MusicGetter(ILogger logger) : ContentGetter(logger)
             }
         }, cancellationToken);
 
-        return Task.FromResult(Result<StreamSpreader, DownloadError>.Success(streamSpreader));
+        return Task.FromResult<StreamSpreader?>(streamSpreader);
     }
 }

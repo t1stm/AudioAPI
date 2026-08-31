@@ -1,4 +1,3 @@
-using Gaida.Platforms.MusicDatabase.Manager.Objects;
 using TagLib;
 using File = TagLib.File;
 
@@ -6,32 +5,13 @@ namespace Gaida.Platforms.MusicDatabase.Manager;
 
 public static class Id3V2
 {
-    public static EmbeddedImage GetImageFromTag(string location)
+    /// <returns>The embedded cover, or <c>null</c> when the tag has none.</returns>
+    public static byte[]? GetImageFromTag(string location)
     {
         var file = File.Create(location);
         var tag = file.GetTag(TagTypes.Id3v2);
-        if (tag == null)
-            return new EmbeddedImage
-            {
-                HasData = false
-            };
-        var pictures = tag.Pictures;
 
-        if (pictures.Length < 1)
-            return new EmbeddedImage
-            {
-                HasData = false
-            };
-
-        var picture = pictures[0];
-        var data = picture.Data.Data;
-        var mime = picture.MimeType;
-
-        return new EmbeddedImage
-        {
-            HasData = true,
-            Data = data,
-            MimeType = mime
-        };
+        var pictures = tag?.Pictures;
+        return pictures is null || pictures.Length < 1 ? null : pictures[0].Data.Data;
     }
 }

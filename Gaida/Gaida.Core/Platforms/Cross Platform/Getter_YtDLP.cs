@@ -1,7 +1,5 @@
 using System.Diagnostics;
-using Gaida.Core.Platforms.Errors;
 using Gaida.Core.Streams;
-using Result;
 using Serilog;
 
 namespace Gaida.Core.Platforms.Cross_Platform;
@@ -10,13 +8,15 @@ public sealed class GetterYtDlp(ILogger logger) : ContentGetter(logger)
 {
     public override int Priority => 20;
 
-    public override Task<Result<StreamSpreader, DownloadError>> TryGetContentData(
-        PlatformResult youtubeResult, CancellationToken cancellationToken)
+    public override Task<StreamSpreader?> GetContentDataAsync(PlatformResult result,
+        CancellationToken cancellationToken)
     {
-        var processInfo = GetProcessStartInfo(youtubeResult);
-        var process = Process.Start(processInfo);
-
-        if (process is null) return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(DownloadError.Generic));
+        var process = Process.Start(GetProcessStartInfo(result));
+        if (process is null)
+        {
+            Logger.Error("Failed to start yt-dlp for URL: {URL}", result.GetDownloadUrl());
+            return Task.FromResult<StreamSpreader?>(null);
+        }
 
         var streamSpreader = new StreamSpreader();
         _ = Task.Run(async () =>
@@ -25,7 +25,7 @@ public sealed class GetterYtDlp(ILogger logger) : ContentGetter(logger)
             await streamSpreader.CloseAsync();
         }, cancellationToken);
 
-        return Task.FromResult(Result<StreamSpreader, DownloadError>.Success(streamSpreader));
+        return Task.FromResult<StreamSpreader?>(streamSpreader);
     }
 
     private static ProcessStartInfo GetProcessStartInfo(PlatformResult result)

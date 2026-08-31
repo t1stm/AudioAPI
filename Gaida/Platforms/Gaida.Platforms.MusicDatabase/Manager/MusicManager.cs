@@ -1,18 +1,16 @@
-using System.Text;
+using System.Collections.Concurrent;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Gaida.Core.Utils;
-using Newtonsoft.Json;
-using Result;
-using Result.Objects;
 using Serilog;
 
 namespace Gaida.Platforms.MusicDatabase.Manager;
 
 public partial class MusicManager(ILogger logger)
 {
-    public ILogger Logger { get; } = logger;
     protected readonly CoverExtractor CoverExtractor = new();
     protected List<MusicInfo> Songs = [];
+    public ILogger Logger { get; } = logger;
 
     public static string Domain =>
         Environment.GetEnvironmentVariable("DOMAIN", EnvironmentVariableTarget.Process) ?? string.Empty;
@@ -48,20 +46,14 @@ public partial class MusicManager(ILogger logger)
     protected async Task Load()
     {
         Logger.Debug("Loading music from {StorageDirectory}", StorageDirectory);
-        var songs = new List<MusicInfo>();
-        var genres = Directory.EnumerateDirectories(StorageDirectory, "*", SearchOption.TopDirectoryOnly).ToList();
+        var folders = Directory.EnumerateDirectories(StorageDirectory, "*", SearchOption.AllDirectories).ToList();
+        Logger.Debug("Found {Count} folders in storage", folders.Count);
 
-        Logger.Debug("Found {Count} genres in storage", genres.Count);
-        foreach (var genre in genres)
-        {
-            var artists = Directory.EnumerateDirectories(genre, "*", SearchOption.TopDirectoryOnly).ToList();
-            Logger.Debug("Found {Count} artists in genre {Genre}", artists.Count, genre);
-            foreach (var artist in artists)
-            {
-                var process = await ParseArtistFolder(artist);
-                songs.AddRange(process);
-            }
-        }
+        var parsed = new ConcurrentBag<List<MusicInfo>>();
+        await Parallel.ForEachAsync(folders, async (folder, _) => parsed.Add(await ParseArtistFolder(folder)));
+
+        // ponytail: folder order is no longer stable; nothing downstream depends on it (search scores, random shuffles).
+        var songs = parsed.SelectMany(f => f).ToList();
 
         songs.ForEach(s => s.CoverUrl = s.CoverUrl?.Replace("$[DOMAIN]", AlbumCoverLocation));
 
@@ -71,80 +63,58 @@ public partial class MusicManager(ILogger logger)
         }
     }
 
-    private async Task<IEnumerable<MusicInfo>> ParseArtistFolder(string artist)
+    private async Task<List<MusicInfo>> ParseArtistFolder(string artist)
     {
         Logger.Information("Loading artist: '{Artist}'", artist);
-        var artistName = artist.Split(Path.PathSeparator)[^1];
         var jsonFile = Path.Combine(artist, "Info.json");
 
-        var songs = Directory.GetFiles($"{artist}", "*", SearchOption.TopDirectoryOnly)
+        var songs = Directory.GetFiles(artist, "*", SearchOption.TopDirectoryOnly)
             .Where(song => IsAudioBasedOnFileExtension(song)).ToList();
 
-        var serializer = new JsonSerializer
-        {
-            Formatting = Formatting.Indented,
-            StringEscapeHandling = StringEscapeHandling.EscapeHtml
-        };
+        // Folders that only hold subfolders get no Info.json.
+        if (songs.Count == 0 && !File.Exists(jsonFile)) return [];
 
         await using var fileStream = File.Open(jsonFile, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
 
-        if (File.Exists(jsonFile))
-        {
-            using var sr = new StreamReader(fileStream, Encoding.UTF8, true, 4096, true);
-            var json = await sr.ReadToEndAsync();
-
+        var existing = new List<MusicInfo>();
+        if (fileStream.Length > 0)
             try
             {
-                var items = JsonConvert.DeserializeObject<List<MusicInfo>>(json) ??
-                            Enumerable.Empty<MusicInfo>().ToList();
-                if (items.Count == songs.Count) return items;
-
-                var update = UpdateData(items, songs);
-                fileStream.SetLength(0);
-                fileStream.Flush();
-                fileStream.Seek(0, SeekOrigin.Begin);
-
-                var blocking = update.ToBlockingEnumerable();
-
-                await using var writer = new StreamWriter(fileStream, Encoding.UTF8);
-                serializer.Serialize(writer, blocking);
-
-                return blocking;
+                existing = await JsonSerializer.DeserializeAsync<List<MusicInfo>>(fileStream,
+                    MusicInfo.SerializerOptions) ?? [];
             }
-            catch (Exception e)
+            catch (JsonException e)
             {
-                Log.Fatal("Error thrown for '{Artist}': '{@Exception}'", artist, e);
+                Logger.Fatal(e, "Malformed Info.json for '{Artist}', rebuilding it", artist);
             }
-        }
 
-        {
-            var list = songs.Where(song => IsAudioBasedOnFileExtension(song))
-                .Select(ParseFile);
+        // Stale entries (e.g. .wvc WavPack correction files indexed by an older scanner) are never playable.
+        var stale = existing.RemoveAll(m => m.RelativeLocation is null ||
+                                            !IsAudioBasedOnFileExtension(m.RelativeLocation));
+        if (stale > 0) Logger.Information("Dropped {Count} non-audio entries for '{Artist}'", stale, artist);
 
-            var awaited = await Task.WhenAll(list);
-            await using var writer = new StreamWriter(fileStream, Encoding.UTF8);
-
-            serializer.Serialize(writer, awaited);
-            fileStream.Close();
-
-            return awaited;
-        }
-    }
-
-    private static async IAsyncEnumerable<MusicInfo> UpdateData(List<MusicInfo> existing, List<string> files)
-    {
-        foreach (var info in existing) yield return info;
-
-        var newFiles = files.Where(location =>
-            IsAudioBasedOnFileExtension(location) &&
-            existing.All(m =>
-            {
-                var relativeLocation = string.Join('/', location.Split('/')[^3..]);
-                return m.RelativeLocation != relativeLocation;
-            }));
+        var newFiles = NewFiles(existing, songs).ToList();
+        if (stale == 0 && newFiles.Count == 0) return existing;
 
         foreach (var file in newFiles)
-            yield return await ParseFile(file);
+            existing.Add(await ParseFile(file));
+
+        fileStream.SetLength(0);
+        fileStream.Position = 0;
+        await JsonSerializer.SerializeAsync(fileStream, existing, MusicInfo.SerializerOptions);
+
+        return existing;
+    }
+
+    private static IEnumerable<string> NewFiles(List<MusicInfo> existing, List<string> files)
+    {
+        return files.Where(location =>
+            existing.All(m => m.RelativeLocation != RelativeLocation(location)));
+    }
+
+    private static string RelativeLocation(string location)
+    {
+        return Path.GetRelativePath(StorageDirectory, location);
     }
 
     private static async Task<MusicInfo> ParseFile(string location)
@@ -163,7 +133,7 @@ public partial class MusicManager(ILogger logger)
         entry.OriginalAuthor ??= author.Trim();
         entry.RomanizedTitle ??= Romanize.FromCyrillic(title).Trim();
         entry.RomanizedAuthor ??= romanizedAuthor.Trim();
-        entry.RelativeLocation ??= string.Join('/', split[^3..]);
+        entry.RelativeLocation ??= RelativeLocation(location);
         entry.ID = entry.UpdateRandomId();
 
         return entry;
@@ -177,7 +147,8 @@ public partial class MusicManager(ILogger logger)
                fileName.EndsWith(".wma") || fileName.EndsWith(".wv");
     }
 
-    public Result<IEnumerable<MusicInfo>, Empty> SearchByTerm(string term)
+    /// <returns>Matching songs, empty when the term is unusable or nothing matches.</returns>
+    public IEnumerable<MusicInfo> SearchByTerm(string term)
     {
         Logger.Debug("MusicManager: Searching by term: {Term}", term);
         var termClean = LevenshteinDistance.RemoveFormatting(
@@ -186,19 +157,20 @@ public partial class MusicManager(ILogger logger)
         if (string.IsNullOrEmpty(termClean))
         {
             Logger.Information("MusicManager: Cleaned search term is empty for: {Term}", term);
-            return Result<IEnumerable<MusicInfo>, Empty>.Error(new Empty());
+            return [];
         }
 
         var found = Songs.Where(r => ScoreSingleTerm(termClean, r)).ToList();
         Logger.Debug("MusicManager: Found {Count} matches for term: {Term}", found.Count, term);
-        return Result<IEnumerable<MusicInfo>, Empty>.Success(found);
+        return found;
     }
 
-    public Result<IEnumerable<MusicInfo>, Empty> GetRandomSongs(int count)
+    public IEnumerable<MusicInfo> GetRandomSongs(int count)
     {
         Logger.Debug("MusicManager: Getting {Count} random songs", count);
-        var songs = Songs.OrderBy(_ => Guid.NewGuid()).Take(count).ToList();
-        return Result<IEnumerable<MusicInfo>, Empty>.Success(songs);
+        var songs = Songs.ToArray();
+        Random.Shared.Shuffle(songs);
+        return songs.Take(count);
     }
 
     private static bool ScoreSingleTerm(string termClean, MusicInfo r)
@@ -232,21 +204,24 @@ public partial class MusicManager(ILogger logger)
         return eval;
     }
 
-    public Result<MusicInfo, Empty> SearchById(string id)
+    /// <returns>The song, or <c>null</c> when the ID isn't known.</returns>
+    public MusicInfo? SearchById(string id)
     {
         Logger.Debug("MusicManager: Searching by ID: {Id}", id);
-        var search = Songs.AsParallel().FirstOrDefault(r => r.ID == id) ??
-                     // Second pass for regenerated infos.
-                     Songs.AsParallel().FirstOrDefault(r => (r.ID ?? "  ")[..^2] == id[..^2]);
+        var search = Songs.AsParallel().FirstOrDefault(r => r.ID == id);
 
-        if (search == null)
+        // Second pass for regenerated infos, whose last two characters are re-rolled.
+        if (search is null && id.Length > 2)
+            search = Songs.AsParallel().FirstOrDefault(r => r.ID?.Length > 2 && r.ID[..^2] == id[..^2]);
+
+        if (search is null)
         {
             Logger.Information("MusicManager: ID not found: {Id}", id);
-            return Result<MusicInfo, Empty>.Error(default);
+            return null;
         }
 
         Logger.Debug("MusicManager: Found song for ID {Id}: {Title}", id, search.OriginalTitle);
-        return Result<MusicInfo, Empty>.Success(search);
+        return search;
     }
 
     [GeneratedRegex(@"\(.*?\)")]
@@ -265,20 +240,21 @@ public partial class MusicManager(ILogger logger)
                (formattedSpan.IndexOf(artistSpan) != -1 || romanizedSpan.IndexOf(artistSpan) != -1);
     }
 
-    public Result<IEnumerable<MusicInfo>, Empty> GetArtistSongs(string artist)
+    /// <returns>The artist's songs, empty when the name is unusable or nothing matches.</returns>
+    public IEnumerable<MusicInfo> GetArtistSongs(string artist)
     {
         Logger.Debug("MusicManager: Getting songs for artist: {Artist}", artist);
         var artistRemovedFormatting = LevenshteinDistance.RemoveFormatting(artist);
         if (string.IsNullOrEmpty(artistRemovedFormatting))
         {
             Logger.Information("MusicManager: Cleaned artist name is empty for: {Artist}", artist);
-            return Result<IEnumerable<MusicInfo>, Empty>.Error(default);
+            return [];
         }
 
         var artistSongs = Songs.AsParallel()
             .Where(song => IsArtistPartOfSong(artistRemovedFormatting, song)).ToList();
 
         Logger.Debug("MusicManager: Found {Count} songs for artist: {Artist}", artistSongs.Count, artist);
-        return Result<IEnumerable<MusicInfo>, Empty>.Success(artistSongs);
+        return artistSongs;
     }
 }

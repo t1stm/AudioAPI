@@ -1,66 +1,56 @@
-using Gaida.Core.Platforms.Errors;
 using Gaida.Core.Platforms.Optional.Supports;
-using Result;
-using Result.Objects;
 using Serilog;
 
 namespace Gaida.Core.Platforms;
 
 public abstract class Platform : ISupportsID
 {
-    protected ILogger Logger { get; }
     protected Platform(ILogger logger)
     {
         Logger = logger.ForContext(GetType());
     }
-    
+
+    protected ILogger Logger { get; }
+
     protected abstract HashSet<string> SearchIDIdentifiers { get; }
-    protected abstract HashSet<string> PlatformDomains { get; }
     protected abstract HashSet<string> SearchPlaylistIdentifiers { get; }
 
     public virtual HashSet<string>.AlternateLookup<ReadOnlySpan<char>> SearchIDIdentifiersLookup =>
         SearchIDIdentifiers.GetAlternateLookup<ReadOnlySpan<char>>();
 
-    public virtual HashSet<string>.AlternateLookup<ReadOnlySpan<char>> PlatformDomainsLookup =>
-        PlatformDomains.GetAlternateLookup<ReadOnlySpan<char>>();
-
     public virtual HashSet<string>.AlternateLookup<ReadOnlySpan<char>> SearchPlaylistIdentifiersLookup =>
         SearchPlaylistIdentifiers.GetAlternateLookup<ReadOnlySpan<char>>();
 
-    public abstract string Name { get; }
-    public abstract string Description { get; }
-    public abstract int Priority { get; }
+    /// <summary>Whether this platform recognises the query as one of its playlist URLs.</summary>
+    public virtual bool IsPlaylistUrl(ReadOnlySpan<char> query)
+    {
+        return false;
+    }
 
     protected abstract List<SearchProvider> SearchProviders { get; set; }
     protected abstract List<ContentGetter> ContentDownloaders { get; set; }
 
-    public virtual async Task<Result<PlatformResult, SearchError>> TryID(string id,
-        CancellationToken cancellationToken = default)
+    public virtual async Task<PlatformResult?> GetByIdAsync(string id, CancellationToken cancellationToken = default)
     {
-        foreach (var searchProvider in
-                 SearchProviders.OfType<ISupportsID>())
-        {
-            var result = await searchProvider.TryID(id, cancellationToken);
-            if (result == Status.Ok) return result;
-        }
+        foreach (var searchProvider in SearchProviders.OfType<ISupportsID>())
+            try
+            {
+                var result = await searchProvider.GetByIdAsync(id, cancellationToken);
+                if (result is not null) return result;
+            }
+            catch (Exception e)
+            {
+                Logger.Error(e, "Provider {Provider} failed for ID {ID}", searchProvider.GetType().Name, id);
+            }
 
-        return Result<PlatformResult, SearchError>.Error(default);
+        return null;
     }
 
     public virtual void Initialize()
     {
-        SortProviders();
-        SetupSearchProviders();
-    }
-
-    protected virtual void SortProviders()
-    {
         SearchProviders = SearchProviders.OrderByDescending(x => x.Priority).ToList();
         ContentDownloaders = ContentDownloaders.OrderByDescending(x => x.Priority).ToList();
-    }
 
-    protected virtual void SetupSearchProviders()
-    {
         SearchProviders.ForEach(s => s.RegisterContentDownloaders(ContentDownloaders));
     }
 }

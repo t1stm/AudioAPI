@@ -1,18 +1,16 @@
-﻿using System.Timers;
+﻿using System.Runtime.CompilerServices;
+using System.Timers;
 using Gaida.Core.Platforms;
-using Gaida.Core.Platforms.Errors;
 using Gaida.Core.Platforms.Optional.Supports;
 using Gaida.Core.Streams;
-using Result;
-using Result.Objects;
+using Gaida.Core.Utils;
 using Serilog;
 using Timer = System.Timers.Timer;
 
 namespace Gaida.Core;
 
-public class AudioManager(ILogger logger)
+public class AudioManager
 {
-    public ILogger Logger { get; } = logger.ForContext<AudioManager>();
     protected readonly Dictionary<string, StreamSpreader> CachedResults = [];
 
     protected readonly Timer ExpireTimer = new()
@@ -26,6 +24,16 @@ public class AudioManager(ILogger logger)
 
     protected readonly SemaphoreSlim Semaphore = new(1, 1);
 
+    public AudioManager(ILogger logger)
+    {
+        Logger = logger.ForContext<AudioManager>();
+
+        ExpireTimer.Elapsed += HandleStreamSpreaders;
+        ExpireTimer.Start();
+    }
+
+    public ILogger Logger { get; }
+
     public List<Platform> Platforms { get; } = [];
 
     protected Dictionary<string, Platform>.AlternateLookup<ReadOnlySpan<char>> SearchIDLookup =>
@@ -37,99 +45,73 @@ public class AudioManager(ILogger logger)
     protected Dictionary<string, DateTime>.AlternateLookup<ReadOnlySpan<char>> ExpireTimestampLookup =>
         ExpireTimestamps.GetAlternateLookup<ReadOnlySpan<char>>();
 
-    public void Initialize()
+    public void RegisterPlatform(Platform platform)
     {
-        Platforms.ForEach(MapPlatformIdentifiers);
-        Platforms.ForEach(p => p.Initialize());
-
-        ExpireTimer.Elapsed += HandleStreamSpreaders;
-        ExpireTimer.Start();
-    }
-
-    public void RegisterPlatform<T>() where T : Platform, IPlatformFactory<T>
-    {
-        var platform = T.CreateNew(Logger);
         platform.Initialize();
-
         Platforms.Add(platform);
-        MapPlatformIdentifiers(platform);
+
+        foreach (var identifier in platform.SearchIDIdentifiersLookup.Set) SearchIDLookup.TryAdd(identifier, platform);
     }
 
     public T GetPlatform<T>() where T : Platform
     {
-        var platform = Platforms.FirstOrDefault(p => p.GetType() == typeof(T));
-        ArgumentNullException.ThrowIfNull(platform);
-        return (platform as T)!;
+        return Platforms.OfType<T>().First();
     }
 
-    protected void MapPlatformIdentifiers(Platform platform)
-    {
-        foreach (var identifier in platform.SearchIDIdentifiersLookup.Set) SearchIDLookup.TryAdd(identifier, platform);
-    }
-
-    public Task<Result<PlatformResult, SearchError>> SearchID(string id, CancellationToken cancellationToken = default)
+    /// <returns>The result, or <c>null</c> when no platform claims the ID or the lookup fails.</returns>
+    public Task<PlatformResult?> SearchID(string id, CancellationToken cancellationToken = default)
     {
         Logger.Information("Searching for ID: {ID}", id);
         var idSpan = id.AsSpan().Trim();
         Span<Range> platformSplit = stackalloc Range[2];
-        var splitCount = idSpan.Trim().Split(platformSplit, "://");
+        var splitCount = idSpan.Split(platformSplit, "://");
 
         var splitID = idSpan[platformSplit[0]];
         var identifier = idSpan[..(splitID.Length + 3)];
 
-        if (!SearchIDLookup.TryGetValue(identifier, out var platform))
-        {
-            Logger.Warning("No platform found for identifier: {Identifier}", identifier.ToString());
-            return Task.FromResult(Result<PlatformResult, SearchError>.Error(SearchError.NotFound));
-        }
+        if (SearchIDLookup.TryGetValue(identifier, out var platform))
+            return platform.GetByIdAsync(splitCount > 1 ? idSpan[platformSplit[1]].ToString() : id, cancellationToken);
 
-        return platform.TryID(splitCount > 1 ? idSpan[platformSplit[1]].ToString() : id, cancellationToken);
+        Logger.Warning("No platform found for identifier: {Identifier}", identifier.ToString());
+        return Task.FromResult<PlatformResult?>(null);
     }
 
-    public async IAsyncEnumerable<PlatformResult> SearchKeywords(string query)
+    public async IAsyncEnumerable<PlatformResult> SearchKeywords(string query,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         Logger.Information("Searching for keywords: {Query}", query);
-        var searchTasks = Platforms.OfType<ISupportsSearch>()
-            .Select(platform => platform.TrySearchKeywords(query));
-
         var totalResults = 0;
-        foreach (var task in searchTasks)
-        {
-            var search = await task;
-            if (search == Status.Error) continue;
 
-            foreach (var result in search.GetOk())
+        foreach (var platform in Platforms.OfType<ISupportsSearch>())
+            await foreach (var result in platform.SearchKeywords(query, cancellationToken)
+                               .Guarded(Logger, platform.GetType().Name, cancellationToken))
             {
                 totalResults++;
                 yield return result;
             }
-        }
+
         Logger.Debug("Keyword search for {Query} finished with {Count} results", query, totalResults);
     }
 
-    public async IAsyncEnumerable<PlatformResult> SearchPlaylist(string query)
+    public async IAsyncEnumerable<PlatformResult> SearchPlaylist(string query,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         Logger.Information("Searching for playlist: {Query}", query);
-        var searchTasks = Platforms
-            .Where(p => p is ISupportsPlaylist pl && pl.IsPlaylistUrl(query))
-            .Cast<ISupportsPlaylist>()
-            .Select(platform => platform.TrySearchPlaylist(query));
-
         var totalResults = 0;
-        foreach (var task in searchTasks)
-        {
-            var search = await task;
-            if (search == Status.Error) continue;
-            foreach (var result in search.GetOk())
+
+        foreach (var platform in Platforms.Where(p => p.IsPlaylistUrl(query)).OfType<ISupportsPlaylist>())
+            await foreach (var result in platform.SearchPlaylist(query, cancellationToken)
+                               .Guarded(Logger, platform.GetType().Name, cancellationToken))
             {
                 totalResults++;
                 yield return result;
             }
-        }
+
         Logger.Debug("Playlist search for {Query} finished with {Count} results", query, totalResults);
     }
 
-    public async Task<Result<StreamSpreader, DownloadError>> TryGetContentData(PlatformResult result,
+    /// <returns>The shared content stream, or <c>null</c> when no downloader could provide it.</returns>
+    public async Task<StreamSpreader?> GetContentDataAsync(PlatformResult result,
         CancellationToken cancellationToken = default)
     {
         await Semaphore.WaitAsync(cancellationToken);
@@ -139,29 +121,28 @@ public class AudioManager(ILogger logger)
             if (cachedResults.TryGetValue(result.ID, out var streamSpreader))
             {
                 Logger.Debug("Cache hit for content ID: {ID}", result.ID);
-                return Result<StreamSpreader, DownloadError>.Success(streamSpreader);
+                return streamSpreader;
             }
 
             Logger.Information("Fetching content data for ID: {ID}", result.ID);
-            var downloader = await result.TryGetContentData(cancellationToken);
-            if (downloader == Status.Error)
+            streamSpreader = await result.GetContentDataAsync(cancellationToken);
+            if (streamSpreader is null)
             {
                 Logger.Error("Failed to fetch content data for ID: {ID}", result.ID);
-                return Result<StreamSpreader, DownloadError>.Error(DownloadError.Generic);
+                return null;
             }
 
-            streamSpreader = downloader.GetOk();
             CachedResults.Add(result.ID, streamSpreader);
             ExpireTimestamps.Add(result.ID, DateTime.UtcNow.Add(ExpireTimeSpan));
 
             if (result is ISupportsCaching caching) await caching.RunCacheProcess(streamSpreader);
 
-            return Result<StreamSpreader, DownloadError>.Success(streamSpreader);
+            return streamSpreader;
         }
         catch (Exception e)
         {
             Logger.Error(e, "Error while getting content data for ID: {ID}", result.ID);
-            return Result<StreamSpreader, DownloadError>.Error(DownloadError.Generic);
+            return null;
         }
         finally
         {
@@ -189,7 +170,7 @@ public class AudioManager(ILogger logger)
             var cachedResults = CachedResultLookup;
             foreach (var (id, expire) in cachedDictionary)
             {
-                if (expire < now) continue;
+                if (expire > now) continue;
                 expireTimestamps.Remove(id);
 
                 var spreader = cachedResults[id];
@@ -208,49 +189,25 @@ public class AudioManager(ILogger logger)
         }
     }
 
-    private static ReadOnlySpan<char> GetProtocolSpan(Span<char> buffer, ReadOnlySpan<char> platformID)
-    {
-        const string protocolSeparator = "://";
-        platformID.CopyTo(buffer);
-        protocolSeparator.CopyTo(buffer[platformID.Length..]);
-        return buffer[..(platformID.Length + protocolSeparator.Length)];
-    }
-
     public QueryType FindQueryType(string query)
     {
         var querySpan = query.AsSpan();
-        Span<char> protocolBuffer = stackalloc char[32];
-
-        foreach (var (platformID, _) in SearchIDLookup.Dictionary)
-        {
-            var protocol = GetProtocolSpan(protocolBuffer, platformID);
-            if (!querySpan.StartsWith(protocol)) continue;
-            return QueryType.ID;
-        }
-
-        var playlistPlatforms = Platforms.Where(p => p is ISupportsPlaylist).ToList();
-        if (playlistPlatforms
-            .Cast<ISupportsPlaylist>()
-            .Any(platform => platform.IsPlaylistUrl(query)))
-            return QueryType.Playlist;
-
         Span<Range> platformSplit = stackalloc Range[2];
-        foreach (var platform in playlistPlatforms)
+
+        if (querySpan.Split(platformSplit, "://") > 1)
         {
-            querySpan.Split(platformSplit, "://");
-            var protocol = GetProtocolSpan(protocolBuffer, querySpan[platformSplit[0]]);
-            if (!platform.SearchPlaylistIdentifiersLookup.Contains(protocol)) continue;
-            return QueryType.Playlist;
+            var identifier = querySpan[..(querySpan[platformSplit[0]].Length + 3)];
+
+            if (SearchIDLookup.ContainsKey(identifier)) return QueryType.ID;
+            foreach (var platform in Platforms)
+                if (platform.SearchPlaylistIdentifiersLookup.Contains(identifier))
+                    return QueryType.Playlist;
         }
+
+        foreach (var platform in Platforms)
+            if (platform.IsPlaylistUrl(querySpan))
+                return QueryType.Playlist;
 
         return QueryType.Keywords;
-    }
-
-    ~AudioManager()
-    {
-        ExpireTimer.Stop();
-        CachedResults.Clear();
-        ExpireTimestamps.Clear();
-        SearchIDMap.Clear();
     }
 }

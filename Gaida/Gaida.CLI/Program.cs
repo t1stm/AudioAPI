@@ -1,41 +1,38 @@
 ﻿using System.Text.Json;
 using Gaida.Core;
+using Gaida.Core.Platforms;
+using Gaida.Core.Streams;
 using Gaida.Platforms.MusicDatabase;
 using Gaida.Platforms.YouTube;
-using Gaida.Core.Streams;
-using Result.Objects;
 using Serilog;
-using Serilog.Core;
 
-var loggerConfiguration = new LoggerConfiguration()
-    .WriteTo.Console();
+var logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .CreateLogger();
 
-var logger = loggerConfiguration.CreateLogger();
 var audioManager = new AudioManager(logger);
-audioManager.Initialize();
 
-audioManager.RegisterPlatform<YouTube>();
-audioManager.RegisterPlatform<MusicDatabase>();
+audioManager.RegisterPlatform(new YouTube(logger));
+audioManager.RegisterPlatform(new MusicDatabase(logger));
 
 // https://www.youtube.com/watch?v=dQw4w9WgXcQ
-var found = await audioManager.SearchID("yt://dQw4w9WgXcQ");
-if (found == Status.Error)
+var result = await audioManager.SearchID("yt://dQw4w9WgXcQ");
+if (result is null)
 {
-    logger.Error("Status: Error");
+    logger.Error("Search: not found");
     return;
 }
 
-var result = found.GetOk();
-logger.Information("Status: OK, Result: {Result}", result.SerializeSelf());
+logger.Information("Search: OK, Result: {Result}",
+    JsonSerializer.Serialize(result, CustomSerializer.SerializerOptions));
 
-var downloadAttempt = await result.TryGetContentData();
-if (downloadAttempt == Status.Error)
+var streamSpreader = await result.GetContentDataAsync();
+if (streamSpreader is null)
 {
     logger.Error("Download: Error");
     return;
 }
 
-var streamSpreader = downloadAttempt.GetOk();
 var stream = File.Open("test", FileMode.Create);
 
 var waitingSemaphore = new SemaphoreSlim(0, 1);
@@ -57,12 +54,10 @@ var streamSubscriber = new StreamSubscriber
     }
 };
 
-streamSpreader.Subscribe(streamSubscriber);
+await streamSpreader.SubscribeAsync(streamSubscriber);
 await waitingSemaphore.WaitAsync();
 
 await stream.FlushAsync();
 await stream.DisposeAsync();
-
-stream.Close();
 
 logger.Information("Total: {Total}", total);

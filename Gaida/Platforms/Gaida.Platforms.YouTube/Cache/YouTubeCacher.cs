@@ -1,7 +1,5 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
-using Gaida.Core.Platforms.Errors;
-using Result;
 using Serilog;
 
 namespace Gaida.Platforms.YouTube.Cache;
@@ -116,15 +114,14 @@ public class YouTubeCacher(ILogger logger)
             await SaveAsync(youtubeResults);
     }
 
-    public async Task<Result<YouTubeResult, SearchError>> GetFromCacheAsync(string id)
+    /// <returns>The cached result, or <c>null</c> when the ID isn't cached.</returns>
+    public async Task<YouTubeResult?> GetFromCacheAsync(string id)
     {
         await Sync.WaitAsync();
         var alternateLookup = Cache.GetAlternateLookup<ReadOnlySpan<char>>();
-        var found = alternateLookup.TryGetValue(id, out var result);
+        alternateLookup.TryGetValue(id, out var result);
         Sync.Release();
 
-        return found && result is not null
-            ? Result<YouTubeResult, SearchError>.Success(result)
-            : Result<YouTubeResult, SearchError>.Error(default);
+        return result;
     }
 }

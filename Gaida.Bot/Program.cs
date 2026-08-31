@@ -6,12 +6,11 @@ using DSharpPlus.Commands.Processors.TextCommands;
 using DSharpPlus.Commands.Processors.TextCommands.Parsing;
 using DSharpPlus.Voice;
 using Gaida.Bot;
-using Gaida.Bot.Player;
+using Gaida.Bot.Players;
 using Gaida.Core;
 using Gaida.Platforms.MusicDatabase;
 using Gaida.Platforms.Spotify;
 using Gaida.Platforms.YouTube;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 
@@ -22,85 +21,67 @@ var loggerConfiguration = new LoggerConfiguration()
 
 var logger = loggerConfiguration.CreateLogger();
 
-BotParametersConfiguration[]? botsConfig;
 var botInlineConfiguration = Environment.GetEnvironmentVariable("BOT_CONFIGURATION");
 var botConfigurationLocation = Environment.GetEnvironmentVariable("CONFIGURATION_LOCATION") ?? ".env.json";
 
-if (botInlineConfiguration is not null)
+var botsConfig = JsonSerializer.Deserialize<BotParametersConfiguration[]>(
+    botInlineConfiguration ?? File.ReadAllText(botConfigurationLocation), defaultSerializer);
+
+if (botsConfig is null)
 {
-    botsConfig = JsonSerializer.Deserialize<BotParametersConfiguration[]>(botInlineConfiguration, defaultSerializer);
-    if (botsConfig is null)
-    {
-        logger.Fatal("Failed to deserialize BotParametersConfiguration from inline configuration.");
-        return;
-    }
-}
-else if (!string.IsNullOrWhiteSpace(botConfigurationLocation))
-{
-    var file = File.ReadAllText(botConfigurationLocation);
-    botsConfig = JsonSerializer.Deserialize<BotParametersConfiguration[]>(file, defaultSerializer);
-    if (botsConfig is null)
-    {
-        logger.Fatal("Failed to deserialize BotParametersConfiguration from file.");
-        return;
-    }
-}
-else
-{
-    logger.Fatal(
-        "Bot configuration location is missing. Please set the CONFIGURATION_LOCATION or BOT_CONFIGURATION environment variables.");
+    logger.Fatal("Failed to read the bot configuration from {Source}.",
+        botInlineConfiguration is not null ? "BOT_CONFIGURATION" : botConfigurationLocation);
     return;
 }
 
 var serviceCollection = new ServiceCollection();
-var configurationBuilder = new ConfigurationBuilder();
-var configuration = configurationBuilder.Build();
 
 serviceCollection.AddSingleton(logger);
-serviceCollection.AddSingleton(configuration);
 serviceCollection.AddSingleton(serviceProvider =>
 {
-    var manager = new AudioManager(serviceProvider.GetRequiredService<ILogger>());
-    manager.RegisterPlatform<MusicDatabase>();
-    manager.RegisterPlatform<YouTube>();
-    manager.RegisterPlatform<Spotify>();
+    var serviceLogger = serviceProvider.GetRequiredService<ILogger>();
+    var manager = new AudioManager(serviceLogger);
 
-    manager.Initialize();
+    manager.RegisterPlatform(new MusicDatabase(serviceLogger));
+    manager.RegisterPlatform(new YouTube(serviceLogger));
+    manager.RegisterPlatform(new Spotify(serviceLogger));
+
     return manager;
 });
 serviceCollection.AddSingleton<PlayerController>();
 
 var applicationAssembly = typeof(Program).Assembly;
 
-var tasks = botsConfig.Select(config => Task.Run(async () =>
-{
-    if (config.Token is null)
+var tasks = botsConfig.Select(config =>
+    Task.Run(async () =>
     {
-        logger.Fatal("Token is missing from configuration for {Name}.", config.Name);
-        return;
-    }
-
-    var builder = DiscordClientBuilder
-        .CreateDefault(config.Token,
-            DiscordIntents.AllUnprivileged | DiscordIntents.MessageContents | TextCommandProcessor.RequiredIntents,
-            serviceCollection)
-        .UseCommands((_, commandsExtension) =>
+        if (config.Token is null)
         {
-            commandsExtension.AddProcessor(new TextCommandProcessor
+            logger.Fatal("Token is missing from configuration for {Name}.", config.Name);
+            return;
+        }
+
+        var builder = DiscordClientBuilder
+            .CreateDefault(config.Token,
+                DiscordIntents.AllUnprivileged | DiscordIntents.MessageContents | TextCommandProcessor.RequiredIntents,
+                serviceCollection)
+            .UseCommands((_, commandsExtension) =>
             {
-                Configuration = new TextCommandConfiguration
+                commandsExtension.AddProcessor(new TextCommandProcessor
                 {
-                    PrefixResolver = new DefaultPrefixResolver(true, config.Prefixes).ResolvePrefixAsync
-                }
-            });
-            commandsExtension.AddProcessor<SlashCommandProcessor>();
-            commandsExtension.AddCommands(applicationAssembly);
-        })
-        .UseVoice();
+                    Configuration = new TextCommandConfiguration
+                    {
+                        PrefixResolver = new DefaultPrefixResolver(true, config.Prefixes).ResolvePrefixAsync
+                    }
+                });
+                commandsExtension.AddProcessor<SlashCommandProcessor>();
+                commandsExtension.AddCommands(applicationAssembly);
+            })
+            .UseVoice();
 
-    var client = builder.Build();
+        var client = builder.Build();
 
-    await client.ConnectAsync();
-    await Task.Delay(-1);
-})).ToArray();
+        await client.ConnectAsync();
+        await Task.Delay(-1);
+    })).ToArray();
 Task.WaitAll(tasks);

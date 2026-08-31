@@ -1,51 +1,39 @@
 using System.Buffers;
 using System.Net.WebSockets;
 using System.Text;
-using Result;
 
 namespace Gaida.API.Controllers.Helpers;
 
-public class WebSocketTextReader(ILogger<Multiplayer> logger)
+public class WebSocketTextReader
 {
     protected readonly StringBuilder Builder = new();
 
-    public async Task<Result<string, WebSocketReadStatus>> ReadWholeMessageAsync(WebSocket webSocket,
-        CancellationToken? cancellationToken = null)
+    /// <returns>The whole text message, or <c>null</c> when the socket closed or faulted.</returns>
+    public async Task<string?> ReadWholeMessageAsync(WebSocket webSocket,
+        CancellationToken cancellationToken = default)
     {
         try
         {
-            cancellationToken ??= CancellationToken.None;
             Builder.Clear();
-            if (webSocket.State != WebSocketState.Open)
-                return Result<string, WebSocketReadStatus>.Error(WebSocketReadStatus.Closed);
+            if (webSocket.State != WebSocketState.Open) return null;
 
             using var buffer = MemoryPool<byte>.Shared.Rent(1024 * 32);
             ValueWebSocketReceiveResult receiveResult;
 
             do
             {
-                receiveResult = await webSocket.ReceiveAsync(buffer.Memory, cancellationToken.Value);
+                receiveResult = await webSocket.ReceiveAsync(buffer.Memory, cancellationToken);
+                if (receiveResult.MessageType == WebSocketMessageType.Close) return null;
                 if (receiveResult.MessageType != WebSocketMessageType.Text) continue;
 
-                var dataSlice = buffer.Memory[..receiveResult.Count];
-                Builder.Append(Encoding.UTF8.GetString(dataSlice.Span));
-
-                if (receiveResult.MessageType != WebSocketMessageType.Close) continue;
-                return Result<string, WebSocketReadStatus>.Error(WebSocketReadStatus.Closed);
+                Builder.Append(Encoding.UTF8.GetString(buffer.Memory[..receiveResult.Count].Span));
             } while (!receiveResult.EndOfMessage);
 
-            return Result<string, WebSocketReadStatus>.Success(Builder.ToString());
+            return Builder.ToString();
         }
-        catch (Exception e)
+        catch (Exception)
         {
-            return Result<string, WebSocketReadStatus>.Error(WebSocketReadStatus.Unknown);
+            return null;
         }
     }
-}
-
-public enum WebSocketReadStatus
-{
-    None,
-    Closed,
-    Unknown
 }

@@ -1,9 +1,5 @@
-using System.Text.Json;
 using System.Text.Json.Serialization;
-using Gaida.Core.Platforms.Errors;
 using Gaida.Core.Streams;
-using Result;
-using Result.Objects;
 
 namespace Gaida.Core.Platforms;
 
@@ -16,6 +12,13 @@ public abstract class PlatformResult
     [JsonInclude] public string? Album { get; set; }
     [JsonInclude] public TimeSpan Duration { get; set; }
     [JsonInclude] public string? ThumbnailUrl { get; set; }
+
+    /// <summary>Untransliterated title, when the platform has one.</summary>
+    [JsonInclude] public string? OriginalTitle { get; set; }
+
+    /// <summary>Untransliterated artist, when the platform has one.</summary>
+    [JsonInclude] public string? OriginalArtist { get; set; }
+
     public abstract string GetDownloadUrl();
 
     public virtual ReadOnlySpan<char> GetPureID()
@@ -27,20 +30,15 @@ public abstract class PlatformResult
         return count > 1 ? span[ranges[1]] : span;
     }
 
-    public virtual async Task<Result<StreamSpreader, DownloadError>> TryGetContentData(
-        CancellationToken token = default)
+    /// <returns>The content stream, or <c>null</c> when no downloader could provide it.</returns>
+    public virtual async Task<StreamSpreader?> GetContentDataAsync(CancellationToken token = default)
     {
         foreach (var downloader in Downloaders)
         {
-            var result = await downloader.TryGetContentData(this, token);
-            if (result == Status.Ok) return result;
+            var result = await downloader.GetContentDataAsync(this, token);
+            if (result is not null) return result;
         }
 
-        return Result<StreamSpreader, DownloadError>.Error(default);
-    }
-
-    public virtual string SerializeSelf()
-    {
-        return JsonSerializer.Serialize(this, CustomSerializer.SerializerOptions);
+        return null;
     }
 }

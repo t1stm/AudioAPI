@@ -16,10 +16,4 @@ public class BotParametersConfiguration
     /// Message prefixes the bot responds to.
     /// </summary>
     public string[] Prefixes { get; set; } = [];
-    
-    /// <summary>
-    /// Controls whether the bot is a master / slave bot.
-    /// A master bot controls other bots by being the only point of contact.
-    /// </summary>
-    public bool Master { get; set; } = false;
 }

@@ -4,23 +4,22 @@ using Serilog;
 using Serilog.Templates;
 using Serilog.Templates.Themes;
 
-var tmpLogger = new LoggerConfiguration()
+Log.Logger = new LoggerConfiguration()
     .Enrich.FromLogContext()
     .WriteTo.Console(new ExpressionTemplate(
         "[{@t:HH:mm:ss} {@l:u3}" +
         "{#if SourceContext is not null} {Substring(SourceContext, LastIndexOf(SourceContext, '.') + 1)}{#end}] {@m}\n{@x}",
-        theme: TemplateTheme.Code));
-
-Log.Logger = tmpLogger
+        theme: TemplateTheme.Code))
     .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// The platform layer reads these as process environment variables; configuration supplies the defaults.
+foreach (var key in (string[]) ["DOMAIN", "STORAGE", "ALBUM_COVERS"])
+    Environment.SetEnvironmentVariable(key, builder.Configuration[key]);
 
 builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddOpenApi();
 builder.Services.AddSerilog();
 
 builder.Services.AddSingleton(Log.Logger);
@@ -29,12 +28,7 @@ builder.Services.AddSingleton<MultiplayerManager>();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+if (app.Environment.IsDevelopment()) app.MapOpenApi();
 
 app.UseCors(b => b
     .AllowAnyHeader()
@@ -47,16 +41,7 @@ app.UseWebSockets(new WebSocketOptions
     KeepAliveInterval = TimeSpan.FromSeconds(5)
 });
 
-if (Environment.GetEnvironmentVariable("DOMAIN") == null)
-    Environment.SetEnvironmentVariable("DOMAIN", "gergov.bg/");
-
-if (Environment.GetEnvironmentVariable("STORAGE") == null)
-    Environment.SetEnvironmentVariable("STORAGE", "./Music Database");
-
-if (Environment.GetEnvironmentVariable("ALBUM_COVERS") == null)
-    Environment.SetEnvironmentVariable("ALBUM_COVERS", "./Music Database/Album_Covers");
-
-// initialize required service here.
+// initialize required services here.
 app.Services.GetRequiredService<ManagerService>();
 app.Services.GetRequiredService<MultiplayerManager>();
 

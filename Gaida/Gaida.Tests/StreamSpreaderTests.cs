@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using Gaida.Core;
 using Gaida.Platforms.YouTube;
-using Result.Objects;
 using Serilog.Core;
 using Xunit.Abstractions;
 
@@ -11,7 +10,7 @@ namespace Gaida.Tests;
 public class StreamSpreaderTests(ITestOutputHelper output)
 {
     [Fact]
-    public void CorrectDataOrder()
+    public async Task CorrectDataOrder()
     {
         var streamSpreader = new StreamSpreader();
         var randomBytes = RandomNumberGenerator.GetBytes(1048576);
@@ -39,7 +38,7 @@ public class StreamSpreaderTests(ITestOutputHelper output)
                 }
             };
 
-            streamSpreader.Subscribe(streamSubscriber);
+            await streamSpreader.SubscribeAsync(streamSubscriber);
             tuples[i] = (stream, waitingSemaphore);
         }
 
@@ -47,7 +46,7 @@ public class StreamSpreaderTests(ITestOutputHelper output)
 
         var memoryStream = new MemoryStream(randomBytes);
         memoryStream.CopyTo(streamSpreader, 1 << 12);
-        streamSpreader.Close();
+        await streamSpreader.CloseAsync();
 
         output.WriteLine("Copied and closed stream.");
 
@@ -74,20 +73,17 @@ public class StreamSpreaderTests(ITestOutputHelper output)
         output.WriteLine("Starting download test.");
         var audioManager = new AudioManager(Logger.None);
 
-        audioManager.Initialize();
-        audioManager.RegisterPlatform<YouTube>();
+        audioManager.RegisterPlatform(new YouTube(Logger.None));
 
-        var found = await audioManager.SearchID("yt://dQw4w9WgXcQ");
-        Assert.True(found == Status.Ok, "YouTube search for \'dQw4w9WgXcQ\' failed.");
+        var result = await audioManager.SearchID("yt://dQw4w9WgXcQ");
+        Assert.True(result is not null, "YouTube search for \'dQw4w9WgXcQ\' failed.");
 
         output.WriteLine("Found YouTube result.");
 
-        var result = found.GetOk();
-        var download = await result.TryGetContentData();
-        Assert.True(download == Status.Ok, "YouTube download failed.");
+        var streamSpreader = await result!.GetContentDataAsync();
+        Assert.True(streamSpreader is not null, "YouTube download failed.");
 
         output.WriteLine("Downloading result.");
-        var streamSpreader = download.GetOk();
 
         var tuples = new (MemoryStream, SemaphoreSlim)[streamCount];
         for (var i = 0; i < streamCount; i++)
@@ -119,7 +115,7 @@ public class StreamSpreaderTests(ITestOutputHelper output)
                 }
             };
 
-            streamSpreader.Subscribe(streamSubscriber);
+            await streamSpreader.SubscribeAsync(streamSubscriber);
             continue;
 
             async Task SyncCall()

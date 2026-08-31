@@ -1,7 +1,6 @@
-using Gaida.Bot.Players;
 using Gaida.Core;
 
-namespace Gaida.Bot.Player;
+namespace Gaida.Bot.Players;
 
 public class PlayerController(AudioManager manager)
 {

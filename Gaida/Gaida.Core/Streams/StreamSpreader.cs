@@ -15,11 +15,6 @@ public class StreamSpreader : Stream
     public override long Length => Position;
     public override long Position { get; set; }
 
-    public void Subscribe(StreamSubscriber subscriber)
-    {
-        SubscribeAsync(subscriber).GetAwaiter().GetResult();
-    }
-
     public async Task SubscribeAsync(StreamSubscriber subscriber)
     {
         try
@@ -34,20 +29,7 @@ public class StreamSpreader : Stream
         }
     }
 
-    public override void Close()
-    {
-        try
-        {
-            Semaphore.Wait();
-            Closed = true;
-            SyncSubscribers().GetAwaiter().GetResult();
-        }
-        finally
-        {
-            Semaphore.Release();
-        }
-    }
-
+    /// <summary>Marks the end of the source data. Not to be confused with <see cref="Stream.Close" />, which disposes.</summary>
     public async Task CloseAsync()
     {
         try
@@ -69,20 +51,6 @@ public class StreamSpreader : Stream
             Semaphore.Wait();
             Data.Add((buffer.ToArray(), offset, count));
             SyncSubscribers().GetAwaiter().GetResult();
-        }
-        finally
-        {
-            Semaphore.Release();
-        }
-    }
-
-    public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await Semaphore.WaitAsync(cancellationToken);
-            Data.Add((buffer.ToArray(), offset, count));
-            await SyncSubscribers();
         }
         finally
         {
@@ -141,19 +109,10 @@ public class StreamSpreader : Stream
         }
     }
 
-    public override ValueTask DisposeAsync()
-    {
-        if (!Closed) return ValueTask.CompletedTask;
-
-        Data.Clear();
-        GC.SuppressFinalize(this);
-
-        return ValueTask.CompletedTask;
-    }
-
-    public void Clean()
+    protected override void Dispose(bool disposing)
     {
         Data.Clear();
+        base.Dispose(disposing);
     }
 
     #region Not Supported

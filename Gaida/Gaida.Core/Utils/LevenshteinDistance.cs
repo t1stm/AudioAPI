@@ -8,17 +8,6 @@ public static class LevenshteinDistance
             str is null ? null : string.Concat(str.Where(char.IsLetterOrDigit)).ToLower();
     }
 
-    public static int ComputeStrict(string? s, string? t)
-    {
-        if (string.IsNullOrEmpty(s)) return string.IsNullOrEmpty(t) ? 0 : t.Length;
-        if (string.IsNullOrEmpty(t)) return s.Length;
-
-        var sourceSpan = s.AsSpan();
-        var targetSpan = t.AsSpan();
-
-        return ComputeStrict(sourceSpan, targetSpan);
-    }
-
     public static int ComputeStrict(ReadOnlySpan<char> s, ReadOnlySpan<char> t)
     {
         var n = s.Length;

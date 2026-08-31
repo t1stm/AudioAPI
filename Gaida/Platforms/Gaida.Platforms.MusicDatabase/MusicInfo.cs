@@ -1,56 +1,33 @@
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using System.Text.Json.Serialization;
-using Gaida.Platforms.MusicDatabase.Manager;
-using Gaida.Core.Utils;
 using Gaida.Core.Platforms;
+using Gaida.Core.Utils;
+using Gaida.Platforms.MusicDatabase.Manager;
 
 namespace Gaida.Platforms.MusicDatabase;
 
 public class MusicInfo
 {
-    [JsonInclude] [JsonPropertyName("romanizedGuestArtists")]
-    public string[]? OriginalGuestArtists;
+    /// <summary>Layout of the per-artist Info.json files on disk. Property names are the on-disk names.</summary>
+    public static readonly JsonSerializerOptions SerializerOptions = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        PropertyNameCaseInsensitive = true,
+        WriteIndented = true
+    };
 
-    [JsonInclude] [JsonPropertyName("romanizedGuestArtists")]
-    public string[]? OriginalOtherTitles;
-
-    [JsonInclude] [JsonPropertyName("romanizedGuestArtists")]
-    public string[]? RomanizedGuestArtists;
-
-    [JsonInclude] [JsonPropertyName("romanizedGuestArtists")]
-    public string[]? RomanizedOtherTitles;
-
-    [JsonInclude] [JsonPropertyName("id")] public string? ID { get; set; }
-
-    [JsonInclude]
-    [JsonPropertyName("titleRomanized")]
+    public string? ID { get; set; }
     public string? RomanizedTitle { get; set; }
-
-    [JsonInclude]
-    [JsonPropertyName("authorRomanized")]
     public string? RomanizedAuthor { get; set; }
-
-    [JsonInclude] public string? Album { get; set; }
-
-    [JsonInclude] public TimeSpan Duration { get; set; }
-
-    [JsonInclude]
-    [JsonPropertyName("coverUrl")]
+    public string? OriginalAuthor { get; set; }
+    public string? OriginalTitle { get; set; }
+    public string? Album { get; set; }
     public string? CoverUrl { get; set; }
-
-    [JsonInclude]
-    [JsonPropertyName("location")]
     public string? RelativeLocation { get; set; }
 
-    [JsonInclude]
-    [JsonPropertyName("authorOriginal")]
-    public string? OriginalAuthor { get; set; }
+    [JsonIgnore] public TimeSpan Duration { get; set; }
 
-    [JsonInclude]
-    [JsonPropertyName("titleOriginal")]
-    public string? OriginalTitle { get; set; }
-
-    [JsonInclude]
-    [JsonPropertyName("length")]
     public double Length
     {
         get => Duration.TotalMilliseconds;

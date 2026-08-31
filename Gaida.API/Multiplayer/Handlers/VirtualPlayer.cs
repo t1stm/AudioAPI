@@ -1,15 +1,21 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Text.Json;
 using Gaida.Core.Platforms;
 
 namespace Gaida.API.Multiplayer.Handlers;
 
 public class VirtualPlayer(MessageQueue messageQueue)
 {
-    protected readonly AddedUserHandler Finished = new();
-
-    protected readonly AddedUserHandler Loaded = new();
     protected readonly SemaphoreSlim Sync = new(1);
     protected int CurrentIndex;
+
+    /// <summary>How many users reported the current item as played out.</summary>
+    protected int FinishedCount;
+
+    /// <summary>How many users reported the current item as buffered.</summary>
+    protected int LoadedCount;
+
     protected TimeSpan? PauseTime;
     protected bool Playing = true;
 
@@ -71,24 +77,23 @@ public class VirtualPlayer(MessageQueue messageQueue)
         await Broadcast(Current());
     }
 
-    public async Task SetFinished(User user)
+    public async Task SetFinished()
     {
-        await Finished.Add(user);
+        FinishedCount++;
         await HandleFinished();
     }
 
     public async Task HandleFinished()
     {
-        if (!Finished.Fulfilled(messageQueue)) return;
+        if (FinishedCount < messageQueue.CurrentStore.Count) return;
+
+        FinishedCount = 0;
         await Next();
     }
 
     public async Task Shuffle()
     {
-        var random = new Random();
-        var count = Items.Count;
-
-        Items = Items.OrderBy(_ => random.Next(count)).ToList();
+        Random.Shared.Shuffle(CollectionsMarshal.AsSpan(Items));
         await Broadcast(Queue());
     }
 
@@ -148,7 +153,7 @@ public class VirtualPlayer(MessageQueue messageQueue)
         if (Items.Count > 0)
             await SyncTime(user);
 
-        await Broadcast($"chat System %% User \'{user.ChatUsername}\' joined the session.");
+        await Broadcast($"chat System %% User '{user.ChatUsername}' joined the session.");
     }
 
     public async Task SeekTo(double seconds)
@@ -166,15 +171,17 @@ public class VirtualPlayer(MessageQueue messageQueue)
         await Broadcast(Time(secondsBroadcast));
     }
 
-    public async Task SetLoaded(User user)
+    public async Task SetLoaded()
     {
-        await Loaded.Add(user);
+        LoadedCount++;
         await HandleLoaded();
     }
 
     public async Task HandleLoaded()
     {
-        if (!Loaded.Fulfilled(messageQueue)) return;
+        if (LoadedCount < messageQueue.CurrentStore.Count) return;
+
+        LoadedCount = 0;
         StartTime = Stopwatch.GetTimestamp();
 
         await Broadcast(Time(0));
@@ -205,14 +212,14 @@ public class VirtualPlayer(MessageQueue messageQueue)
 
     protected void UpdateStart()
     {
-        Loaded.Clear();
+        LoadedCount = 0;
         StartTime = null;
         PauseTime = null;
     }
 
     protected string Queue()
     {
-        return $"queue {Items.ToJson()}";
+        return $"queue {JsonSerializer.Serialize(Items, CustomSerializer.SerializerOptions)}";
     }
 
     protected string Current()
@@ -225,19 +232,13 @@ public class VirtualPlayer(MessageQueue messageQueue)
         return $"seek {time}";
     }
 
-    protected async Task Broadcast(string message)
+    protected Task Broadcast(string message)
     {
-        await messageQueue.Add(message);
-        await messageQueue.Update();
+        return messageQueue.Add(message);
     }
 
     private static long TimeSpanToTimestamp(TimeSpan timeSpan)
     {
-        return TicksToStopwatchTimestamp(timeSpan.Ticks);
-    }
-
-    private static long TicksToStopwatchTimestamp(long ticks)
-    {
-        return ticks * Stopwatch.Frequency / 10000000;
+        return timeSpan.Ticks * Stopwatch.Frequency / 10000000;
     }
 }

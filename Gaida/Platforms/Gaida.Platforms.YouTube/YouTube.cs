@@ -1,104 +1,90 @@
+using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using Gaida.Core.Platforms;
 using Gaida.Core.Platforms.Cross_Platform;
-using Gaida.Core.Platforms.Errors;
 using Gaida.Core.Platforms.Optional.Supports;
+using Gaida.Core.Utils;
 using Gaida.Platforms.YouTube.Cache;
 using Gaida.Platforms.YouTube.Getters;
 using Gaida.Platforms.YouTube.Search_Providers;
-using Result;
-using Result.Objects;
 using Serilog;
-using Gaida.Core.Platforms;
 
 namespace Gaida.Platforms.YouTube;
 
-public sealed partial class YouTube(ILogger logger) : Platform(logger), IPlatformFactory<YouTube>, ISupportsSearch, ISupportsPlaylist
+public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlaylist
 {
-    public static YouTube CreateNew(ILogger logger)
+    private readonly YouTubeCacher _cacher;
+
+    public YouTube(ILogger logger) : base(logger)
     {
-        return new YouTube(logger);
+        _cacher = new YouTubeCacher(logger);
+
+        SearchProviders =
+        [
+            new YouTubeSearchProviderCached(logger, _cacher),
+            new YouTubeSearchProviderExplode(logger)
+        ];
+
+        ContentDownloaders =
+        [
+            new GetterLocalCache(logger),
+            new GetterYouTubeExplode(logger),
+            new GetterYtDlp(logger)
+        ];
     }
 
-    private static YouTubeCacher? _youTubeCacher;
     protected override HashSet<string> SearchIDIdentifiers => ["yt://"];
     protected override HashSet<string> SearchPlaylistIdentifiers => ["yt-playlist://"];
 
-    protected override HashSet<string> PlatformDomains =>
-    [
-        "youtube.com", "youtu.be",
-        "m.youtube.com", "music.youtube.com"
-    ];
+    protected override List<SearchProvider> SearchProviders { get; set; }
+    protected override List<ContentGetter> ContentDownloaders { get; set; }
 
-    public override string Name => "YouTube";
-    public override string Description => "The YouTube video and music platform.";
-    public override int Priority => 50;
-
-    protected override List<SearchProvider> SearchProviders { get; set; } =
-    [
-        new YouTubeSearchProviderCached(logger, _youTubeCacher ??= new YouTubeCacher(logger)),
-        new YouTubeSearchProviderMadeyoga(logger),
-        new YouTubeSearchProviderExplode(logger)
-    ];
-
-    protected override List<ContentGetter> ContentDownloaders { get; set; } =
-    [
-        new GetterLocalCache(logger),
-        new GetterYouTubeExplode(logger),
-        new GetterYtDlp(logger),
-        new GetterVideoLibrary(logger)
-    ];
-
-    public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchPlaylist(string playlist,
-        CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<PlatformResult> SearchPlaylist(string playlist,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         Logger.Debug("Searching for playlist: {Playlist}", playlist);
-        foreach (var searchProvider in
-                 SearchProviders.OfType<ISupportsPlaylist>())
-        {
-            var result = await searchProvider.TrySearchPlaylist(playlist, cancellationToken);
-            _ = PopulateYouTubeCache(result);
-            if (result == Status.Ok) return result;
-        }
-
-        return Result<IEnumerable<PlatformResult>, SearchError>.Error(default);
+        await foreach (var result in FirstProviderWithResults<ISupportsPlaylist>(
+                           (provider, token) => provider.SearchPlaylist(playlist, token), cancellationToken))
+            yield return result;
     }
 
-    public bool IsPlaylistUrl(ReadOnlySpan<char> query)
+    public async IAsyncEnumerable<PlatformResult> SearchKeywords(string keywords,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        Logger.Debug("Searching for keywords: {Keywords}", keywords);
+        await foreach (var result in FirstProviderWithResults<ISupportsSearch>(
+                           (provider, token) => provider.SearchKeywords(keywords, token), cancellationToken))
+            yield return result;
+    }
+
+    public override bool IsPlaylistUrl(ReadOnlySpan<char> query)
     {
         return PlaylistRegex().IsMatch(query);
     }
 
-    public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchKeywords(string keywords,
-        CancellationToken cancellationToken = default)
+    /// <summary>
+    ///     Streams results from the highest priority provider that returns any, caching what it saw on the way out.
+    /// </summary>
+    private async IAsyncEnumerable<PlatformResult> FirstProviderWithResults<T>(
+        Func<T, CancellationToken, IAsyncEnumerable<PlatformResult>> search,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        Logger.Debug("Searching for keywords: {Keywords}", keywords);
-        foreach (var searchProvider in
-                 SearchProviders.OfType<ISupportsSearch>())
+        foreach (var provider in SearchProviders.OfType<T>())
         {
-            var result = await searchProvider.TrySearchKeywords(keywords, cancellationToken);
-            _ = PopulateYouTubeCache(result);
-            if (result == Status.Ok) return result;
+            var found = new List<YouTubeResult>();
+
+            await foreach (var result in search(provider, cancellationToken)
+                               .Guarded(Logger, provider!.GetType().Name, cancellationToken))
+            {
+                if (result is YouTubeResult youTubeResult) found.Add(youTubeResult);
+                yield return result;
+            }
+
+            if (found.Count == 0) continue;
+
+            await _cacher.AddToCacheAsync(found);
+            yield break;
         }
-
-        return Result<IEnumerable<PlatformResult>, SearchError>.Error(default);
-    }
-
-    public override void Initialize()
-    {
-        foreach (var searchProvider in SearchProviders) searchProvider.RegisterContentDownloaders(ContentDownloaders);
-        base.Initialize();
-    }
-
-    private async Task PopulateYouTubeCache(Result<IEnumerable<PlatformResult>, SearchError> results)
-    {
-        if (results == Status.Error)
-        {
-            Logger.Error("Error while populating YouTube cache: {@Exception}", results.GetError());
-            return;
-        }
-        
-        if (_youTubeCacher is not null) // should always be true when this is called
-            await _youTubeCacher.AddToCacheAsync(results.GetOk().OfType<YouTubeResult>());
     }
 
     [GeneratedRegex(@"\/playlist\?list=[a-zA-Z0-9_-]+")]

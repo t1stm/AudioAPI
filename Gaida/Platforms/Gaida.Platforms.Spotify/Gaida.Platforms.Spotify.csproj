@@ -10,4 +10,8 @@
     <ProjectReference Include="..\..\Gaida.Core\Gaida.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="SpotifyAPI.Web" Version="7.4.2" />
+  </ItemGroup>
+
 </Project>

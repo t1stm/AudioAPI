@@ -1,8 +1,6 @@
-using Gaida.Core.Platforms.Errors;
-using Gaida.Core.Streams;
-using Result;
-using Serilog;
 using Gaida.Core.Platforms;
+using Gaida.Core.Streams;
+using Serilog;
 
 namespace Gaida.Platforms.YouTube.Getters;
 
@@ -21,13 +19,13 @@ public class GetterLocalCache(ILogger logger) : ContentGetter(logger)
         base.Initialize();
     }
 
-    public override Task<Result<StreamSpreader, DownloadError>> TryGetContentData(
-        PlatformResult result, CancellationToken cancellationToken)
+    public override Task<StreamSpreader?> GetContentDataAsync(PlatformResult result,
+        CancellationToken cancellationToken)
     {
         if (result is not YouTubeResult youtubeResult)
         {
-            Logger.Debug("Result is not YouTubeResult, returning error");
-            return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(DownloadError.WrongType));
+            Logger.Debug("Result is not a YouTubeResult");
+            return Task.FromResult<StreamSpreader?>(null);
         }
 
         var file = youtubeResult.GetPureID().ToString() + ".webm";
@@ -36,10 +34,9 @@ public class GetterLocalCache(ILogger logger) : ContentGetter(logger)
         var path = Path.Combine(CacheLocation, file);
         if (!File.Exists(path))
         {
-            Logger.Debug("File not found, returning error");
-            return Task.FromResult(Result<StreamSpreader, DownloadError>.Error(
-                DownloadError.FileReadFailure));
-        };
+            Logger.Debug("Not in the local cache: {Path}", path);
+            return Task.FromResult<StreamSpreader?>(null);
+        }
 
         var streamSpreader = new StreamSpreader();
         _ = Task.Run(async () =>
@@ -48,14 +45,17 @@ public class GetterLocalCache(ILogger logger) : ContentGetter(logger)
             {
                 await using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.None);
                 await stream.CopyToAsync(streamSpreader, cancellationToken);
-                await streamSpreader.CloseAsync();
             }
             catch (Exception e)
             {
-                Logger.Fatal("Error while copying local cache to StreamSpreader: '{@Exception}'", e);
+                Logger.Fatal(e, "Error while copying local cache to StreamSpreader");
+            }
+            finally
+            {
+                await streamSpreader.CloseAsync();
             }
         }, cancellationToken);
 
-        return Task.FromResult(Result<StreamSpreader, DownloadError>.Success(streamSpreader));
+        return Task.FromResult<StreamSpreader?>(streamSpreader);
     }
 }

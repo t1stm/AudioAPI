@@ -11,7 +11,6 @@ public class Player(VoiceConnection connection, DiscordMessage message)
     protected CancellationTokenSource CancellationTokenSource { get; } = new();
     
     public PlayerQueue Queue { get; } = new() { OnCurrentChange = _ => { /* TODO */ } };
-    public StatusbarManager StatusbarManager { get; } = new();
 
     public async Task Play()
     {

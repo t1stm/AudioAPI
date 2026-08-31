@@ -27,5 +27,4 @@
   </Folder>
   <Project Path="Gaida.API/Gaida.API.csproj" />
   <Project Path="Gaida.Bot/Gaida.Bot.csproj" />
-  <Project Path="Result/Result.csproj" />
 </Solution>

@@ -1,11 +1,11 @@
 using System.Security.Cryptography;
-using System.Text;
-using Newtonsoft.Json;
+using System.Text.Json;
 
 namespace Gaida.Platforms.MusicDatabase.Manager;
 
 public class CoverExtractor
 {
+    private static readonly Lock ExportLock = new();
     public string ExportLocation = "./Album_Covers";
 
     public void Extract(string location)
@@ -13,65 +13,48 @@ public class CoverExtractor
         ExportLocation = Environment.GetEnvironmentVariable("ALBUM_COVERS", EnvironmentVariableTarget.Process) ??
                          ExportLocation;
 
-        if (!Directory.Exists(ExportLocation)) Directory.CreateDirectory(ExportLocation);
-        foreach (var genreDirectory in Directory.GetDirectories(location))
-        foreach (var artistDirectory in Directory.GetDirectories(genreDirectory))
-            ParseFolder(artistDirectory);
+        Directory.CreateDirectory(ExportLocation);
+        Parallel.ForEach(
+            Directory.GetDirectories(location, "*", SearchOption.AllDirectories)
+                .Where(folder => File.Exists($"{folder}/Info.json")),
+            ParseFolder);
     }
 
     public void ParseFolder(string folder)
     {
-        var serializer = new JsonSerializer
-        {
-            Formatting = Formatting.Indented,
-            StringEscapeHandling = StringEscapeHandling.EscapeHtml
-        };
-
-        using var fileStream = File.Open($"{folder}/Info.json", FileMode.OpenOrCreate, FileAccess.ReadWrite,
+        using var fileStream = File.Open($"{folder}/Info.json", FileMode.Open, FileAccess.ReadWrite,
             FileShare.ReadWrite);
 
-        using var reader = new StreamReader(fileStream, Encoding.UTF8, true, 1024, true);
+        if (fileStream.Length == 0) return;
 
-        var json = reader.ReadToEnd();
-        var items = JsonConvert.DeserializeObject<List<MusicInfo>>(json) ?? [];
+        var items = JsonSerializer.Deserialize<List<MusicInfo>>(fileStream, MusicInfo.SerializerOptions) ?? [];
         var change = false;
 
         foreach (var info in items.Where(m => string.IsNullOrWhiteSpace(m.CoverUrl)))
         {
             var location = info.ToMusicResult([]).Path;
-            var image = Flac.GetImageFromFile(location);
+            var image = Flac.GetImageFromFile(location) ?? WavPack.GetImageFromFile(location) ??
+                        Id3V2.GetImageFromTag(location);
+            if (image is null) continue;
 
-            if (!image.HasData)
-            {
-                image = Id3V2.GetImageFromTag(location);
-                if (!image.HasData) continue;
-            }
-
-            var hash = Sha1Generator.Get(image.Data!);
-            var extension = Flac.GetImageFiletype(image.Data!);
+            var hash = Convert.ToHexStringLower(SHA1.HashData(image));
+            var extension = Flac.GetImageFiletype(image);
 
             var filename = $"{ExportLocation}/{hash}.{extension}";
             info.CoverUrl = $"$[DOMAIN]/{hash}.{extension}";
-            if (File.Exists(filename)) continue;
             change = true;
-            File.WriteAllBytes(filename, image.Data!);
+
+            // ponytail: one lock for every cover write; they are rare and small, split it per-hash if that ever shows up.
+            lock (ExportLock)
+            {
+                if (!File.Exists(filename)) File.WriteAllBytes(filename, image);
+            }
         }
 
         if (!change) return;
-        fileStream.Position = 0;
+
         fileStream.SetLength(0);
-
-        using var writer = new StreamWriter(fileStream, Encoding.UTF8);
-        serializer.Serialize(writer, items);
-    }
-}
-
-public static class Sha1Generator
-{
-    public static string Get(byte[] sourceData)
-    {
-        var hash = SHA1.HashData(sourceData);
-        var hashString = BitConverter.ToString(hash);
-        return hashString.Replace("-", string.Empty).ToLower();
+        fileStream.Position = 0;
+        JsonSerializer.Serialize(fileStream, items, MusicInfo.SerializerOptions);
     }
 }

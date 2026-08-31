@@ -1,18 +1,14 @@
 using System.Diagnostics;
-using Gaida.Platforms.MusicDatabase.Manager.Objects;
 using File = System.IO.File;
 
 namespace Gaida.Platforms.MusicDatabase.Manager;
 
 public static class Flac
 {
-    public static EmbeddedImage GetImageFromFile(string location)
+    /// <returns>The embedded cover, or <c>null</c> when the file has none.</returns>
+    public static byte[]? GetImageFromFile(string location)
     {
-        if (!File.Exists(location) || !location.Contains(".flac"))
-            return new EmbeddedImage
-            {
-                HasData = false
-            };
+        if (!File.Exists(location) || !location.Contains(".flac")) return null;
 
         var process = Process.Start(new ProcessStartInfo
         {
@@ -21,53 +17,20 @@ public static class Flac
             RedirectStandardError = true,
             FileName = "metaflac"
         });
-        if (process == null)
-            return new EmbeddedImage
-            {
-                HasData = false
-            };
-        process.Start();
+        if (process == null) return null;
 
         var memoryStream = new MemoryStream();
-        var data = process.StandardOutput.BaseStream;
-        data.CopyTo(memoryStream);
-        memoryStream.Position = 0;
-        var array = memoryStream.ToArray();
+        process.StandardOutput.BaseStream.CopyTo(memoryStream);
 
-        if (array.Length < 1)
-            return new EmbeddedImage
-            {
-                HasData = false
-            };
-
-        return new EmbeddedImage
-        {
-            HasData = true,
-            Data = array,
-            MimeType = ""
-        };
+        return memoryStream.Length < 1 ? null : memoryStream.ToArray();
     }
 
-    public static string GetImageFiletype(byte[] data)
+    public static string GetImageFiletype(ReadOnlySpan<byte> data)
     {
-        Span<byte> pngHeader = [137, 80, 78, 71, 13, 10, 26, 10];
-        Span<byte> jpegHeader = [255, 216, 255];
-        return data.Length switch
-        {
-            > 9 when HasHeader(pngHeader, data) => "png",
-            > 5 when HasHeader(jpegHeader, data) => "jpg",
-            _ => ""
-        };
-    }
+        ReadOnlySpan<byte> pngHeader = [137, 80, 78, 71, 13, 10, 26, 10];
+        ReadOnlySpan<byte> jpegHeader = [255, 216, 255];
 
-    private static bool HasHeader(Span<byte> header, ReadOnlySpan<byte> source)
-    {
-        if (header.Length > source.Length) return false;
-
-        for (var i = 0; i < header.Length; i++)
-            if (header[i] != source[i])
-                return false;
-
-        return true;
+        if (data.StartsWith(pngHeader)) return "png";
+        return data.StartsWith(jpegHeader) ? "jpg" : "";
     }
 }

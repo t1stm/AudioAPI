@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using Gaida.Core.Streams;
-using Result;
 
 namespace Gaida.Core.FFmpeg;
 
@@ -10,13 +9,14 @@ public class FFmpegEncoder
     protected readonly StreamSpreader InnerStreamSpreader = new();
     protected Process? Process;
 
-    public Result<StreamSubscriber, FFmpegError> Convert(int bitrate, string codec = "-c:a libopus",
-        string outputFormat = "-f mka")
+    /// <returns>A subscriber that feeds ffmpeg, or <c>null</c> when ffmpeg couldn't be started.</returns>
+    public StreamSubscriber? Convert(int bitrate, string codec = "-c:a libopus", string outputFormat = "-f mka")
     {
         return Convert($"{codec} -b:a {bitrate}k -vn -d copy {outputFormat}");
     }
 
-    public Result<StreamSubscriber, FFmpegError> Convert(string ffmpegArguments)
+    /// <returns>A subscriber that feeds ffmpeg, or <c>null</c> when ffmpeg couldn't be started.</returns>
+    public StreamSubscriber? Convert(string ffmpegArguments)
     {
         var queue = new ConcurrentQueue<(byte[], int, int)>();
         var updateSemaphore = new SemaphoreSlim(1, 1);
@@ -32,9 +32,7 @@ public class FFmpegEncoder
         };
 
         Process = Process.Start(processStartInfo);
-        if (Process == null)
-            return Result<StreamSubscriber, FFmpegError>
-                .Error(FFmpegError.UnableToOpen);
+        if (Process == null) return null;
 
         var streamSubscriber = new StreamSubscriber
         {
@@ -53,8 +51,7 @@ public class FFmpegEncoder
             await InnerStreamSpreader.CloseAsync();
         });
 
-        return Result<StreamSubscriber, FFmpegError>.Success(
-            streamSubscriber);
+        return streamSubscriber;
 
         async Task CloseCall()
         {
@@ -84,7 +81,7 @@ public class FFmpegEncoder
 
     public void Cleanup()
     {
-        InnerStreamSpreader.Clean();
+        InnerStreamSpreader.Dispose();
         Process?.Close();
     }
 }

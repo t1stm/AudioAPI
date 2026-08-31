@@ -1,114 +1,80 @@
-using Gaida.Core.Platforms.Errors;
+using System.Runtime.CompilerServices;
+using Gaida.Core.Platforms;
 using Gaida.Core.Platforms.Optional.Supports;
 using Gaida.Core.Utils;
-using Result;
 using Serilog;
 using YoutubeExplode;
 using YoutubeExplode.Common;
-using Gaida.Core.Platforms;
 
 namespace Gaida.Platforms.YouTube.Search_Providers;
 
 public sealed class YouTubeSearchProviderExplode(ILogger logger) : SearchProvider(logger),
     ISupportsID, ISupportsPlaylist, ISupportsSearch
 {
+    private const int MaxKeywordResults = 15;
     public static YoutubeClient Client { get; } = new();
-    public override string Name => "YouTube Explode";
     public override string PlatformIdentifier => "yt://";
     public override int Priority => 40;
 
-    public async Task<Result<PlatformResult, SearchError>> TryID(string id, CancellationToken token)
+    public async Task<PlatformResult?> GetByIdAsync(string id, CancellationToken cancellationToken = default)
     {
-        try
+        var video = await Client.Videos.GetAsync(id, cancellationToken);
+
+        return new YouTubeResult
         {
-            var youtubeClient = Client;
-            var video = await youtubeClient.Videos.GetAsync(id, token);
+            ID = PlatformIdentifier + id,
+            Name = video.Title,
+            Artist = video.Author.ChannelTitle,
+            Duration = video.Duration.GetValueOrDefault(TimeSpan.Zero),
+            ThumbnailUrl = BestThumbnail(video.Thumbnails),
+            Downloaders = ContentDownloaders
+        };
+    }
 
+    public async IAsyncEnumerable<PlatformResult> SearchPlaylist(string playlistUrl,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var playlistID = playlistUrl.AsSpan()
+            .SliceAfter("list=")
+            .SliceTo("&")
+            .ToString();
 
-            return Result<PlatformResult, SearchError>.Success(new YouTubeResult
+        await foreach (var batch in Client.Playlists.GetVideoBatchesAsync(playlistID, cancellationToken))
+        foreach (var video in batch.Items)
+            yield return new YouTubeResult
             {
+                ID = PlatformIdentifier + video.Id,
                 Name = video.Title,
                 Artist = video.Author.ChannelTitle,
                 Duration = video.Duration.GetValueOrDefault(TimeSpan.Zero),
-                ID = PlatformIdentifier + id,
-                ThumbnailUrl = RemoveTracking(video.Thumbnails.OrderByDescending(t => t.Resolution.Area).First().Url),
+                ThumbnailUrl = BestThumbnail(video.Thumbnails),
                 Downloaders = ContentDownloaders
-            });
-        }
-        catch(Exception e)
-        {
-            Log.Error("Failed to get video with ID: {@Id} with exception: {Exception}", id, e);
-            return Result<PlatformResult, SearchError>.Error(SearchError.GenericError);
-        }
+            };
     }
 
-    public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchPlaylist(string playlistUrl,
-        CancellationToken cancellationToken)
+    public async IAsyncEnumerable<PlatformResult> SearchKeywords(string keywords,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        try
+        var returned = 0;
+        await foreach (var video in Client.Search.GetVideosAsync(keywords, cancellationToken))
         {
-            var youtubeClient = new YoutubeClient();
-            var playlistID = playlistUrl
-                .SliceAfter("list=")
-                .SliceTo("&");
-
-            var playlistResults = new List<PlatformResult>();
-            await foreach (var video in youtubeClient.Playlists.GetVideoBatchesAsync(playlistID, cancellationToken))
+            yield return new YouTubeResult
             {
-                var items = video.Items;
-                playlistResults.AddRange(items.Select(v => new YouTubeResult
-                {
-                    ID = PlatformIdentifier + v.Id,
-                    Name = v.Title,
-                    Artist = v.Author.ChannelTitle,
-                    Duration = v.Duration.GetValueOrDefault(TimeSpan.Zero),
-                    Downloaders = ContentDownloaders,
-                    ThumbnailUrl = RemoveTracking(v.Thumbnails.OrderByDescending(t => t.Resolution.Area).First().Url)
-                }));
-            }
+                ID = PlatformIdentifier + video.Id,
+                Name = video.Title,
+                Artist = video.Author.ChannelTitle,
+                Duration = video.Duration.GetValueOrDefault(TimeSpan.Zero),
+                ThumbnailUrl = BestThumbnail(video.Thumbnails),
+                Downloaders = ContentDownloaders
+            };
 
-            return Result<IEnumerable<PlatformResult>, SearchError>.Success(playlistResults);
-        }
-        catch(Exception e)
-        {
-            Log.Error("Failed to get playlist with URL: {@Url} with exception: {Exception}", playlistUrl, e);
-            return Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.GenericError);
+            if (++returned >= MaxKeywordResults) yield break;
         }
     }
 
-    public bool IsPlaylistUrl(ReadOnlySpan<char> query)
+    /// <summary>Highest resolution thumbnail, without the tracking query string.</summary>
+    private static string BestThumbnail(IReadOnlyList<Thumbnail> thumbnails)
     {
-        throw new NotSupportedException();
-    }
-
-    public async Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchKeywords(string keywords,
-        CancellationToken token)
-    {
-        try
-        {
-            var youtubeClient = new YoutubeClient();
-            var results = await youtubeClient.Search.GetVideosAsync(keywords, token).CollectAsync(15);
-            return Result<IEnumerable<PlatformResult>, SearchError>.Success(
-                results.Select(video => new YouTubeResult
-                {
-                    ID = PlatformIdentifier + video.Id,
-                    Name = video.Title,
-                    Artist = video.Author.ChannelTitle,
-                    Duration = video.Duration.GetValueOrDefault(TimeSpan.Zero),
-                    ThumbnailUrl =
-                        RemoveTracking(video.Thumbnails.OrderByDescending(t => t.Resolution.Area).First().Url),
-                    Downloaders = ContentDownloaders
-                }));
-        }
-        catch(Exception e)
-        {
-            Log.Error("Failed to search for keywords: {@Keywords} with exception: {Exception}", keywords, e);
-            return Result<IEnumerable<PlatformResult>, SearchError>.Error(SearchError.GenericError);
-        }
-    }
-
-    private static string RemoveTracking(string thumbnailUrl)
-    {
-        return thumbnailUrl.SliceTo("?");
+        return thumbnails.MaxBy(t => t.Resolution.Area)!.Url.AsSpan().SliceTo("?").ToString();
     }
 }

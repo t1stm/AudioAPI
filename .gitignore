@@ -1,4 +1,7 @@
-.idea 
+.idea
 bin/
 obj/
 .env
+.env.json
+*.user
+Gaida.API/cache/

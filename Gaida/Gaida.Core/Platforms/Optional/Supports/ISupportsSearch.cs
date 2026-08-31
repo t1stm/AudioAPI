@@ -1,10 +1,8 @@
-using Gaida.Core.Platforms.Errors;
-using Result;
-
 namespace Gaida.Core.Platforms.Optional.Supports;
 
 public interface ISupportsSearch
 {
-    public Task<Result<IEnumerable<PlatformResult>, SearchError>> TrySearchKeywords(string keywords,
+    /// <returns>Results as they arrive. An empty sequence means nothing was found.</returns>
+    public IAsyncEnumerable<PlatformResult> SearchKeywords(string keywords,
         CancellationToken cancellationToken = default);
 }

@@ -1,129 +1,69 @@
+using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.Timers;
 using Gaida.Core;
 using Gaida.Core.FFmpeg;
 using Gaida.Platforms.MusicDatabase;
 using Gaida.Platforms.YouTube;
-using Timer = System.Timers.Timer;
 using ILogger = Serilog.ILogger;
+using Timer = System.Timers.Timer;
 
 namespace Gaida.API;
 
 public class ManagerService
 {
-    public ILogger Logger { get; }
-    private readonly ReaderWriterLockSlim _lock = new(LockRecursionPolicy.SupportsRecursion);
-
-    protected readonly Dictionary<string, FFmpegEncoder> CachedEncoders = new();
-    public readonly Timer ExpireTimer;
-    protected readonly Dictionary<FFmpegEncoder, DateTime> ExpireTimes = new();
+    protected readonly ConcurrentDictionary<string, FFmpegEncoder> CachedEncoders = new();
+    protected readonly ConcurrentDictionary<string, DateTime> ExpireTimes = new();
     public readonly AudioManager Manager;
 
     public ManagerService(ILogger logger)
     {
         Logger = logger;
         Manager = new AudioManager(logger);
-        Manager.Initialize();
 
-        Manager.RegisterPlatform<MusicDatabase>();
-        Manager.RegisterPlatform<YouTube>();
+        Manager.RegisterPlatform(new MusicDatabase(logger));
+        Manager.RegisterPlatform(new YouTube(logger));
 
-        ExpireTimer = new Timer();
-        ExpireTimer.Interval = 60 * 1000;
+        ExpireTimer = new Timer(TimeSpan.FromMinutes(1)) { Enabled = true };
         ExpireTimer.Elapsed += ExpireFFmpegSessions;
     }
 
-    protected int GetKey(ReadOnlySpan<char> codec, int bitrate, ReadOnlySpan<char> id, Span<char> destination)
+    public ILogger Logger { get; }
+    public Timer ExpireTimer { get; }
+
+    public static string EncoderKey(string codec, int bitrate, string id)
     {
-        const int wantedMaxLength = 128;
-        const int maxCodecLength = 32;
-        const int maxBitrateLength = 11; // this is the max length of an int32 when stringified with a negative sign
-        const int maxIDLength = wantedMaxLength - maxCodecLength - maxBitrateLength;
-
-        if (codec.Length > maxCodecLength || id.Length > maxIDLength) return -1;
-
-        Span<char> bitrateString = stackalloc char[maxBitrateLength];
-
-        codec.CopyTo(destination);
-        bitrate.TryFormat(bitrateString, out _);
-        bitrateString.CopyTo(destination[codec.Length..]);
-        id.CopyTo(destination[(codec.Length + bitrateString.Length)..]);
-
-        return codec.Length + bitrateString.Length + id.Length;
+        return $"{codec}-{bitrate}-{id}";
     }
 
-    public (string key, FFmpegEncoder encoder) CreateNewEncoder(ReadOnlySpan<char> codec, int bitrate,
-        ReadOnlySpan<char> id)
+    public FFmpegEncoder CreateEncoder(string key)
     {
-        Span<char> buffer = stackalloc char[128];
-        var keyLength = GetKey(codec, bitrate, id, buffer);
-        if (keyLength == -1) throw new ArgumentException("Codec or ID is too long");
-
-        ReadOnlySpan<char> key = buffer[..keyLength];
-        var alternativeLookup = CachedEncoders.GetAlternateLookup<ReadOnlySpan<char>>();
-
-        _lock.EnterReadLock();
-        if (alternativeLookup.TryGetValue(key, out var encoder))
-            return (key.ToString(), encoder);
-        _lock.ExitReadLock();
-
-        _lock.EnterWriteLock();
-        alternativeLookup.TryAdd(key, encoder = new FFmpegEncoder());
-        _lock.ExitWriteLock();
-
-        return (key.ToString(), encoder);
+        return CachedEncoders.GetOrAdd(key, _ => new FFmpegEncoder());
     }
 
-    public bool TryGetEncoder(ReadOnlySpan<char> codec, int bitrate, ReadOnlySpan<char> id,
-        [NotNullWhen(true)] out FFmpegEncoder? encoder)
+    public bool TryGetEncoder(string key, [NotNullWhen(true)] out FFmpegEncoder? encoder)
     {
-        Span<char> buffer = stackalloc char[128];
-        var keyLength = GetKey(codec, bitrate, id, buffer);
-        if (keyLength == -1)
-        {
-            encoder = null;
-            return false;
-        }
-
-        ReadOnlySpan<char> key = buffer[..keyLength];
-        return TryGetEncoder(key, out encoder);
+        return CachedEncoders.TryGetValue(key, out encoder);
     }
 
-    public bool TryGetEncoder(ReadOnlySpan<char> key, [NotNullWhen(true)] out FFmpegEncoder? encoder)
+    public void ExpireIn(string key, TimeSpan after)
     {
-        var alternativeLookup = CachedEncoders.GetAlternateLookup<ReadOnlySpan<char>>();
-
-        _lock.EnterReadLock();
-        var result = alternativeLookup.TryGetValue(key, out encoder);
-        _lock.ExitReadLock();
-
-        return result;
+        ExpireTimes[key] = DateTime.UtcNow.Add(after);
     }
 
-    public void ExpireFFmpegSessions(object? sender, ElapsedEventArgs elapsedEventArgs)
+    protected void ExpireFFmpegSessions(object? sender, ElapsedEventArgs elapsedEventArgs)
     {
-        _lock.EnterWriteLock();
+        var now = DateTime.UtcNow;
 
-        var expireCopy = ExpireTimes.ToDictionary();
-        var now = DateTime.Now;
-
-        foreach (var (ffmpegEncoder, expire) in expireCopy)
+        foreach (var (key, expire) in ExpireTimes)
         {
             if (expire > now) continue;
-            ExpireTimes.Remove(ffmpegEncoder);
 
-            var pair = CachedEncoders.FirstOrDefault(kvp => kvp.Value == ffmpegEncoder);
-            CachedEncoders.Remove(pair.Key);
-            pair.Value.Cleanup();
+            ExpireTimes.TryRemove(key, out _);
+            if (!CachedEncoders.TryRemove(key, out var encoder)) continue;
+
+            Logger.Information("Disposing expired ffmpeg session: {Key}", key);
+            encoder.Cleanup();
         }
-
-        _lock.ExitWriteLock();
-    }
-
-    public void AddNewExpireSession(FFmpegEncoder encoder, DateTime expireDate)
-    {
-        _lock.EnterWriteLock();
-        ExpireTimes.Add(encoder, expireDate);
-        _lock.ExitWriteLock();
     }
 }
