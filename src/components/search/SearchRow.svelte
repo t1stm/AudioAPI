@@ -126,13 +126,17 @@
 				>
 					Play next
 				</button>
-				<a
-					href={result.contentUrl}
-					download
-					class="flex items-center gap-2 rounded-art px-2 py-1.5 text-xs hover:bg-surface-200"
-				>
-					<Icon src={ArrowDownTray} mini size="14" /> Download raw
-				</a>
+				<!-- room queue items carry no contentUrl; hide the action rather than
+				     linking nowhere -->
+				{#if result.contentUrl}
+					<a
+						href={result.contentUrl}
+						download
+						class="flex items-center gap-2 rounded-art px-2 py-1.5 text-xs hover:bg-surface-200"
+					>
+						<Icon src={ArrowDownTray} mini size="14" /> Download raw
+					</a>
+				{/if}
 				<button
 					type="button"
 					class="flex items-center gap-2 rounded-art px-2 py-1.5 text-left text-xs hover:bg-surface-200"

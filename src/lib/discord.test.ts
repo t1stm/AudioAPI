@@ -41,15 +41,17 @@ describe('discord activity detection', () => {
 
 		expect(audioApi).toBe('/.proxy/api/Audio');
 
-		const [yt, api, other, none] = proxyThumbnails([
+		const [yt, api, cover, other, none] = proxyThumbnails([
 			thumb('https://i9.ytimg.com/vi/abc/hq.jpg?sqp=1'),
 			thumb('https://api.gergov.bg/Audio/Art?id=1'),
+			thumb('https://gergov.bg/Album_Covers/asdf.png'),
 			thumb('https://example.com/a.png'),
 			thumb(null)
 		]);
 
 		expect(yt.thumbnailUrl).toBe('/.proxy/ytimg/i9/vi/abc/hq.jpg?sqp=1');
 		expect(api.thumbnailUrl).toBe('/.proxy/api/Audio/Art?id=1');
+		expect(cover.thumbnailUrl).toBe('/.proxy/covers/asdf.png');
 		expect(other.thumbnailUrl).toBe('https://example.com/a.png');
 		expect(none.thumbnailUrl).toBe(null);
 	});

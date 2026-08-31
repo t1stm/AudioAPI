@@ -47,9 +47,14 @@ export default ts.config(
 		}
 	},
 	{
-		// resolve() types accept a route, not a query string, so search and artist
-		// links resolve the route and append ?term= themselves.
-		files: ['src/routes/(app)/+page.svelte', 'src/components/ArtistLink.svelte'],
+		// resolve() types accept a route, not a query string, so search, artist and
+		// room links resolve the route and append their own query.
+		files: [
+			'src/routes/(app)/+page.svelte',
+			'src/routes/(app)/+layout.svelte',
+			'src/routes/(app)/rooms/+page.svelte',
+			'src/components/ArtistLink.svelte'
+		],
 		rules: {
 			'svelte/no-navigation-without-resolve': 'off'
 		}

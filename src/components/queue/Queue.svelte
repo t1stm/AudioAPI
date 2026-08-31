@@ -4,6 +4,7 @@
 	import audio from '$states/audio.svelte';
 	import current from '$states/current.svelte';
 	import queue from '$states/queue.svelte';
+	import session from '$states/session.svelte';
 	import type { SearchResult } from '$states/search.svelte';
 	import ArtistLink from '$components/ArtistLink.svelte';
 
@@ -60,12 +61,8 @@
 	}
 </script>
 
-<section class="flex h-full flex-col overflow-hidden rounded-panel border border-haze bg-surface-100/95 p-3 text-chalk backdrop-blur-xl">
-	<div class="flex items-center justify-between border-b border-haze pb-2">
-		<h2 class="eyebrow text-primary-500">Queue</h2>
-		<span class="font-mono text-xs text-fog">{items.length} tracks</span>
-	</div>
-
+<!-- the dock owns the panel chrome and the tab strip; this is only its body -->
+<section class="flex min-h-0 flex-1 flex-col overflow-hidden">
 {#if items.length === 0}
 		<p class="mt-4 max-w-64 text-sm text-fog">
 			Queue’s empty. Add something from <a class="text-primary-500 underline-offset-4 hover:underline" href={resolve('/search')}>search</a>, or
@@ -147,9 +144,12 @@
 		<button type="button" class="rounded-[5px] border border-haze px-2 py-1 text-xs font-semibold hover:bg-surface-200" onclick={() => queue.shuffle()}>
 			Shuffle
 		</button>
-		<button type="button" class="rounded-[5px] border border-haze px-2 py-1 text-xs font-semibold text-fog hover:bg-surface-200 hover:text-chalk" onclick={() => queue.clear()}>
-			Clear
-		</button>
+		{#if !session.inRoom}
+			<!-- the protocol has no clear -->
+			<button type="button" class="rounded-[5px] border border-haze px-2 py-1 text-xs font-semibold text-fog hover:bg-surface-200 hover:text-chalk" onclick={() => queue.clear()}>
+				Clear
+			</button>
+		{/if}
 	</footer>
 	{/if}
 </section>

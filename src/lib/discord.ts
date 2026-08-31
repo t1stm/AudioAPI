@@ -17,7 +17,20 @@ export const isDiscordActivity =
  */
 export const audioApi = isDiscordActivity ? '/.proxy/api/Audio' : 'https://api.gergov.bg/Audio';
 
+/**
+ * Socket URL for an API path. Browser-only: `audioApi` may be a proxy path, so
+ * the origin has to come from `location`. `https` becomes `wss`, `http` `ws`.
+ * Discord passes websocket upgrades through the same `/api` mapping, so the
+ * activity needs no extra Developer Portal entry.
+ */
+export function audioWsUrl(path: string) {
+	return new URL(audioApi + path, location.origin).href.replace(/^http/, 'ws');
+}
+
 const YTIMG = '.ytimg.com';
+// ponytail: temporary — the API hands out absolute cover URLs on a host the
+// activity cannot reach. Drop this once it returns paths relative to the API.
+const ALBUM_COVERS = '/Album_Covers/';
 
 /** Rewrites an absolute URL the API handed us onto the Discord proxy. */
 function proxied(url: string | null): string | null {
@@ -30,6 +43,8 @@ function proxied(url: string | null): string | null {
 	}
 	const { hostname, pathname, search } = parsed;
 	if (hostname === 'api.gergov.bg') return `/.proxy/api${pathname}${search}`;
+	if (hostname === 'gergov.bg' && pathname.startsWith(ALBUM_COVERS))
+		return `/.proxy/covers/${pathname.slice(ALBUM_COVERS.length)}${search}`;
 	if (hostname.endsWith(YTIMG))
 		return `/.proxy/ytimg/${hostname.slice(0, -YTIMG.length)}${pathname}${search}`;
 	// ponytail: unmapped host stays as-is — the iframe blocks it and the <img>
@@ -43,6 +58,9 @@ export function proxyThumbnails<T extends SearchResult>(results: T[]): T[] {
 }
 
 export let sdk: DiscordSDK | null = null;
+
+/** Name and avatar of whoever launched the activity, once `initDiscord` ran. */
+export let discordUser: { name: string; avatarUrl: string | null } | null = null;
 
 /**
  * Handshakes with the Discord client. Without `ready()` the activity sits on
@@ -61,5 +79,30 @@ export async function initDiscord() {
 	}
 
 	sdk = new DiscordSDK(clientId);
+	// READY carries the basic user object — no scopes, no OAuth code exchange, so
+	// no token endpoint on the API. `subscribe` registers READY listeners on the
+	// bus synchronously (it skips the RPC round trip for this one event), so this
+	// is in place before the handshake reply lands.
+	void sdk.subscribe('READY', ({ user }) => {
+		if (!user) return;
+		discordUser = {
+			name: user.username,
+			// ponytail: no avatar means no URL — the header falls back to its icon.
+			avatarUrl: user.avatar
+				? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=64`
+				: null
+		};
+	});
 	await sdk.ready();
+}
+
+/**
+ * Readable without authenticating, which is what the room mapping runs on.
+ * A real channel name needs `sdk.commands.authenticate()`, and that needs a
+ * server-side OAuth code exchange the API does not have yet. The launching
+ * user's own name and avatar do not — see `discordUser`.
+ */
+export function discordIds() {
+	if (!sdk) return null;
+	return { instanceId: sdk.instanceId, channelId: sdk.channelId, guildId: sdk.guildId };
 }

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import audio from '$states/audio.svelte';
 	import current from '$states/current.svelte';
+	import session from '$states/session.svelte';
 
 	import { getTimeString } from '$lib';
 	import { SliderInteractions } from '$lib/sliderInteractions.svelte.js';
@@ -8,8 +9,17 @@
 	const seekSeconds = 2;
 	const slider = new SliderInteractions(seekSeconds);
 
+	// dragging fires on every mousemove; in a room that would be sixty seeks a
+	// second for everybody, so only the position you settle on is broadcast
+	let seekTimer: ReturnType<typeof setTimeout> | undefined;
 	slider.onChange = () => {
-		audio.currentSeconds = (slider.percentage / 100) * current.lengthSeconds;
+		const seconds = (slider.percentage / 100) * current.lengthSeconds;
+		if (!session.inRoom) {
+			audio.currentSeconds = seconds;
+			return;
+		}
+		clearTimeout(seekTimer);
+		seekTimer = setTimeout(() => session.send(`seek ${seconds}`), 150);
 	};
 
 	let buffered = $derived(current.lengthSeconds > 0 ? (audio.bufferedSeconds / current.lengthSeconds) * 100 : 0);

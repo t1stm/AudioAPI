@@ -6,7 +6,17 @@ class Queue {
 	items: SearchResult[] = $state([]);
 	currentIndex: number = $state(0);
 
+	/**
+	 * Set by the session while it owns the room socket. Every verb below becomes
+	 * a command and the server's broadcast writes the list back — nothing mutates
+	 * locally, so the queue is never briefly a fiction. Commands are
+	 * fire-and-forget: there is no acknowledgement and no error frame.
+	 */
+	remote: ((command: string) => void) | null = null;
+
 	add(item: SearchResult) {
+		if (this.remote) return this.remote(`add ${item.id}`);
+
 		if (
 			this.items.length > 0 &&
 			this.currentIndex + 1 >= this.items.length &&
@@ -31,6 +41,7 @@ class Queue {
 
 	removeIndex(index: number) {
 		if (index < 0 || index >= this.items.length) return;
+		if (this.remote) return this.remote(`remove ${index}`);
 		const wasCurrent = index === this.currentIndex;
 
 		this.items.splice(index, 1);
@@ -47,6 +58,9 @@ class Queue {
 	}
 
 	playNow(item: SearchResult) {
+		// the protocol appends and jumps separately; the broadcast queue lands first
+		if (this.remote) return this.remote(`add ${item.id}`);
+
 		const insertAt = this.items.length > 0 ? this.currentIndex + 1 : 0;
 		this.items.splice(insertAt, 0, item);
 		this.currentIndex = insertAt;
@@ -54,6 +68,8 @@ class Queue {
 	}
 
 	playNext(item: SearchResult) {
+		if (this.remote) return this.remote(`add ${item.id}`);
+
 		if (this.items.length === 0) {
 			this.items.push(item);
 			this.setCurrent();
@@ -65,11 +81,14 @@ class Queue {
 
 	playIndex(index: number) {
 		if (index < 0 || index >= this.items.length) return;
+		if (this.remote) return this.remote(`skipto ${index}`);
 		this.currentIndex = index;
 		this.setCurrent();
 	}
 
 	setNext(targetIndex: number) {
+		if (this.remote) return this.remote(`setnext ${targetIndex}`);
+
 		const items = this.items;
 
 		if (targetIndex === this.currentIndex || targetIndex >= items.length || targetIndex < 0) return;
@@ -82,6 +101,8 @@ class Queue {
 	}
 
 	shuffle() {
+		if (this.remote) return this.remote('shuffle');
+
 		const firstUpcoming = this.currentIndex + 1;
 		if (this.items.length - firstUpcoming < 2) return;
 
@@ -104,6 +125,7 @@ class Queue {
 	}
 
 	previousTrack() {
+		if (this.remote) return this.remote('previous');
 		if (this.items.length < 1) return;
 
 		if (this.currentIndex > this.items.length) this.currentIndex = this.items.length - 1;
@@ -118,6 +140,7 @@ class Queue {
 	}
 
 	nextTrack() {
+		if (this.remote) return this.remote('next');
 		if (this.items.length < 1) return;
 
 		if (this.currentIndex + 1 >= this.items.length) {
