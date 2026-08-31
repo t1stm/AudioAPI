@@ -10,6 +10,9 @@ const gitignorePath = fileURLToPath(new URL('./.gitignore', import.meta.url));
 
 export default ts.config(
 	includeIgnoreFile(gitignorePath),
+	{
+		ignores: ['.svelte-kit/', 'build/']
+	},
 	js.configs.recommended,
 	...ts.configs.recommended,
 	...svelte.configs.recommended,
@@ -34,6 +37,21 @@ export default ts.config(
 				parser: ts.parser,
 				svelteConfig
 			}
+		}
+	},
+	{
+		files: ['src/components/search/SearchRow.svelte'],
+		rules: {
+			// Raw source URLs come from the API and may be external, so they cannot use SvelteKit's route resolver.
+			'svelte/no-navigation-without-resolve': 'off'
+		}
+	},
+	{
+		// resolve() types accept a route, not a query string, so search and artist
+		// links resolve the route and append ?term= themselves.
+		files: ['src/routes/(app)/+page.svelte', 'src/components/ArtistLink.svelte'],
+		rules: {
+			'svelte/no-navigation-without-resolve': 'off'
 		}
 	}
 );

@@ -1,7 +1,10 @@
 <script lang="ts">
 	import current from '$states/current.svelte';
-	import empty from '/static/empty.png';
+	import ArtistLink from '$components/ArtistLink.svelte';
 
+
+	// static/ is served at the root; '/static/empty.png' 404s.
+	const empty = '/empty.png';
 	let thumbnail = $derived(current.thumbnail?.length > 0 ? current.thumbnail : empty);
 
   $effect(() => {
@@ -13,14 +16,20 @@
   })
 </script>
 
-<div id="track-info" class="flex items-center gap-1.5">
-	<div class="flex flex-col">
-		<span class="text-primary-500 font-bold text-xs text-right select-none">{current.name}</span>
-		<span class="text-surface-500 text-xs text-right select-none">{current.artist}</span>
+{#if current.name}
+	<div id="track-info" class="flex min-w-0 max-w-56 shrink items-center gap-2">
+	<div class="flex min-w-0 flex-col">
+		<span class="truncate text-right text-xs font-semibold text-chalk select-none">{current.name}</span>
+		<span class="truncate text-right text-xs text-fog"><ArtistLink artist={current.artist} /></span>
 	</div>
 	<img
 		src={thumbnail}
-		alt="Current Song's Album Cover"
-		class="size-10 object-contain rounded-md hidden md:flex"
+		alt=""
+		class="hidden size-10 shrink-0 rounded-art object-cover md:block"
+		onerror={(event: Event) => {
+			const image = event.currentTarget as HTMLImageElement;
+			if (!image.src.endsWith(empty)) image.src = empty;
+		}}
 	/>
 </div>
+{/if}

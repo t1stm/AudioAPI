@@ -11,6 +11,12 @@
 	bind:volume={audio.volume}
 	bind:currentTime={audio.currentSeconds}
 	autoplay
+	onloadstart={() => {
+		// bufferedSeconds only ever climbs, so it has to go back to zero with the
+		// resource it describes — otherwise the next track inherits this one's
+		// buffer and the gauge never fills again.
+		audio.bufferedSeconds = 0;
+	}}
 	onprogress={(event) => {
 		const player = event.currentTarget;
 		const buffer = player.buffered;

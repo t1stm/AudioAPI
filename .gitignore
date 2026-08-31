@@ -26,3 +26,7 @@ dist-ssr
 # Include only SCSS files.
 *.css
 *.css.map
+
+# Build output
+.svelte-kit
+build

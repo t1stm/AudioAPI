@@ -4,4 +4,4 @@ type User = {
 };
 
 const initialState: User | null = null;
-export let user = $state(initialState);
+export const user = $state(initialState);

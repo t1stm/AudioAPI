@@ -41,7 +41,7 @@
   })
 </script>
 
-<div id="controls" class="flex gap-2">
+<div id="controls" class="flex shrink-0 gap-2">
 	{#each buttons as button (button.icon)}
 		<button
 			class="cursor-pointer ring-0 focus-visible:bg-surface-300 focus-visible:outline-5 outline-surface-300 rounded-lg duration-75"

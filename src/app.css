@@ -5,8 +5,13 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-	--color-dark-0: #080811;
+	--color-dark-0: #06060d;
 	--color-light-0: #ffffff;
+	--color-gold: #e8b04b;
+	--color-ember: #e85a4b;
+	--color-haze: #2a2638;
+	--color-fog: #9b96ad;
+	--color-chalk: #e9e6f2;
 
 	--color-primary-0: #8171fc;
 	--color-primary-100: #9280fd;
@@ -14,13 +19,98 @@
 	--color-primary-300: #b09ffe;
 	--color-primary-400: #beaeff;
 	--color-primary-500: #ccbeff;
+	--color-primary-600: #6b57f5;
 
-	--color-surface-0: #28243a;
-	--color-surface-100: #3d394d;
-	--color-surface-200: #524e61;
-	--color-surface-300: #696576;
-	--color-surface-400: #807d8c;
+	--color-surface-0: #14121f;
+	--color-surface-100: #1b1828;
+	--color-surface-200: #28243a;
+	--color-surface-300: #3d394d;
+	--color-surface-400: #696576;
 	--color-surface-500: #9895a2;
+
+	/* radii carry the hierarchy: panels step down to rows, rows down to artwork */
+	--radius-panel: 8px;
+	--radius-row: 6px;
+	--radius-art: 4px;
+
+	--font-display: 'Unbounded', 'Golos Text', ui-sans-serif, system-ui, sans-serif;
+	--font-body: 'Golos Text', ui-sans-serif, system-ui, sans-serif;
+	--font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* Names of things people made get the humanist face; facts the machine
+   measured get the mono — and the digits line up down every column. */
+.font-mono {
+	font-variant-numeric: tabular-nums;
+}
+
+/* The scrolling body of every route. Sections are flex items, and any section
+   with its own overflow reports a zero automatic minimum size — without the
+   shrink lock a tall page squashes its sections instead of scrolling. */
+@utility page {
+	display: flex;
+	width: 100%;
+	height: 100%;
+	flex-direction: column;
+	overflow-y: auto;
+
+	& > * {
+		flex-shrink: 0;
+	}
+}
+
+/* The rain gauge. The API transcodes on demand, so the first seconds of a new
+   track are a real wait — name it instead of hiding it behind a spinner. */
+@keyframes rain-fall {
+	to {
+		top: 100%;
+	}
+}
+
+@utility rain-streak {
+	position: absolute;
+	inset-inline: 0;
+	top: -100%;
+	height: 100%;
+	background: linear-gradient(
+		to bottom,
+		transparent,
+		color-mix(in srgb, var(--color-primary-0) 12%, transparent) 40%,
+		var(--color-primary-0)
+	);
+	animation: rain-fall 1.5s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.rain-streak {
+		top: 0;
+		opacity: 0.35;
+		animation: none;
+	}
+}
+
+/* Every structural label in the app: group heads, zone names, hero eyebrows. */
+@utility eyebrow {
+	font-family: var(--font-mono);
+	font-size: 0.68rem;
+	line-height: 1.4;
+	letter-spacing: 0.13em;
+	text-transform: uppercase;
+	color: var(--color-fog);
+}
+
+@media (min-width: 1024px) {
+	.queue-open {
+		margin-right: 396px;
+	}
+}
+
+/* Firefox implements none of the ::-webkit-scrollbar rules below. It takes
+   these two instead, and both inherit, so every scroll container picks them up.
+   A transparent track keeps its default light rail off the dark ground. */
+:root {
+	scrollbar-width: thin;
+	scrollbar-color: var(--color-primary-600) transparent;
 }
 
 ::-webkit-scrollbar {
@@ -29,18 +119,17 @@
 }
 
 ::-webkit-scrollbar-track {
-	border-radius: 10px;
-	background-color: #28243a;
+	background-color: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
 	width: 100px;
 	border-radius: 10px;
-	background-color: #8171fc;
+	background-color: var(--color-primary-600);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-	background-color: #ccbeff;
+	background-color: var(--color-primary-100);
 }
 
 ::-webkit-scrollbar-button {
