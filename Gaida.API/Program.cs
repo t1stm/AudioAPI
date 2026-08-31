@@ -21,6 +21,11 @@ foreach (var key in (string[]) ["DOMAIN", "STORAGE", "ALBUM_COVERS"])
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddSerilog();
+var configuredOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+builder.Services.AddCors(options => options.AddPolicy("Frontend", policy => policy
+    .SetIsOriginAllowed(origin => IsFrontendOrLocalVite(origin, configuredOrigins))
+    .AllowAnyHeader()
+    .AllowAnyMethod()));
 
 builder.Services.AddSingleton(Log.Logger);
 builder.Services.AddSingleton<ManagerService>();
@@ -30,11 +35,7 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment()) app.MapOpenApi();
 
-app.UseCors(b => b
-    .AllowAnyHeader()
-    .AllowAnyMethod()
-    .AllowAnyOrigin()
-);
+app.UseCors("Frontend");
 
 app.UseWebSockets(new WebSocketOptions
 {
@@ -48,3 +49,15 @@ app.Services.GetRequiredService<MultiplayerManager>();
 app.UseAuthorization();
 app.MapControllers();
 app.Run();
+
+static bool IsFrontendOrLocalVite(string origin, IReadOnlyCollection<string> configuredOrigins)
+{
+    if (configuredOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase)) return true;
+    if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return false;
+
+    return uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+           uri.Host.Equals("127.0.0.1", StringComparison.Ordinal) ||
+           uri.Host.Equals("::1", StringComparison.Ordinal) ||
+           uri.Host.Equals("gergov.bg", StringComparison.OrdinalIgnoreCase) ||
+           uri.Host.EndsWith(".gergov.bg", StringComparison.OrdinalIgnoreCase);
+}

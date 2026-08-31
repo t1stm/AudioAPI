@@ -4,6 +4,7 @@ namespace Gaida.Core.Streams;
 public class StreamSpreader : Stream
 {
     protected readonly List<(byte[], int, int)> Data = [];
+    private readonly TaskCompletionSource ClosedCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
     protected readonly Queue<StreamSubscriber> RemoveQueue = new();
     protected readonly SemaphoreSlim Semaphore = new(1, 1);
     protected readonly List<StreamSubscriber> Subscribers = [];
@@ -37,6 +38,7 @@ public class StreamSpreader : Stream
             await Semaphore.WaitAsync();
             Closed = true;
             await SyncSubscribers();
+            ClosedCompletion.TrySetResult();
         }
         finally
         {
@@ -50,6 +52,7 @@ public class StreamSpreader : Stream
         {
             Semaphore.Wait();
             Data.Add((buffer.ToArray(), offset, count));
+            Position += count;
             SyncSubscribers().GetAwaiter().GetResult();
         }
         finally
@@ -67,7 +70,31 @@ public class StreamSpreader : Stream
             var newArray = new byte[buffer.Length];
             buffer.CopyTo(newArray);
             Data.Add((newArray, 0, newArray.Length));
+            Position += newArray.Length;
             await SyncSubscribers();
+        }
+        finally
+        {
+            Semaphore.Release();
+        }
+    }
+
+    /// <summary>Waits until no further bytes can be written to this spreader.</summary>
+    public Task WaitForCloseAsync(CancellationToken cancellationToken = default)
+    {
+        return Closed ? Task.CompletedTask : ClosedCompletion.Task.WaitAsync(cancellationToken);
+    }
+
+    /// <summary>Returns the completed cached stream, used to satisfy HTTP byte-range requests.</summary>
+    public async Task<byte[]> GetBufferedBytesAsync(CancellationToken cancellationToken = default)
+    {
+        await Semaphore.WaitAsync(cancellationToken);
+        try
+        {
+            await using var output = new MemoryStream();
+            foreach (var (bytes, offset, length) in Data)
+                await output.WriteAsync(bytes.AsMemory(offset, length), cancellationToken);
+            return output.ToArray();
         }
         finally
         {

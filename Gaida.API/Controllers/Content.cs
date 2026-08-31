@@ -1,10 +1,9 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Text.Encodings.Web;
+using Gaida.API.Contracts;
 using Gaida.Core;
 using Gaida.Core.Platforms;
 using Gaida.Core.Streams;
-using Gaida.Core.Utils;
 using Gaida.Platforms.MusicDatabase;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,56 +11,74 @@ namespace Gaida.API.Controllers;
 
 [ApiController]
 [Route("[controller]")]
-public class Content(ILogger<Content> logger) : ControllerBase
+public class Content(ILogger<Content> logger, IConfiguration configuration, IHostEnvironment environment) : ControllerBase
 {
     [HttpGet]
     [Route("/Audio/Search")]
     [Produces("application/json")]
-    public async IAsyncEnumerable<PlatformResult> Search(string query, [FromServices] ManagerService managerService)
+    public async Task<ActionResult<IReadOnlyList<SearchResultDto>>> Search(string? query,
+        [FromServices] ManagerService managerService)
     {
-        if (string.IsNullOrWhiteSpace(query)) yield break;
+        if (string.IsNullOrWhiteSpace(query)) return Ok(Array.Empty<SearchResultDto>());
         logger.LogInformation("Searching for {Query}", query);
 
         var manager = managerService.Manager;
         var cancellationToken = HttpContext.RequestAborted;
+        var results = new List<SearchResultDto>();
 
-        switch (manager.FindQueryType(query))
+        try
         {
-            case QueryType.ID:
+            switch (manager.FindQueryType(query))
             {
-                var found = await manager.SearchID(query, cancellationToken);
-                if (found is not null) yield return found;
-                break;
-            }
+                case QueryType.ID:
+                {
+                    var found = await manager.SearchID(query, cancellationToken);
+                    AddMappedResult(results, found);
+                    break;
+                }
 
-            case QueryType.Playlist:
-            {
-                await foreach (var result in manager.SearchPlaylist(query, cancellationToken)) yield return result;
-                break;
-            }
+                case QueryType.Playlist:
+                    await AddMappedResults(results, manager.SearchPlaylist(query, cancellationToken));
+                    break;
 
-            case QueryType.Keywords:
-            default:
-            {
-                await foreach (var result in manager.SearchKeywords(query, cancellationToken)) yield return result;
-                break;
+                case QueryType.Keywords:
+                default:
+                    await AddMappedResults(results, manager.SearchKeywords(query, cancellationToken));
+                    break;
             }
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            // Discovery remains a valid JSON response even when an upstream provider is unavailable.
+            logger.LogError(exception, "Search failed for {Query}", query);
+        }
+
+        return Ok(results);
     }
 
     [HttpGet]
     [Route("/Audio/RandomResults")]
     [Produces("application/json")]
-    public IAsyncEnumerable<PlatformResult> RandomResults([FromServices] ManagerService managerService, int count = 10)
+    public async Task<ActionResult<IReadOnlyList<SearchResultDto>>> RandomResults(
+        [FromServices] ManagerService managerService, int count = 10)
     {
+        if (count is < 1 or > 200)
+            return BadRequest(new ApiErrorBody(new ApiError("invalid_count", "count must be between 1 and 200.")));
+
         logger.LogInformation("Returning {Count} random results", count);
-        return managerService.Manager.GetPlatform<MusicDatabase>()
-            .GetRandomResults(count, HttpContext.RequestAborted);
+        var results = new List<SearchResultDto>();
+        await AddMappedResults(results, managerService.Manager.GetPlatform<MusicDatabase>()
+            .GetRandomResults(count, HttpContext.RequestAborted));
+        return Ok(results);
     }
 
     [HttpGet]
     [Route("/Audio/DownloadRaw")]
-    [Produces("audio/ogg", "audio/mp3", "audio/aac", "audio/flac", "audio/mka", "audio/webm", "text/plain")]
+    [Produces("audio/ogg", "audio/mpeg", "audio/aac", "audio/flac", "audio/mka", "audio/webm", "text/plain")]
     public async Task<IActionResult> DownloadRaw(string id, [FromServices] ManagerService managerService)
     {
         if (string.IsNullOrWhiteSpace(id)) return NotFound();
@@ -75,7 +92,14 @@ public class Content(ILogger<Content> logger) : ControllerBase
         if (streamSpreader is null) return StatusCode(500);
 
         var fileId = FileId(id);
-        SetDownloadHeaders(fileId, $"raw-{fileId}");
+        var extension = result is MusicResult localResult ? Path.GetExtension(localResult.Path) : ".audio";
+        SetDownloadHeaders(fileId + extension, $"raw-{fileId}");
+
+        if (Request.Headers.Range.Count > 0)
+        {
+            var rangeResponse = await BufferedRangeResponse(streamSpreader, "application/octet-stream");
+            if (rangeResponse is not null) return rangeResponse;
+        }
 
         await StreamToResponse(streamSpreader);
 
@@ -99,11 +123,9 @@ public class Content(ILogger<Content> logger) : ControllerBase
             "Vorbis" => ("audio/ogg", "-c:a libvorbis", "-f ogg"),
             "AAC" => ("audio/aac", "-c:a aac", "-f adts"),
             "FLAC" => ("audio/flac", "-c:a flac", "-f flac"),
-            "MP3" => ("audio/mp3", "-c:a libmp3lame", "-f mp3"),
+            "MP3" => ("audio/mpeg", "-c:a libmp3lame", "-f mp3"),
             _ => ("audio/mka", "-c:a libopus", "-f mka")
         };
-
-        Response.ContentType = contentType;
 
         var key = ManagerService.EncoderKey(codec, bitrate, id);
         if (!managerService.TryGetEncoder(key, out var encoder))
@@ -123,9 +145,17 @@ public class Content(ILogger<Content> logger) : ControllerBase
         }
 
         var fileId = FileId(id);
-        SetDownloadHeaders($"{fileId}.{ffmpegOutputFormat[3..]}", $"{contentType}-{bitrate}-{fileId}");
+        var outputFileName = $"{fileId}.{ffmpegOutputFormat[3..]}";
+        SetStreamHeaders(contentType, outputFileName, $"{contentType}-{bitrate}-{fileId}");
 
-        await StreamToResponse(encoder.GetStreamSpreader(),
+        var encodedStream = encoder.GetStreamSpreader();
+        if (Request.Headers.Range.Count > 0)
+        {
+            var rangeResponse = await BufferedRangeResponse(encodedStream, contentType);
+            if (rangeResponse is not null) return rangeResponse;
+        }
+
+        await StreamToResponse(encodedStream,
             () => managerService.ExpireIn(key, TimeSpan.FromMinutes(45)));
 
         return new EmptyResult();
@@ -134,14 +164,59 @@ public class Content(ILogger<Content> logger) : ControllerBase
     /// <summary>The ID without its platform protocol, safe to put in a header.</summary>
     private static string FileId(string id)
     {
-        return UrlEncoder.Default.Encode(id.AsSpan().SliceAfter("://").ToString());
+        var separator = id.IndexOf("://", StringComparison.Ordinal);
+        var value = separator >= 0 ? id[(separator + 3)..] : id;
+        return Uri.EscapeDataString(value);
     }
 
     private void SetDownloadHeaders(string fileName, string etag)
     {
         Response.Headers.Append("Content-Disposition", $"attachment; filename={fileName}");
+        Response.Headers.AcceptRanges = "bytes";
+        SetCacheHeaders(etag);
+    }
+
+    private void SetStreamHeaders(string contentType, string fileName, string etag)
+    {
+        Response.ContentType = contentType;
+        Response.Headers.Append("Content-Disposition", $"inline; filename={fileName}");
+        Response.Headers.AcceptRanges = "bytes";
+        SetCacheHeaders(etag);
+    }
+
+    private void SetCacheHeaders(string etag)
+    {
         Response.Headers.Append("Cache-Control", "public, max-age=31536000, immutable");
         Response.Headers.ETag = $"\"{etag}\"";
+    }
+
+    /// <summary>Returns a proper 206 response from completed cached data when a browser seeks.</summary>
+    private async Task<IActionResult?> BufferedRangeResponse(StreamSpreader streamSpreader, string contentType)
+    {
+        try
+        {
+            await streamSpreader.WaitForCloseAsync(HttpContext.RequestAborted);
+            var bytes = await streamSpreader.GetBufferedBytesAsync(HttpContext.RequestAborted);
+            return File(bytes, contentType, enableRangeProcessing: true);
+        }
+        catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
+        {
+            return new EmptyResult();
+        }
+    }
+
+    private void AddMappedResult(ICollection<SearchResultDto> destination, PlatformResult? result)
+    {
+        if (result is null) return;
+        var mapped = DiscoveryResultMapper.Map(result, Request, configuration, environment);
+        if (mapped is not null) destination.Add(mapped);
+    }
+
+    private async Task AddMappedResults(ICollection<SearchResultDto> destination,
+        IAsyncEnumerable<PlatformResult> source)
+    {
+        await foreach (var result in source.WithCancellation(HttpContext.RequestAborted))
+            AddMappedResult(destination, result);
     }
 
     /// <summary>Pumps a stream spreader into the response body until the source closes or the client leaves.</summary>

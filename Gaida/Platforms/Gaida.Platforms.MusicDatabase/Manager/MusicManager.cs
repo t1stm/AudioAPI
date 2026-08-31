@@ -190,6 +190,12 @@ public partial class MusicManager(ILogger logger)
             r.OriginalAuthor is null ? null : LevenshteinDistance.RemoveFormatting(r.OriginalAuthor);
 
         var eval =
+            (romanizedArtistClean != null &&
+             LevenshteinDistance.ComputeStrict(romanizedArtistClean, termClean) < 2)
+            ||
+            (originalArtistClean != null &&
+             LevenshteinDistance.ComputeStrict(originalArtistClean, termClean) < 2)
+            ||
             (romanizedTitleClean != null &&
              (LevenshteinDistance.ComputeStrict(romanizedTitleClean, termClean) < 2 ||
               LevenshteinDistance.ComputeStrict($"{romanizedTitleClean}{romanizedArtistClean}", termClean) < 3 ||

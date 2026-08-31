@@ -1,5 +1,7 @@
 # A (Future) Game-Changing Music Listening Platform 
 
+The frontend-facing endpoint contract is documented in [API.md](API.md).
+
 ## Features
 
 * Cutting edge content delivery method for all types of users.

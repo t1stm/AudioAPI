@@ -62,17 +62,19 @@ public class AudioManager
     public Task<PlatformResult?> SearchID(string id, CancellationToken cancellationToken = default)
     {
         Logger.Information("Searching for ID: {ID}", id);
-        var idSpan = id.AsSpan().Trim();
-        Span<Range> platformSplit = stackalloc Range[2];
-        var splitCount = idSpan.Split(platformSplit, "://");
+        var normalizedId = id.Trim();
+        var separator = normalizedId.IndexOf("://", StringComparison.Ordinal);
+        if (separator < 1)
+        {
+            Logger.Warning("ID does not contain a platform protocol: {ID}", normalizedId);
+            return Task.FromResult<PlatformResult?>(null);
+        }
 
-        var splitID = idSpan[platformSplit[0]];
-        var identifier = idSpan[..(splitID.Length + 3)];
+        var identifier = normalizedId[..(separator + 3)];
+        if (SearchIDLookup.TryGetValue(identifier.AsSpan(), out var platform))
+            return platform.GetByIdAsync(normalizedId[(separator + 3)..], cancellationToken);
 
-        if (SearchIDLookup.TryGetValue(identifier, out var platform))
-            return platform.GetByIdAsync(splitCount > 1 ? idSpan[platformSplit[1]].ToString() : id, cancellationToken);
-
-        Logger.Warning("No platform found for identifier: {Identifier}", identifier.ToString());
+        Logger.Warning("No platform found for identifier: {Identifier}", identifier);
         return Task.FromResult<PlatformResult?>(null);
     }
 
@@ -99,8 +101,15 @@ public class AudioManager
         Logger.Information("Searching for playlist: {Query}", query);
         var totalResults = 0;
 
-        foreach (var platform in Platforms.Where(p => p.IsPlaylistUrl(query)).OfType<ISupportsPlaylist>())
-            await foreach (var result in platform.SearchPlaylist(query, cancellationToken)
+        var normalizedQuery = query.Trim();
+        var separator = normalizedQuery.IndexOf("://", StringComparison.Ordinal);
+        var identifier = separator < 1 ? null : normalizedQuery[..(separator + 3)];
+
+        foreach (var platform in Platforms
+                     .Where(p => p.IsPlaylistUrl(normalizedQuery) ||
+                                 (identifier is not null && p.SearchPlaylistIdentifiersLookup.Contains(identifier.AsSpan())))
+                     .OfType<ISupportsPlaylist>())
+            await foreach (var result in platform.SearchPlaylist(normalizedQuery, cancellationToken)
                                .Guarded(Logger, platform.GetType().Name, cancellationToken))
             {
                 totalResults++;
@@ -191,21 +200,20 @@ public class AudioManager
 
     public QueryType FindQueryType(string query)
     {
-        var querySpan = query.AsSpan();
-        Span<Range> platformSplit = stackalloc Range[2];
-
-        if (querySpan.Split(platformSplit, "://") > 1)
+        var normalizedQuery = query.Trim();
+        var separator = normalizedQuery.IndexOf("://", StringComparison.Ordinal);
+        if (separator >= 1)
         {
-            var identifier = querySpan[..(querySpan[platformSplit[0]].Length + 3)];
+            var identifier = normalizedQuery[..(separator + 3)];
 
-            if (SearchIDLookup.ContainsKey(identifier)) return QueryType.ID;
+            if (SearchIDLookup.ContainsKey(identifier.AsSpan())) return QueryType.ID;
             foreach (var platform in Platforms)
-                if (platform.SearchPlaylistIdentifiersLookup.Contains(identifier))
+                if (platform.SearchPlaylistIdentifiersLookup.Contains(identifier.AsSpan()))
                     return QueryType.Playlist;
         }
 
         foreach (var platform in Platforms)
-            if (platform.IsPlaylistUrl(querySpan))
+            if (platform.IsPlaylistUrl(normalizedQuery))
                 return QueryType.Playlist;
 
         return QueryType.Keywords;

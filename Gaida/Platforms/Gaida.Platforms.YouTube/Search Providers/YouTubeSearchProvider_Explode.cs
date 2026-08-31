@@ -34,10 +34,11 @@ public sealed class YouTubeSearchProviderExplode(ILogger logger) : SearchProvide
     public async IAsyncEnumerable<PlatformResult> SearchPlaylist(string playlistUrl,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var playlistID = playlistUrl.AsSpan()
-            .SliceAfter("list=")
-            .SliceTo("&")
-            .ToString();
+        var playlistID = playlistUrl.StartsWith("yt-playlist://", StringComparison.OrdinalIgnoreCase)
+            ? playlistUrl["yt-playlist://".Length..]
+            : playlistUrl.AsSpan().SliceAfter("list=").SliceTo("&").ToString();
+
+        if (string.IsNullOrWhiteSpace(playlistID)) yield break;
 
         await foreach (var batch in Client.Playlists.GetVideoBatchesAsync(playlistID, cancellationToken))
         foreach (var video in batch.Items)
