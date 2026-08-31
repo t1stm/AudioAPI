@@ -1,6 +1,7 @@
 import type { SearchResult } from '$states/search.svelte';
 import { convertTimeSpanStringToSeconds } from '$lib';
 import { rememberRecentlyPlayed } from '$lib/recentlyPlayed';
+import { audioApi } from '$lib/discord';
 import quality from './quality.svelte';
 
 class Current {
@@ -13,7 +14,7 @@ class Current {
 	set(now: SearchResult) {
 		this.name = now.name;
 		this.artist = now.artist;
-		this.url = `https://api.gergov.bg/Audio/Download/${quality.codec}/${quality.bitrate}?id=${encodeURIComponent(now.id)}`;
+		this.url = `${audioApi}/Download/${quality.codec}/${quality.bitrate}?id=${encodeURIComponent(now.id)}`;
 		this.lengthSeconds = convertTimeSpanStringToSeconds(now.duration);
 		this.thumbnail = now.thumbnailUrl ?? '/empty.png';
 		rememberRecentlyPlayed(now);

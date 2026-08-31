@@ -1,6 +1,5 @@
 import type { SearchResult } from '$states/search.svelte';
-
-const audioApi = 'https://api.gergov.bg/Audio';
+import { audioApi, proxyThumbnails } from '$lib/discord';
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 export type QueryResolution =
@@ -27,18 +26,30 @@ async function getJson<T>(fetcher: Fetcher, path: string): Promise<T> {
 	return payload as T;
 }
 
+async function getResults(fetcher: Fetcher, path: string) {
+	return proxyThumbnails(await getJson<SearchResult[]>(fetcher, path));
+}
+
 export function getRandomSongs(fetcher: Fetcher, count = 30) {
-	return getJson<SearchResult[]>(fetcher, `/RandomResults?count=${count}`);
+	return getResults(fetcher, `/RandomResults?count=${count}`);
 }
 
 export function getArtistLocal(term: string, fetcher: Fetcher) {
-	return getJson<SearchResult[]>(fetcher, `/Artist/Local?term=${encodeURIComponent(term)}`);
+	return getResults(fetcher, `/Artist/Local?term=${encodeURIComponent(term)}`);
 }
 
 export function getArtistYouTube(term: string, fetcher: Fetcher) {
-	return getJson<SearchResult[]>(fetcher, `/Artist/YouTube?term=${encodeURIComponent(term)}`);
+	return getResults(fetcher, `/Artist/YouTube?term=${encodeURIComponent(term)}`);
 }
 
-export function findQueryType(query: string, fetcher?: Fetcher) {
-	return getJson<QueryResolution>(fetcher ?? globalThis.fetch.bind(globalThis), `/FindQueryType?query=${encodeURIComponent(query)}`);
+export async function findQueryType(query: string, fetcher?: Fetcher) {
+	const resolution = await getJson<QueryResolution>(
+		fetcher ?? globalThis.fetch.bind(globalThis),
+		`/FindQueryType?query=${encodeURIComponent(query)}`
+	);
+
+	if (resolution.kind === 'youtubePlaylist') resolution.results = proxyThumbnails(resolution.results);
+	else if (resolution.kind !== 'search') resolution.result = proxyThumbnails([resolution.result])[0];
+
+	return resolution;
 }

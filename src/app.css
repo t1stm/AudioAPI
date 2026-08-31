@@ -33,9 +33,9 @@
 	--radius-row: 6px;
 	--radius-art: 4px;
 
-	--font-display: 'Unbounded', 'Golos Text', ui-sans-serif, system-ui, sans-serif;
-	--font-body: 'Golos Text', ui-sans-serif, system-ui, sans-serif;
-	--font-mono: 'JetBrains Mono', ui-monospace, monospace;
+	--font-display: 'Unbounded Variable', 'Golos Text Variable', ui-sans-serif, system-ui, sans-serif;
+	--font-body: 'Golos Text Variable', ui-sans-serif, system-ui, sans-serif;
+	--font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
 }
 
 /* Names of things people made get the humanist face; facts the machine

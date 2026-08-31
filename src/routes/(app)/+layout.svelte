@@ -1,10 +1,19 @@
 <script lang="ts">
+	// self-hosted so they survive the Discord activity's CSP (no external font hosts)
+	import '@fontsource-variable/unbounded/wght.css';
+	import '@fontsource-variable/golos-text/wght.css';
+	import '@fontsource-variable/jetbrains-mono/wght.css';
 	import '../../app.css';
+	import { onMount } from 'svelte';
+	import { initDiscord } from '$lib/discord';
 	import Header from '$components/header/Header.svelte';
 	import Player from '$components/player/Player.svelte';
 	import Queue from '$components/queue/Queue.svelte';
 	let { children } = $props();
 	let showQueue = $state(false);
+
+	// clears Discord's activity loading screen; a no-op in a normal browser tab
+	onMount(initDiscord);
 </script>
 
 <div class="relative flex flex-col w-full h-svh overflow-hidden">
