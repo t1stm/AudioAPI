@@ -28,8 +28,14 @@
 	// is the moment the track resumes rather than an arbitrary level.
 	const runwaySeconds = 3;
 	let bufferedAhead = $derived(Math.max(audio.bufferedSeconds - audio.currentSeconds, 0));
+	// In a room the loading happens while the track is held paused — that is the
+	// whole point of the barrier — so `!audio.paused` on its own hides the gauge
+	// for exactly the wait it exists to name. `awaitingLoad` is this client still
+	// owing the room its `loaded`, which is the same wait wearing the other hat.
 	let isBuffering = $derived(
-		!audio.paused && current.lengthSeconds > 0 && bufferedAhead < runwaySeconds
+		(!audio.paused || session.awaitingLoad) &&
+			current.lengthSeconds > 0 &&
+			bufferedAhead < runwaySeconds
 	);
 	let gaugeLevel = $derived(Math.min(bufferedAhead / runwaySeconds, 1) * 100);
 
