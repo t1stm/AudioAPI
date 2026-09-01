@@ -94,14 +94,45 @@ Server → client messages in the Join socket are prefixed strings, dispatched o
 | `queue ` | JSON array of queue items | broadcast |
 | `current ` | integer index | broadcast |
 | `playing ` | `True` or `False` (capitalised .NET bool) | broadcast |
-| `seek ` | seconds as a decimal number | broadcast, or to one user on join |
+| `seek ` | `<seconds> <serverUtcMs>` | broadcast, or to one user on join |
 | `stop` | — (no payload) | broadcast |
 | `chat ` | `<username> %% <text>` | broadcast |
 | `room name ` / `room description ` | new value | **sender only** |
-| `sync ` | seconds as a decimal number | **sender only** |
+| `sync ` | `<seconds> <serverUtcMs>` | **sender only** |
 
 Parse by longest prefix: `room name`/`room description` are two-token prefixes, and `sync` is distinct from
 `seek` even though both carry a time.
+
+### 2.0 The stamp on `seek` and `sync`
+
+Every frame that moves the shared clock carries a second field: `serverUtcMs`, the server's
+`DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()` read at the same instant as the position.
+**Split on whitespace — do not `Number()` the whole argument**, which yields `NaN`.
+
+```js
+const [seconds, stamp] = argument.trim().split(/\s+/);
+```
+
+It exists because the position is measured when the server broadcasts and is stale by one downlink
+when it lands. Half a round trip is the usual stand-in for that, but the useful round-trip estimate
+is a *minimum* over recent samples — the best the link has managed lately — and any given broadcast
+is under no obligation to be that trip. A `seek` that spent 300 ms queued was being placed 60 ms
+back, and the client landed a quarter of a second ahead of the room at the one moment everybody is
+listening for it. With the stamp:
+
+```
+flight = (clientNow + skew) − serverUtcMs        // skew: server UTC minus the client's clock
+```
+
+`skew` is NTP's offset from three timestamps: send a `sync` at `t1`, read `serverUtcMs` out of the
+reply that lands at `t4`, and `skew = serverUtcMs − (t1 + t4) / 2`. Hold it against a **monotonic**
+client clock (`performance.now()`), not `Date.now()` — the wall clock steps when the OS corrects it,
+and a step mid-track is indistinguishable from the room having moved.
+
+What the stamp does **not** fix is a path whose asymmetry is constant. A link that is always 180 ms
+up and 20 ms down biases `skew` by half the difference, and the flight then reads back as exactly
+half the round trip again. That is NTP's floor: three timestamps cannot separate a clock offset from
+a lopsided path.
 
 ### 2.1 Queue item shape
 
@@ -166,7 +197,11 @@ cycle. Follow with `skipto` if you want deterministic behaviour.
 
 ### 3.7 `playpause`
 Toggles play/pause for everyone. Ignored entirely before the first track has started (no `StartTime` yet).
-Broadcasts `playing True|False`, plus a `seek <seconds>` when pausing so clients converge on the pause position.
+Broadcasts `seek <seconds> <serverUtcMs>` **then** `playing True|False`, on **both** edges.
+
+The position leads the state change so a client lands on it before it starts moving. Resuming used to
+broadcast `playing True` alone, leaving every client to rediscover where the room came back at from
+its next `sync` — a whole round trip in the wrong place, on a transition everybody hears.
 
 ### 3.8 `stop`
 Broadcasts `stop` and marks the session paused. It does **not** clear the queue and does **not** stop the
@@ -193,8 +228,11 @@ broadcast value is recomputed server-side, so it will differ slightly from what 
 The synchronisation barrier — see §4.
 
 ### 3.13 `sync`
-Requests the current position. The server replies `sync <seconds>` **to the sender only**. Use for drift
-correction; it does not touch anyone else's playback.
+Requests the current position. The server replies `sync <seconds> <serverUtcMs>` **to the sender only**. Use
+for drift correction and to derive the clock offset (§2.0); it does not touch anyone else's playback.
+
+Replies carry no request id, so keep exactly one in flight — with two outstanding you match a reply to the
+wrong send time and time a 600 ms link at 1 ms. Self-clock it: send the next when the last one lands.
 
 ---
 
@@ -217,16 +255,21 @@ early for everybody. Send each exactly once per track.
 Recommended client loop:
 
 ```
-on "current n"       → load queue[n], do NOT play, then send "loaded"
-on "seek t"          → set audio.currentTime = t
-on "playing True"    → play()      | "playing False" → pause()
-on "stop"            → pause()
-on audio "ended"     → send "end"
-every ~10s           → send "sync", correct drift if |local - reported| > ~0.5s
+on "current n"        → load queue[n], do NOT play, then send "loaded"
+on "seek t stamp"     → set audio.currentTime = t + flight(stamp)
+on "playing True"     → play()      | "playing False" → pause()
+on "stop"             → pause()
+on audio "ended"      → send "end"
+one "sync" in flight  → skew and round trip from the reply (§2.0), correct the position
 ```
 
+Do **not** compare the raw `sync` reply against your local position and correct past some tolerance. On a
+symmetric path a client's own lateness and the reply's staleness are the same size and opposite in sign, so
+they cancel: a client a tenth of a second behind the room measures itself as a few milliseconds out and
+concludes it is fine. Credit the reply the flight it spent arriving first — that is what §2.0 is for.
+
 Time values are formatted with the server's culture — in practice invariant, i.e. `12.3456789` with a dot.
-Parse defensively.
+The stamp is a plain integer. Parse defensively.
 
 ---
 
@@ -272,8 +315,8 @@ ws.onmessage = e => {
     case "queue":   setQueue(JSON.parse(arg)); break;
     case "current": load(Number(arg)); ws.send("loaded"); break;
     case "playing": arg === "True" ? audio.play() : audio.pause(); break;
-    case "seek":    audio.currentTime = Number(arg); break;
-    case "sync":    correctDrift(Number(arg)); break;
+    case "seek":    { const [t, stamp] = arg.trim().split(/\s+/); seekTo(Number(t), Number(stamp)); break; }
+    case "sync":    { const [t, stamp] = arg.trim().split(/\s+/); onSync(Number(t), Number(stamp)); break; }
     case "stop":    audio.pause(); break;
     case "chat":    { const i = arg.indexOf(" %% "); addChat(arg.slice(0, i), arg.slice(i + 4).trim()); break; }
     case "room":    { const j = arg.indexOf(" "); setRoomField(arg.slice(0, j), arg.slice(j + 1).trim()); break; }

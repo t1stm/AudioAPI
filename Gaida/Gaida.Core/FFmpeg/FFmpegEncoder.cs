@@ -55,22 +55,41 @@ public class FFmpegEncoder
 
         async Task CloseCall()
         {
-            await SyncCall();
-            Process.StandardInput.BaseStream.Close();
+            try
+            {
+                await SyncCall();
+            }
+            finally
+            {
+                // ffmpeg only flushes its last packets once stdin reaches EOF, so this has to happen
+                // even when the drain above failed — otherwise the process sits there holding the tail
+                // of the encode and the output stream never closes.
+                Process.StandardInput.BaseStream.Close();
+            }
         }
 
         async Task SyncCall()
         {
             await updateSemaphore.WaitAsync();
 
-            while (queue.TryDequeue(out var entry))
+            try
             {
-                var (bytes, offset, length) = entry;
-                await Process.StandardInput.BaseStream.WriteAsync(
-                    bytes.AsMemory(offset, length));
-            }
+                // Peek, write, then dequeue: dequeuing first dropped the chunk whenever the write to
+                // stdin threw, which puts a silent gap in the middle of what ffmpeg is asked to encode.
+                // Single consumer, so nothing else can take the entry between the peek and the dequeue.
+                while (queue.TryPeek(out var entry))
+                {
+                    var (bytes, offset, length) = entry;
+                    await Process.StandardInput.BaseStream.WriteAsync(
+                        bytes.AsMemory(offset, length));
 
-            updateSemaphore.Release();
+                    queue.TryDequeue(out _);
+                }
+            }
+            finally
+            {
+                updateSemaphore.Release();
+            }
         }
     }
 

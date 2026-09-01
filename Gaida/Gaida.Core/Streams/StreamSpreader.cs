@@ -4,8 +4,6 @@ namespace Gaida.Core.Streams;
 public class StreamSpreader : Stream
 {
     protected readonly List<(byte[], int, int)> Data = [];
-    private readonly TaskCompletionSource ClosedCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    protected readonly Queue<StreamSubscriber> RemoveQueue = new();
     protected readonly SemaphoreSlim Semaphore = new(1, 1);
     protected readonly List<StreamSubscriber> Subscribers = [];
     public bool Closed { get; protected set; }
@@ -38,7 +36,6 @@ public class StreamSpreader : Stream
             await Semaphore.WaitAsync();
             Closed = true;
             await SyncSubscribers();
-            ClosedCompletion.TrySetResult();
         }
         finally
         {
@@ -51,7 +48,7 @@ public class StreamSpreader : Stream
         try
         {
             Semaphore.Wait();
-            Data.Add((buffer.ToArray(), offset, count));
+            Data.Add(([.. buffer], offset, count));
             Position += count;
             SyncSubscribers().GetAwaiter().GetResult();
         }
@@ -79,12 +76,6 @@ public class StreamSpreader : Stream
         }
     }
 
-    /// <summary>Waits until no further bytes can be written to this spreader.</summary>
-    public Task WaitForCloseAsync(CancellationToken cancellationToken = default)
-    {
-        return Closed ? Task.CompletedTask : ClosedCompletion.Task.WaitAsync(cancellationToken);
-    }
-
     /// <summary>Returns the completed cached stream, used to satisfy HTTP byte-range requests.</summary>
     public async Task<byte[]> GetBufferedBytesAsync(CancellationToken cancellationToken = default)
     {
@@ -104,41 +95,71 @@ public class StreamSpreader : Stream
 
     protected async Task SyncSubscribers()
     {
-        while (RemoveQueue.TryDequeue(out var subscriber)) Subscribers.Remove(subscriber);
+        Subscribers.RemoveAll(dead => dead.Dead);
 
         foreach (var subscriber in Subscribers)
         {
-            var startingIndex = subscriber.CachedDataIndex;
-            var dataLength = Data.Count;
-
-            for (subscriber.CachedDataIndex = startingIndex;
-                 subscriber.CachedDataIndex < dataLength;
-                 subscriber.CachedDataIndex++)
+            try
             {
-                var currentSlice = Data[subscriber.CachedDataIndex];
-                var (bytes, offset, length) = currentSlice;
-                var status = await subscriber.WriteCall.Invoke(bytes, offset, length);
+                var dataLength = Data.Count;
 
-                if (!status.HasFlag(StreamStatus.Closed)) continue;
+                for (; subscriber.CachedDataIndex < dataLength; subscriber.CachedDataIndex++)
+                {
+                    var currentSlice = Data[subscriber.CachedDataIndex];
+                    var (bytes, offset, length) = currentSlice;
+                    var status = await subscriber.WriteCall.Invoke(bytes, offset, length);
 
-                RemoveQueue.Enqueue(subscriber);
-                break;
+                    if (!status.HasFlag(StreamStatus.Closed)) continue;
+
+                    subscriber.Dead = true;
+                    break;
+                }
             }
+            catch (Exception)
+            {
+                // A subscriber whose client already went away must not take the remaining ones
+                // down with it: without this one dead HTTP response poisons the whole spreader.
+                subscriber.Dead = true;
+            }
+
+            if (subscriber.Dead) continue;
 
             _ = Task.Run(async () =>
             {
-                await subscriber.SyncCall();
-                if (!Closed) return;
+                try
+                {
+                    await subscriber.SyncCall();
+                    if (!Closed) return;
 
-                subscriber.SourceClosed = true;
-                await subscriber.CloseCall();
+                    subscriber.SourceClosed = true;
+                    await subscriber.CloseCall();
+                }
+                catch (Exception)
+                {
+                    subscriber.Dead = true;
+                }
             });
         }
     }
 
     protected override void Dispose(bool disposing)
     {
-        Data.Clear();
+        if (disposing)
+        {
+            // Under the semaphore: an in-flight GetBufferedBytesAsync or SyncSubscribers is walking Data,
+            // and clearing it from the expiry timer thread would fault them mid-enumeration.
+            Semaphore.Wait();
+
+            try
+            {
+                Data.Clear();
+            }
+            finally
+            {
+                Semaphore.Release();
+            }
+        }
+
         base.Dispose(disposing);
     }
 

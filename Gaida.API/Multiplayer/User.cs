@@ -1,5 +1,4 @@
 using System.Net.WebSockets;
-using System.Text;
 
 namespace Gaida.API.Multiplayer;
 
@@ -11,21 +10,35 @@ public class User
 
     public string ChatUsername => Username ??= $"Anonymous {GetId(ID)}";
 
-    public async Task SendMessageAsync(ReadOnlyMemory<byte> bytes)
+    /// <summary>ValueTask so a send that completes inline — the usual case for a small text
+    /// frame — costs no Task.</summary>
+    public ValueTask SendMessageAsync(ReadOnlyMemory<byte> bytes)
     {
-        if (WebSocket.State != WebSocketState.Open) return;
-        await WebSocket.SendAsync(bytes, WebSocketMessageType.Text, true, CancellationToken.None);
+        return WebSocket.State != WebSocketState.Open
+            ? ValueTask.CompletedTask
+            : WebSocket.SendAsync(bytes, WebSocketMessageType.Text, true, CancellationToken.None);
+    }
+
+    public Task SendAsync(Utf8MessageHandler handler)
+    {
+        return SendAsync(handler.Message);
+    }
+
+    public async Task SendAsync(Utf8Message message)
+    {
+        try
+        {
+            await SendMessageAsync(message.Memory);
+        }
+        finally
+        {
+            message.Dispose();
+        }
     }
 
     private static string GetId(string id)
     {
         var index = id.IndexOf(':');
         return index == -1 ? id : id[..index];
-    }
-
-    public Task SendMessageAsync(string message)
-    {
-        var bytes = Encoding.UTF8.GetBytes(message);
-        return SendMessageAsync(bytes);
     }
 }

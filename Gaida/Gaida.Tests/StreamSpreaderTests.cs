@@ -66,6 +66,34 @@ public class StreamSpreaderTests(ITestOutputHelper output)
         }
     }
 
+    /// <summary>
+    ///     The expiry timer disposes encoders while range requests may still be copying their buffer, so a read is
+    ///     either the whole thing or nothing, never a fault mid-enumeration.
+    /// </summary>
+    [Fact]
+    public async Task DisposeDoesNotFaultConcurrentBufferedReads()
+    {
+        var streamSpreader = new StreamSpreader();
+        var randomBytes = RandomNumberGenerator.GetBytes(1 << 20);
+
+        new MemoryStream(randomBytes).CopyTo(streamSpreader, 1 << 12);
+        await streamSpreader.CloseAsync();
+
+        var reads = Enumerable.Range(0, 8)
+            .Select(_ => Task.Run(() => streamSpreader.GetBufferedBytesAsync()))
+            .ToArray();
+
+        streamSpreader.Dispose();
+
+        foreach (var read in reads)
+        {
+            var bytes = await read;
+            if (bytes.Length == 0) continue;
+
+            Assert.Equal(randomBytes, bytes);
+        }
+    }
+
     [Fact]
     public async Task TestDownloading()
     {
@@ -188,5 +216,50 @@ public class StreamSpreaderTests(ITestOutputHelper output)
         await Task.Delay(2000);
 
         Assert.False(memoryStream.ToArray().Length == 0, "No data copied to the MemoryStream.");
+    }
+
+    /// <summary>
+    ///     A subscriber whose client vanished throws on every later write. It must be dropped instead of
+    ///     aborting the sync pass, or one abandoned HTTP response truncates the stream for everyone else.
+    /// </summary>
+    [Fact]
+    public async Task FaultingSubscriberDoesNotStarveOthers()
+    {
+        var streamSpreader = new StreamSpreader();
+        var chunks = new[] { RandomNumberGenerator.GetBytes(4096), RandomNumberGenerator.GetBytes(4096) };
+
+        var poisoned = new StreamSubscriber
+        {
+            WriteCall = (_, _, _) => throw new ObjectDisposedException("IFeatureCollection"),
+            SyncCall = () => throw new ObjectDisposedException("IFeatureCollection"),
+            CloseCall = () => throw new ObjectDisposedException("IFeatureCollection")
+        };
+
+        var healthy = new MemoryStream();
+        var finished = new SemaphoreSlim(0, 1);
+        var good = new StreamSubscriber
+        {
+            WriteCall = async (bytes, offset, length) =>
+            {
+                await healthy.WriteAsync(bytes.AsMemory(offset, length));
+                return StreamStatus.Open;
+            },
+            SyncCall = () => Task.CompletedTask,
+            CloseCall = () =>
+            {
+                finished.Release();
+                return Task.CompletedTask;
+            }
+        };
+
+        // The poisoned subscriber is first in line, so it gets to fail before the healthy one is reached.
+        await streamSpreader.SubscribeAsync(poisoned);
+        await streamSpreader.SubscribeAsync(good);
+
+        foreach (var chunk in chunks) await streamSpreader.WriteAsync(chunk);
+        await streamSpreader.CloseAsync();
+
+        Assert.True(await finished.WaitAsync(TimeSpan.FromSeconds(10)), "Healthy subscriber never completed.");
+        Assert.Equal(chunks.SelectMany(chunk => chunk).ToArray(), healthy.ToArray());
     }
 }

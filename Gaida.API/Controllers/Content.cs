@@ -93,13 +93,10 @@ public class Content(ILogger<Content> logger, IConfiguration configuration, IHos
 
         var fileId = FileId(id);
         var extension = result is MusicResult localResult ? Path.GetExtension(localResult.Path) : ".audio";
-        SetDownloadHeaders(fileId + extension, $"raw-{fileId}");
+        SetDownloadHeaders(fileId + extension, $"raw-{fileId}", streamSpreader.Closed);
 
-        if (Request.Headers.Range.Count > 0)
-        {
-            var rangeResponse = await BufferedRangeResponse(streamSpreader, "application/octet-stream");
-            if (rangeResponse is not null) return rangeResponse;
-        }
+        if (streamSpreader.Closed && Request.Headers.Range.Count > 0)
+            return await BufferedRangeResponse(streamSpreader, "application/octet-stream");
 
         await StreamToResponse(streamSpreader);
 
@@ -128,36 +125,39 @@ public class Content(ILogger<Content> logger, IConfiguration configuration, IHos
         };
 
         var key = ManagerService.EncoderKey(codec, bitrate, id);
-        if (!managerService.TryGetEncoder(key, out var encoder))
+        if (!managerService.TryGetEncoder(key, out var encoderTask))
         {
             var result = await managerService.Manager.SearchID(id, HttpContext.RequestAborted);
             if (result is null) return NotFound("Search resulted in error");
 
-            var sourceStreamSpreader =
-                await managerService.Manager.GetContentDataAsync(result, HttpContext.RequestAborted);
-            if (sourceStreamSpreader is null) return StatusCode(500);
+            encoderTask = managerService.GetOrStartEncoderAsync(key, async encoder =>
+            {
+                // Deliberately not RequestAborted: this encode is shared by every request for the same key,
+                // so the client that happened to start it must not cancel it for the others on the way out.
+                var sourceStreamSpreader =
+                    await managerService.Manager.GetContentDataAsync(result, CancellationToken.None);
+                if (sourceStreamSpreader is null) return false;
 
-            encoder = managerService.CreateEncoder(key);
-            var sourceStreamSubscriber = encoder.Convert(bitrate, ffmpegCodec, ffmpegOutputFormat);
-            if (sourceStreamSubscriber is null) return StatusCode(500);
+                var sourceStreamSubscriber = encoder.Convert(bitrate, ffmpegCodec, ffmpegOutputFormat);
+                if (sourceStreamSubscriber is null) return false;
 
-            await sourceStreamSpreader.SubscribeAsync(sourceStreamSubscriber);
+                await sourceStreamSpreader.SubscribeAsync(sourceStreamSubscriber);
+                return true;
+            });
         }
 
+        var startedEncoder = await encoderTask;
+        if (startedEncoder is null) return StatusCode(500);
+
+        var encodedStream = startedEncoder.GetStreamSpreader();
         var fileId = FileId(id);
         var outputFileName = $"{fileId}.{ffmpegOutputFormat[3..]}";
-        SetStreamHeaders(contentType, outputFileName, $"{contentType}-{bitrate}-{fileId}");
+        SetStreamHeaders(contentType, outputFileName, $"{contentType}-{bitrate}-{fileId}", encodedStream.Closed);
 
-        var encodedStream = encoder.GetStreamSpreader();
-        if (Request.Headers.Range.Count > 0)
-        {
-            var rangeResponse = await BufferedRangeResponse(encodedStream, contentType);
-            if (rangeResponse is not null) return rangeResponse;
-        }
+        if (encodedStream.Closed && Request.Headers.Range.Count > 0)
+            return await BufferedRangeResponse(encodedStream, contentType);
 
-        await StreamToResponse(encodedStream,
-            () => managerService.ExpireIn(key, TimeSpan.FromMinutes(45)));
-
+        await StreamToResponse(encodedStream);
         return new EmptyResult();
     }
 
@@ -169,19 +169,25 @@ public class Content(ILogger<Content> logger, IConfiguration configuration, IHos
         return Uri.EscapeDataString(value);
     }
 
-    private void SetDownloadHeaders(string fileName, string etag)
+    private void SetDownloadHeaders(string fileName, string etag, bool seekable)
     {
         Response.Headers.Append("Content-Disposition", $"attachment; filename={fileName}");
-        Response.Headers.AcceptRanges = "bytes";
+        SetRangeSupport(seekable);
         SetCacheHeaders(etag);
     }
 
-    private void SetStreamHeaders(string contentType, string fileName, string etag)
+    private void SetStreamHeaders(string contentType, string fileName, string etag, bool seekable)
     {
         Response.ContentType = contentType;
         Response.Headers.Append("Content-Disposition", $"inline; filename={fileName}");
-        Response.Headers.AcceptRanges = "bytes";
+        SetRangeSupport(seekable);
         SetCacheHeaders(etag);
+    }
+
+    /// <summary>Only claim range support for a finished body: promising it mid-encode makes players seek into a 200.</summary>
+    private void SetRangeSupport(bool seekable)
+    {
+        Response.Headers.AcceptRanges = seekable ? "bytes" : "none";
     }
 
     private void SetCacheHeaders(string etag)
@@ -190,12 +196,15 @@ public class Content(ILogger<Content> logger, IConfiguration configuration, IHos
         Response.Headers.ETag = $"\"{etag}\"";
     }
 
-    /// <summary>Returns a proper 206 response from completed cached data when a browser seeks.</summary>
-    private async Task<IActionResult?> BufferedRangeResponse(StreamSpreader streamSpreader, string contentType)
+    /// <summary>
+    ///     Returns a proper 206 response from completed cached data when a browser seeks. Callers must check
+    ///     <see cref="StreamSpreader.Closed" /> first: a range served off a still-growing buffer would report a
+    ///     total length that is already wrong by the time the client reads it.
+    /// </summary>
+    private async Task<IActionResult> BufferedRangeResponse(StreamSpreader streamSpreader, string contentType)
     {
         try
         {
-            await streamSpreader.WaitForCloseAsync(HttpContext.RequestAborted);
             var bytes = await streamSpreader.GetBufferedBytesAsync(HttpContext.RequestAborted);
             return File(bytes, contentType, enableRangeProcessing: true);
         }
@@ -220,8 +229,13 @@ public class Content(ILogger<Content> logger, IConfiguration configuration, IHos
     }
 
     /// <summary>Pumps a stream spreader into the response body until the source closes or the client leaves.</summary>
-    private async Task StreamToResponse(StreamSpreader streamSpreader, Action? onFinished = null)
+    private async Task StreamToResponse(StreamSpreader streamSpreader)
     {
+        // Captured once: these callbacks outlive the request, and touching HttpContext after it is
+        // disposed throws inside the spreader instead of just unsubscribing us.
+        var cancellationToken = HttpContext.RequestAborted;
+        var body = Response.Body;
+
         var cache = new ConcurrentQueue<(byte[], int, int)>();
         var finished = new SemaphoreSlim(0, 1);
         var syncSemaphore = new SemaphoreSlim(1, 1);
@@ -231,7 +245,7 @@ public class Content(ILogger<Content> logger, IConfiguration configuration, IHos
             WriteCall = (bytes, offset, length) =>
             {
                 cache.Enqueue((bytes, offset, length));
-                return Task.FromResult(HttpContext.RequestAborted.IsCancellationRequested
+                return Task.FromResult(cancellationToken.IsCancellationRequested
                     ? StreamStatus.Closed
                     : StreamStatus.Open);
             },
@@ -239,7 +253,6 @@ public class Content(ILogger<Content> logger, IConfiguration configuration, IHos
             CloseCall = async () =>
             {
                 await SyncCall();
-                onFinished?.Invoke();
                 finished.Release();
             }
         };
@@ -248,28 +261,33 @@ public class Content(ILogger<Content> logger, IConfiguration configuration, IHos
 
         try
         {
-            await finished.WaitAsync(HttpContext.RequestAborted);
+            await finished.WaitAsync(cancellationToken);
         }
         catch (OperationCanceledException)
         {
             return;
         }
 
-        await Response.Body.FlushAsync();
+        await body.FlushAsync(cancellationToken);
         return;
 
         async Task SyncCall()
         {
-            if (HttpContext.RequestAborted.IsCancellationRequested) return;
-            await syncSemaphore.WaitAsync();
+            if (cancellationToken.IsCancellationRequested) return;
+            await syncSemaphore.WaitAsync(CancellationToken.None);
 
-            while (cache.TryDequeue(out var entry))
+            try
             {
-                var (bytes, offset, length) = entry;
-                await Response.Body.WriteAsync(bytes.AsMemory(offset, length));
+                while (cache.TryDequeue(out var entry))
+                {
+                    var (bytes, offset, length) = entry;
+                    await body.WriteAsync(bytes.AsMemory(offset, length), cancellationToken);
+                }
             }
-
-            syncSemaphore.Release();
+            finally
+            {
+                syncSemaphore.Release();
+            }
         }
     }
 }

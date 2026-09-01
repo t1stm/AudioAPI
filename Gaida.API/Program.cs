@@ -41,7 +41,8 @@ app.UseCors("Frontend");
 
 app.UseWebSockets(new WebSocketOptions
 {
-    KeepAliveInterval = TimeSpan.FromSeconds(5)
+    KeepAliveInterval = TimeSpan.FromSeconds(1),
+    KeepAliveTimeout = TimeSpan.FromSeconds(5)
 });
 
 // initialize required services here.
@@ -51,4 +52,3 @@ app.Services.GetRequiredService<MultiplayerManager>();
 app.UseAuthorization();
 app.MapControllers();
 app.Run();
-

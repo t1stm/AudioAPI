@@ -4,32 +4,57 @@ using System.Text;
 
 namespace Gaida.API.Controllers.Helpers;
 
-public class WebSocketTextReader
+/// <summary>
+/// Reads whole text frames off one connection. Both buffers are rented once for the life of the
+/// connection rather than per message, and the payload is decoded straight into chars — the
+/// StringBuilder path allocated a string per frame plus one for the finished message.
+/// </summary>
+public sealed class WebSocketTextReader : IDisposable
 {
-    protected readonly StringBuilder Builder = new();
+    private readonly Decoder decoder = Encoding.UTF8.GetDecoder();
+    private byte[] receive = ArrayPool<byte>.Shared.Rent(4096);
+    private char[] chars = ArrayPool<char>.Shared.Rent(4096);
 
-    /// <returns>The whole text message, or <c>null</c> when the socket closed or faulted.</returns>
-    public async Task<string?> ReadWholeMessageAsync(WebSocket webSocket,
+    public void Dispose()
+    {
+        if (receive.Length > 0) ArrayPool<byte>.Shared.Return(receive);
+        if (chars.Length > 0) ArrayPool<char>.Shared.Return(chars);
+
+        receive = [];
+        chars = [];
+    }
+
+    /// <returns>
+    /// The whole text message — valid only until the next read — or <c>null</c> when the socket
+    /// closed or faulted.
+    /// </returns>
+    public async Task<ReadOnlyMemory<char>?> ReadWholeMessageAsync(WebSocket webSocket,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            Builder.Clear();
             if (webSocket.State != WebSocketState.Open) return null;
 
-            using var buffer = MemoryPool<byte>.Shared.Rent(1024 * 32);
+            decoder.Reset();
+            var length = 0;
             ValueWebSocketReceiveResult receiveResult;
 
             do
             {
-                receiveResult = await webSocket.ReceiveAsync(buffer.Memory, cancellationToken);
+                receiveResult = await webSocket.ReceiveAsync(receive.AsMemory(), cancellationToken);
                 if (receiveResult.MessageType == WebSocketMessageType.Close) return null;
                 if (receiveResult.MessageType != WebSocketMessageType.Text) continue;
 
-                Builder.Append(Encoding.UTF8.GetString(buffer.Memory[..receiveResult.Count].Span));
+                // a frame can end mid-codepoint, so the decoder carries the remainder over
+                // rather than each frame being decoded on its own
+                var room = Encoding.UTF8.GetMaxCharCount(receiveResult.Count);
+                if (length + room > chars.Length) GrowChars(length, length + room);
+
+                length += decoder.GetChars(receive.AsSpan(0, receiveResult.Count), chars.AsSpan(length),
+                    receiveResult.EndOfMessage);
             } while (!receiveResult.EndOfMessage);
 
-            return Builder.ToString();
+            return chars.AsMemory(0, length);
         }
         // A connection that goes away is the end of the session, not a fault:
         // null is what the caller already treats as "this socket is done". Any
@@ -43,5 +68,14 @@ public class WebSocketTextReader
         {
             return null;
         }
+    }
+
+    private void GrowChars(int length, int size)
+    {
+        var next = ArrayPool<char>.Shared.Rent(size);
+        chars.AsSpan(0, length).CopyTo(next);
+
+        ArrayPool<char>.Shared.Return(chars);
+        chars = next;
     }
 }

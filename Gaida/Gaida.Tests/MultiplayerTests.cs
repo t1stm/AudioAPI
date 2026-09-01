@@ -104,6 +104,26 @@ public class MultiplayerUserTests
         Assert.Empty(closedSocket.Messages);
     }
 
+    /// <summary>
+    ///     The broadcast walks the store one socket at a time, so a peer that dropped between the state check
+    ///     and the send used to throw straight out of the loop and take the frame away from everybody after it
+    ///     — one bad connection leaving the rest of the room on a stale position.
+    /// </summary>
+    [Fact]
+    public async Task MessageQueueKeepsBroadcastingPastASocketThatThrows()
+    {
+        var store = new UserStore();
+        var failing = new RecordingWebSocket(sendFails: true);
+        var healthy = new RecordingWebSocket();
+        await store.GetOrAddUser("failing", failing);
+        await store.GetOrAddUser("healthy", healthy);
+        var queue = new MessageQueue(store);
+
+        await queue.Add("seek 12 1700000000000");
+
+        Assert.Equal(["seek 12 1700000000000"], healthy.Messages);
+    }
+
     [Fact]
     public void ChatUsernameUsesExplicitNameOrStableAnonymousName()
     {
@@ -137,7 +157,7 @@ public class VirtualPlayerTests
             },
             current => Assert.Equal("current 0", current),
             playing => Assert.Equal("playing True", playing),
-            seek => Assert.Equal("seek 0", seek),
+            seek => Assert.Equal("seek 0", TestObjects.Unstamped(seek)),
             chat => Assert.Equal("chat System %% User 'Anonymous listener' joined the session.", chat));
     }
 
@@ -205,7 +225,7 @@ public class VirtualPlayerTests
         Assert.Contains("playing False", socket.Messages);
 
         await player.SetLoaded();
-        Assert.Contains("seek 0", socket.Messages);
+        Assert.Contains("seek 0", TestObjects.Unstamped(socket.Messages));
         Assert.Contains("playing True", socket.Messages);
     }
 
@@ -265,8 +285,8 @@ public class VirtualPlayerTests
         Assert.Empty(secondSocket.Messages);
 
         await player.SetLoaded();
-        Assert.Equal(["seek 0", "playing True"], firstSocket.Messages);
-        Assert.Equal(["seek 0", "playing True"], secondSocket.Messages);
+        Assert.Equal(["seek 0", "playing True"], TestObjects.Unstamped(firstSocket.Messages));
+        Assert.Equal(["seek 0", "playing True"], TestObjects.Unstamped(secondSocket.Messages));
         firstSocket.ClearMessages();
         secondSocket.ClearMessages();
 
@@ -290,7 +310,7 @@ public class VirtualPlayerTests
         // position in an ordinary track rather than an edge case
         await player.SeekTo(1800);
 
-        Assert.InRange(double.Parse(Assert.Single(socket.Messages)["seek ".Length..]), 1800, 1801);
+        Assert.InRange(SeekSeconds(Assert.Single(socket.Messages)), 1800, 1801);
         Assert.InRange(await player.GetCurrentTime(), 1800, 1801);
 
         // the same arithmetic carries the position out of a pause and back in
@@ -308,19 +328,77 @@ public class VirtualPlayerTests
         await store.GetOrAddUser("listener", socket);
 
         await player.SeekTo(12.5);
-        var seekSeconds = double.Parse(Assert.Single(socket.Messages)["seek ".Length..]);
-        Assert.InRange(seekSeconds, 12.4, 12.7);
+        Assert.InRange(SeekSeconds(Assert.Single(socket.Messages)), 12.4, 12.7);
+        socket.ClearMessages();
+
+        // the position leads the state change on both edges: a client has to land on
+        // it before it starts moving, and resuming used to send no position at all
+        await player.TogglePlaying();
+        Assert.InRange(SeekSeconds(socket.Messages[0]), 12.4, 12.7);
+        Assert.Equal("playing False", socket.Messages[1]);
         socket.ClearMessages();
 
         await player.TogglePlaying();
-        Assert.Equal("playing False", socket.Messages[0]);
-        Assert.StartsWith("seek ", socket.Messages[1]);
+        Assert.InRange(SeekSeconds(socket.Messages[0]), 12.4, 12.7);
+        Assert.Equal("playing True", socket.Messages[1]);
         socket.ClearMessages();
 
-        await player.TogglePlaying();
         await player.Stop();
+        Assert.Equal(["stop"], socket.Messages);
+    }
 
-        Assert.Equal(["playing True", "stop"], socket.Messages);
+    /// <summary>
+    ///     Every socket runs its own read loop, so the clock is written by as many threads as there are
+    ///     listeners. Two things broke under that: <c>LoadedCount++</c> lost increments and left the loading
+    ///     barrier permanently short of the member count, and the position was read through a
+    ///     <c>StartTime.HasValue</c> check taken outside the lock — a concurrent track change could null it
+    ///     before the <c>.Value</c>, throwing past a <c>Release()</c> that had no <c>finally</c> and stranding
+    ///     the room's semaphore for the life of the process.
+    /// </summary>
+    [Fact]
+    public async Task ConcurrentClockChangesNeverStrandTheRoomLock()
+    {
+        const int users = 4;
+        var (player, store) = TestObjects.Player();
+        var sockets = new RecordingWebSocket[users];
+
+        for (var index = 0; index < users; index++)
+        {
+            sockets[index] = new RecordingWebSocket();
+            await store.GetOrAddUser($"listener:{index}", sockets[index]);
+        }
+
+        player.Items.Add(TestObjects.Result("audio://one"));
+
+        // Everybody reports `loaded` at once: lose one increment and the barrier never releases.
+        await Task.WhenAll(Enumerable.Range(0, users).Select(_ => Task.Run(() => player.SetLoaded())));
+        Assert.Contains("seek 0", TestObjects.Unstamped(sockets[0].Messages));
+
+        // The clock is running now, so the readers race every path that nulls StartTime.
+        var first = store.GetUser("listener:0")!;
+        var hammer = new List<Task>();
+
+        for (var round = 0; round < 64; round++)
+        {
+            hammer.Add(Task.Run(() => player.SeekTo(30)));
+            hammer.Add(Task.Run(() => player.Next()));
+            hammer.Add(Task.Run(() => player.TogglePlaying()));
+            hammer.Add(Task.Run(() => player.SyncTo(first)));
+            hammer.Add(Task.Run(() => player.GetCurrentTime()));
+            hammer.Add(Task.Run(() => player.SetLoaded()));
+        }
+
+        await Task.WhenAll(hammer).WaitAsync(TimeSpan.FromSeconds(30));
+
+        // A stranded semaphore shows up here: this one would never come back.
+        var position = await player.GetCurrentTime().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(position >= 0, $"position went backwards: {position}");
+    }
+
+    /// <summary>The position out of a `seek &lt;seconds&gt; &lt;stamp&gt;` frame.</summary>
+    private static double SeekSeconds(string frame)
+    {
+        return double.Parse(TestObjects.Unstamped(frame)["seek ".Length..]);
     }
 }
 
@@ -340,7 +418,7 @@ public class MultiplayerRoomTests
         socket.ClearMessages();
 
         await room.HandleUserMessage(user, "sync");
-        Assert.Equal(["sync 0"], socket.Messages);
+        Assert.Equal(["sync 0"], TestObjects.Unstamped(socket.Messages));
         socket.ClearMessages();
 
         await room.HandleUserMessage(user, "updateroom description Shared favorites");
@@ -449,6 +527,25 @@ public class MultiplayerControllerTests
         Assert.Contains(staying.Messages, message => message.Contains("'Vanishing User' left"));
     }
 
+    [Fact]
+    public async Task AJoinWhoseReceiveFailsStillTakesTheUserBackOutOfTheRoom()
+    {
+        var manager = new MultiplayerManager(TestObjects.ManagerService());
+        var roomId = await manager.CreateNewRoom();
+        var room = manager.GetRoom(roomId)!;
+
+        var staying = new RecordingWebSocket();
+        await room.GetOrAddUser("staying", staying, "Staying User");
+        staying.ClearMessages();
+
+        var controller = Controller(manager,
+            new RecordingWebSocket(receiveFailure: new WebSocketException("connection reset")));
+
+        await controller.Join(roomId.ToString(), "Vanishing User");
+
+        Assert.Contains(staying.Messages, message => message.Contains("'Vanishing User' left"));
+    }
+
     private static MultiplayerController Controller(MultiplayerManager manager, WebSocket? socket = null)
     {
         var context = new DefaultHttpContext();
@@ -484,6 +581,30 @@ internal static class TestObjects
     {
         var store = new UserStore();
         return (new VirtualPlayer(new MessageQueue(store)), store);
+    }
+
+    /// <summary>
+    /// The frame with its trailing stamp checked and stripped, so the assertions below
+    /// can stay about the position rather than about a wall clock.
+    /// </summary>
+    public static string Unstamped(string frame)
+    {
+        var split = frame.LastIndexOf(' ');
+        Assert.True(split != -1 && long.TryParse(frame[(split + 1)..], out _), $"no stamp on '{frame}'");
+
+        var stamp = long.Parse(frame[(split + 1)..]);
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        Assert.InRange(stamp, now - 60_000, now);
+
+        return frame[..split];
+    }
+
+    /// <summary>The same, over a whole transcript: only the frames that carry a position
+    /// are stamped, so the rest have to pass through untouched.</summary>
+    public static IEnumerable<string> Unstamped(IEnumerable<string> frames)
+    {
+        return frames.Select(frame =>
+            frame.StartsWith("seek ") || frame.StartsWith("sync ") ? Unstamped(frame) : frame);
     }
 
     public static PlatformResult Result(string id)

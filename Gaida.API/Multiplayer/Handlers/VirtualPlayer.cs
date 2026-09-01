@@ -7,7 +7,21 @@ namespace Gaida.API.Multiplayer.Handlers;
 
 public class VirtualPlayer(MessageQueue messageQueue)
 {
+    /// <summary>
+    ///     Guards every read and write of the room clock, the queue and the two barrier counters, and is held
+    ///     across the broadcast so state changes and the frames announcing them leave in the same order. Each
+    ///     socket runs its own read loop, so without this the clock is mutated by as many threads as there are
+    ///     listeners: <c>StartTime</c> could go null between a <c>HasValue</c> check and the <c>.Value</c> that
+    ///     followed it, and <c>LoadedCount++</c> could lose an increment and strand the loading barrier.
+    /// </summary>
+    /// <remarks>
+    ///     ponytail: one lock for the whole room. Public methods take it, <c>*Core</c> helpers assume it is
+    ///     already held — SemaphoreSlim is not reentrant, so calling a public one from inside another deadlocks.
+    ///     A room is a handful of listeners and MessageQueue already serialises the sends underneath, so this
+    ///     costs nothing that was not already serial. Split it per-field if rooms grow past a few dozen members.
+    /// </remarks>
     protected readonly SemaphoreSlim Sync = new(1);
+
     protected int CurrentIndex;
 
     /// <summary>How many users reported the current item as played out.</summary>
@@ -24,66 +38,353 @@ public class VirtualPlayer(MessageQueue messageQueue)
 
     public async Task Next()
     {
-        if (CurrentIndex < Items.Count)
-            CurrentIndex++;
+        await Sync.WaitAsync();
 
-        UpdateStart();
-        await SetPlaying(false);
-        await Broadcast(Current());
+        try
+        {
+            await NextCore();
+        }
+        finally
+        {
+            Sync.Release();
+        }
     }
 
     public async Task Previous()
     {
-        if (CurrentIndex > 0)
-            CurrentIndex--;
+        await Sync.WaitAsync();
 
-        UpdateStart();
-        await SetPlaying(false);
-        await Broadcast(Current());
+        try
+        {
+            if (CurrentIndex > 0)
+                CurrentIndex--;
+
+            UpdateStart();
+            await SetPlayingCore(false);
+            await Broadcast($"current {CurrentIndex}");
+        }
+        finally
+        {
+            Sync.Release();
+        }
     }
 
     public async Task Remove(int index)
     {
-        if (index < 0 || index >= Items.Count) return;
-        var oldCurrent = CurrentIndex;
-        Items.RemoveAt(index);
+        await Sync.WaitAsync();
 
-        if (oldCurrent > index)
-            CurrentIndex--;
+        try
+        {
+            if (index < 0 || index >= Items.Count) return;
+            var oldCurrent = CurrentIndex;
+            Items.RemoveAt(index);
 
-        await Broadcast(Queue());
+            if (oldCurrent > index)
+                CurrentIndex--;
+
+            await Broadcast(QueueMessage());
+        }
+        finally
+        {
+            Sync.Release();
+        }
     }
 
     public async Task SetNext(int index)
     {
-        if (index < 0 || index >= Items.Count || index == CurrentIndex) return;
-        if (index < CurrentIndex)
-            CurrentIndex--;
+        await Sync.WaitAsync();
 
-        var item = Items[index];
-        Items.RemoveAt(index);
-        Items.Insert(CurrentIndex + 1, item);
+        try
+        {
+            if (index < 0 || index >= Items.Count || index == CurrentIndex) return;
+            if (index < CurrentIndex)
+                CurrentIndex--;
 
-        await Broadcast(Queue());
+            var item = Items[index];
+            Items.RemoveAt(index);
+            Items.Insert(CurrentIndex + 1, item);
+
+            await Broadcast(QueueMessage());
+        }
+        finally
+        {
+            Sync.Release();
+        }
     }
 
     public async Task SkipTo(int index)
     {
-        if (index < 0 || index >= Items.Count || index == CurrentIndex) return;
-        CurrentIndex = index;
+        await Sync.WaitAsync();
 
-        UpdateStart();
-        await SetPlaying(false);
-        await Broadcast(Current());
+        try
+        {
+            if (index < 0 || index >= Items.Count || index == CurrentIndex) return;
+            CurrentIndex = index;
+
+            UpdateStart();
+            await SetPlayingCore(false);
+            await Broadcast($"current {CurrentIndex}");
+        }
+        finally
+        {
+            Sync.Release();
+        }
     }
 
     public async Task SetFinished()
     {
-        FinishedCount++;
-        await HandleFinished();
+        await Sync.WaitAsync();
+
+        try
+        {
+            FinishedCount++;
+            await HandleFinishedCore();
+        }
+        finally
+        {
+            Sync.Release();
+        }
     }
 
     public async Task HandleFinished()
+    {
+        await Sync.WaitAsync();
+
+        try
+        {
+            await HandleFinishedCore();
+        }
+        finally
+        {
+            Sync.Release();
+        }
+    }
+
+    public async Task Shuffle()
+    {
+        await Sync.WaitAsync();
+
+        try
+        {
+            Random.Shared.Shuffle(CollectionsMarshal.AsSpan(Items));
+            await Broadcast(QueueMessage());
+        }
+        finally
+        {
+            Sync.Release();
+        }
+    }
+
+    public async Task SetPlaying(bool state)
+    {
+        await Sync.WaitAsync();
+
+        try
+        {
+            await SetPlayingCore(state);
+        }
+        finally
+        {
+            Sync.Release();
+        }
+    }
+
+    public async Task TogglePlaying()
+    {
+        await Sync.WaitAsync();
+
+        try
+        {
+            if (!StartTime.HasValue) return;
+
+            Playing = !Playing;
+
+            switch (Playing)
+            {
+                case false:
+                    PauseTime = Stopwatch.GetElapsedTime(StartTime.Value);
+                    break;
+                case true:
+                    if (PauseTime.HasValue)
+                        StartTime = Stopwatch.GetTimestamp() - TimeSpanToTimestamp(PauseTime.Value);
+                    PauseTime = null;
+                    break;
+            }
+
+            // Both edges carry the position now, and the position goes out before the
+            // state change so a client lands on it before it starts moving. Resuming
+            // used to broadcast `playing True` alone, leaving every client to rediscover
+            // where the room came back at from the next `sync` — which is a whole round
+            // trip of being in the wrong place, on the one transition where everybody
+            // is listening for it.
+            await Broadcast($"seek {Stopwatch.GetElapsedTime(StartTime.Value).TotalSeconds} {Stamp()}");
+            await SetPlayingCore(Playing);
+        }
+        finally
+        {
+            Sync.Release();
+        }
+    }
+
+    public async Task Stop()
+    {
+        await Sync.WaitAsync();
+
+        try
+        {
+            Playing = false;
+            PauseTime = null;
+            await messageQueue.Add("stop");
+        }
+        finally
+        {
+            Sync.Release();
+        }
+    }
+
+    public async Task Enqueue(PlatformResult result)
+    {
+        await Sync.WaitAsync();
+
+        try
+        {
+            // current sits past the end of the queue exactly when nothing is playing,
+            // so the item going in is the one that becomes current
+            var startsPlayback = CurrentIndex >= Items.Count;
+            Items.Add(result);
+
+            await Broadcast(QueueMessage());
+            if (!startsPlayback) return;
+
+            // That is a track change like any other and has to go through the loading
+            // barrier. Without it the room plays its first track against whatever the
+            // clock already read, so a song added to an idle room starts however many
+            // seconds into itself.
+            UpdateStart();
+            await SetPlayingCore(false);
+            await Broadcast($"current {CurrentIndex}");
+        }
+        finally
+        {
+            Sync.Release();
+        }
+    }
+
+    public async Task Joined(User user)
+    {
+        await Sync.WaitAsync();
+
+        try
+        {
+            await user.SendAsync(QueueMessage());
+            await user.SendAsync($"current {CurrentIndex}");
+            await user.SendAsync($"playing {Playing}");
+
+            if (Items.Count > 0)
+                await user.SendAsync($"seek {CurrentTimeCore()} {Stamp()}");
+
+            await Broadcast($"chat System %% User '{user.ChatUsername}' joined the session.");
+        }
+        finally
+        {
+            Sync.Release();
+        }
+    }
+
+    public async Task SeekTo(double seconds)
+    {
+        await Sync.WaitAsync();
+
+        try
+        {
+            StartTime = Stopwatch.GetTimestamp() - TimeSpanToTimestamp(TimeSpan.FromSeconds(seconds));
+            await Broadcast($"seek {Stopwatch.GetElapsedTime(StartTime.Value).TotalSeconds} {Stamp()}");
+        }
+        finally
+        {
+            Sync.Release();
+        }
+    }
+
+    public async Task SetLoaded()
+    {
+        await Sync.WaitAsync();
+
+        try
+        {
+            LoadedCount++;
+            await HandleLoadedCore();
+        }
+        finally
+        {
+            Sync.Release();
+        }
+    }
+
+    public async Task HandleLoaded()
+    {
+        await Sync.WaitAsync();
+
+        try
+        {
+            await HandleLoadedCore();
+        }
+        finally
+        {
+            Sync.Release();
+        }
+    }
+
+    /// <summary>Answers one user's <c>sync</c>. The position and the stamp are read in the same critical section.</summary>
+    public async Task SyncTo(User user)
+    {
+        await Sync.WaitAsync();
+
+        try
+        {
+            // The stamp is read at the same instant as the position, so a client can
+            // credit the request's queueing to the uplink instead of splitting it across
+            // both halves the way `rtt / 2` does.
+            await user.SendAsync($"sync {CurrentTimeCore()} {Stamp()}");
+        }
+        finally
+        {
+            Sync.Release();
+        }
+    }
+
+    /// <summary>The room position in seconds, read under the lock.</summary>
+    public async Task<double> GetCurrentTime()
+    {
+        await Sync.WaitAsync();
+
+        try
+        {
+            return CurrentTimeCore();
+        }
+        finally
+        {
+            Sync.Release();
+        }
+    }
+
+    protected async Task NextCore()
+    {
+        if (CurrentIndex < Items.Count)
+            CurrentIndex++;
+
+        UpdateStart();
+        await SetPlayingCore(false);
+        await Broadcast($"current {CurrentIndex}");
+    }
+
+    protected Task SetPlayingCore(bool state)
+    {
+        Playing = state;
+        return Broadcast($"playing {Playing}");
+    }
+
+    protected async Task HandleFinishedCore()
     {
         var count = messageQueue.CurrentStore.Count;
         // An empty room has nobody to wait for and nobody to tell. Without the
@@ -92,111 +393,13 @@ public class VirtualPlayer(MessageQueue messageQueue)
         if (count == 0 || FinishedCount < count) return;
 
         FinishedCount = 0;
-        await Next();
+        await NextCore();
     }
 
-    public async Task Shuffle()
-    {
-        Random.Shared.Shuffle(CollectionsMarshal.AsSpan(Items));
-        await Broadcast(Queue());
-    }
-
-    public async Task SetPlaying(bool state)
-    {
-        Playing = state;
-        await Broadcast($"playing {Playing}");
-    }
-
-    public async Task TogglePlaying()
-    {
-        if (!StartTime.HasValue) return;
-
-        await SetPlaying(!Playing);
-
-        switch (Playing)
-        {
-            case false:
-                PauseTime = Stopwatch.GetElapsedTime(StartTime.Value);
-                break;
-            case true:
-                if (PauseTime.HasValue)
-                    StartTime = Stopwatch.GetTimestamp() - TimeSpanToTimestamp(PauseTime.Value);
-                PauseTime = null;
-                break;
-        }
-
-        if (!Playing)
-        {
-            var seconds = Stopwatch.GetElapsedTime(StartTime.Value).TotalSeconds;
-            await Broadcast(Time(seconds));
-        }
-    }
-
-    public async Task Stop()
-    {
-        Playing = false;
-        PauseTime = null;
-        await Broadcast("stop");
-    }
-
-    public async Task Enqueue(PlatformResult result)
-    {
-        await Sync.WaitAsync();
-        // current sits past the end of the queue exactly when nothing is playing,
-        // so the item going in is the one that becomes current
-        var startsPlayback = CurrentIndex >= Items.Count;
-        Items.Add(result);
-        Sync.Release();
-
-        await Broadcast(Queue());
-        if (!startsPlayback) return;
-
-        // That is a track change like any other and has to go through the loading
-        // barrier. Without it the room plays its first track against whatever the
-        // clock already read, so a song added to an idle room starts however many
-        // seconds into itself.
-        UpdateStart();
-        await SetPlaying(false);
-        await Broadcast(Current());
-    }
-
-    public async Task Joined(User user)
-    {
-        await user.SendMessageAsync(Queue());
-        await user.SendMessageAsync(Current());
-        await user.SendMessageAsync($"playing {Playing}");
-
-        if (Items.Count > 0)
-            await SyncTime(user);
-
-        await Broadcast($"chat System %% User '{user.ChatUsername}' joined the session.");
-    }
-
-    public async Task SeekTo(double seconds)
-    {
-        await Sync.WaitAsync();
-
-        var wantedTime = TimeSpan.FromSeconds(seconds);
-        var currentTime = Stopwatch.GetTimestamp();
-        var deltaTime = currentTime - TimeSpanToTimestamp(wantedTime);
-
-        StartTime = deltaTime;
-        Sync.Release();
-
-        var secondsBroadcast = Stopwatch.GetElapsedTime(StartTime.Value).TotalSeconds;
-        await Broadcast(Time(secondsBroadcast));
-    }
-
-    public async Task SetLoaded()
-    {
-        LoadedCount++;
-        await HandleLoaded();
-    }
-
-    public async Task HandleLoaded()
+    protected async Task HandleLoadedCore()
     {
         var count = messageQueue.CurrentStore.Count;
-        // as in HandleFinished: on an empty room `0 < 0` is false, and this
+        // as in HandleFinishedCore: on an empty room `0 < 0` is false, and this
         // releases the barrier — rewinding the clock and force-playing a room
         // that the next person to join then walks into mid-track. An empty queue
         // is the same mistake in the other direction: starting the clock with
@@ -206,30 +409,19 @@ public class VirtualPlayer(MessageQueue messageQueue)
         LoadedCount = 0;
         StartTime = Stopwatch.GetTimestamp();
 
-        await Broadcast(Time(0));
-        await SetPlaying(true);
+        await Broadcast($"seek {0d} {Stamp()}");
+        await SetPlayingCore(true);
     }
 
-    public async Task SyncTime(User user)
-    {
-        var time = await GetCurrentTime();
-        await user.SendMessageAsync($"seek {time}");
-    }
-
-    public async Task<double> GetCurrentTime()
+    /// <summary>The room position in seconds. Both branches touch <c>StartTime</c>, so the lock must be held.</summary>
+    protected double CurrentTimeCore()
     {
         if (!StartTime.HasValue) return 0;
-
-        await Sync.WaitAsync();
 
         if (PauseTime.HasValue)
             StartTime = Stopwatch.GetTimestamp() - TimeSpanToTimestamp(PauseTime.Value);
 
-        var time = Stopwatch.GetElapsedTime(StartTime.Value);
-
-        Sync.Release();
-
-        return time.TotalSeconds;
+        return Stopwatch.GetElapsedTime(StartTime.Value).TotalSeconds;
     }
 
     protected void UpdateStart()
@@ -239,24 +431,42 @@ public class VirtualPlayer(MessageQueue messageQueue)
         PauseTime = null;
     }
 
-    protected string Queue()
+    /// <summary>
+    /// The queue frame, serialised straight into a pooled buffer. This used to be the single
+    /// largest allocation in the room: a JSON string, a second string for the interpolation,
+    /// and a third array for the UTF-8 encoding — three copies of the whole queue, all of them
+    /// large enough to reach gen1 on a busy room.
+    /// </summary>
+    protected Utf8Message QueueMessage()
     {
-        return $"queue {JsonSerializer.Serialize(Items, CustomSerializer.SerializerOptions)}";
+        var message = new Utf8Message(1024);
+        message.Write("queue "u8);
+
+        using var writer = new Utf8JsonWriter(message, CustomSerializer.WriterOptions);
+        JsonSerializer.Serialize(writer, Items, CustomSerializer.SerializerOptions);
+
+        return message;
     }
 
-    protected string Current()
+    protected Task Broadcast(Utf8MessageHandler handler)
     {
-        return $"current {CurrentIndex}";
+        return messageQueue.Add(handler.Message);
     }
 
-    protected static string Time(double time)
-    {
-        return $"seek {time}";
-    }
-
-    protected Task Broadcast(string message)
+    protected Task Broadcast(Utf8Message message)
     {
         return messageQueue.Add(message);
+    }
+
+    /// <summary>
+    /// When this frame left the room, in Unix milliseconds. Every frame that moves the
+    /// shared clock carries one, so a client can subtract the flight this frame actually
+    /// took rather than the quickest one the link has managed lately — which is what
+    /// half a round trip amounts to, and which understates any frame that got queued.
+    /// </summary>
+    public static long Stamp()
+    {
+        return DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
     }
 
     private static long TimeSpanToTimestamp(TimeSpan timeSpan)

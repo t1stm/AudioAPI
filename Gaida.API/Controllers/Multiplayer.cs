@@ -77,23 +77,28 @@ public class Multiplayer(ILogger<Multiplayer> logger, MultiplayerManager manager
 
         try
         {
-            await Task.Delay(Timeout.Infinite, cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            // client went away
+            // Keep a pending receive so control frames (including keepalive pongs) are drained
+            // and this socket gets the same dead-client detection as room sockets.
+            using var reader = new WebSocketTextReader();
+            while (await reader.ReadWholeMessageAsync(webSocket, cancellationToken) is not null) { }
         }
         finally
         {
             manager.RoomsChanged -= SendRooms;
         }
 
-        await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
+        await CloseNormallyAsync(webSocket);
         return;
 
         Task SendRooms()
         {
-            return user.SendMessageAsync(JsonSerializer.Serialize(manager.GetRooms()));
+            var message = new Utf8Message(1024);
+            using (var writer = new Utf8JsonWriter(message))
+            {
+                JsonSerializer.Serialize(writer, manager.GetRooms());
+            }
+
+            return user.SendAsync(message);
         }
     }
 
@@ -102,18 +107,18 @@ public class Multiplayer(ILogger<Multiplayer> logger, MultiplayerManager manager
     {
         try
         {
-            var reader = new WebSocketTextReader();
-            var open = await HandleUserMessage(id, roomID, webSocket, string.Empty, username);
+            using var reader = new WebSocketTextReader();
+            var open = await HandleUserMessage(id, roomID, webSocket, default, username);
 
             while (open)
             {
                 var message = await reader.ReadWholeMessageAsync(webSocket, cancellationToken);
                 if (message is null) break;
 
-                open = await HandleUserMessage(id, roomID, webSocket, message);
+                open = await HandleUserMessage(id, roomID, webSocket, message.Value);
             }
 
-            await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
+            await CloseNormallyAsync(webSocket);
         }
         finally
         {
@@ -129,11 +134,28 @@ public class Multiplayer(ILogger<Multiplayer> logger, MultiplayerManager manager
         }
     }
 
-    /// <returns>Whether the room is still open.</returns>
-    private async Task<bool> HandleUserMessage(string id, Guid roomID, WebSocket webSocket, string message,
-        string? initialUsername = null)
+    private static async Task CloseNormallyAsync(WebSocket webSocket)
     {
-        logger.LogDebug("WebSocket '{ID}' received: '{Message}'", id, message);
+        if (webSocket.State is not (WebSocketState.Open or WebSocketState.CloseReceived)) return;
+
+        try
+        {
+            await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
+        }
+        catch (WebSocketException)
+        {
+            // The peer may have disappeared between checking State and closing. The caller's
+            // finally block still removes a joined user from the room.
+        }
+    }
+
+    /// <returns>Whether the room is still open.</returns>
+    private async Task<bool> HandleUserMessage(string id, Guid roomID, WebSocket webSocket,
+        ReadOnlyMemory<char> message, string? initialUsername = null)
+    {
+        // guarded: the frame only becomes a string when someone is actually listening for it
+        if (logger.IsEnabled(LogLevel.Debug))
+            logger.LogDebug("WebSocket '{ID}' received: '{Message}'", id, message.ToString());
 
         var room = manager.GetRoom(roomID);
         if (room is null) return false;

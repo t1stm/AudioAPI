@@ -37,9 +37,13 @@ public class Room
 
     [JsonIgnore] public Action? OnInfoModified { get; init; }
 
-    public async Task<User> GetOrAddUser(string id, WebSocket webSocket, string? initialUsername)
+    public ValueTask<User> GetOrAddUser(string id, WebSocket webSocket, string? initialUsername)
     {
-        return await Store.GetOrAddUser(id, webSocket, user =>
+        // the join callback closes over the username, so building it on every message — which
+        // is what the unconditional call did — allocated a closure and a delegate per frame
+        if (Store.GetUser(id) is { } present) return new ValueTask<User>(present);
+
+        return Store.GetOrAddUser(id, webSocket, user =>
         {
             user.Username = initialUsername;
             return Player.Joined(user);
@@ -48,133 +52,140 @@ public class Room
 
     public async Task RemoveUser(string id)
     {
-        var user = await Store.GetUser(id);
+        var user = Store.GetUser(id);
         // a socket can close without ever having joined — nothing left, so
         // nothing to announce and no barrier that could have changed
         if (user is null) return;
 
         await Store.RemoveUser(id);
-        await Queue.Add($"chat System %% User '{user.ChatUsername}' left from the session.");
+        await Queue.Send($"chat System %% User '{user.ChatUsername}' left from the session.");
         await Player.HandleLoaded();
         await Player.HandleFinished();
     }
 
-    public async Task HandleUserMessage(User user, string message)
+    public Task HandleUserMessage(User user, string message)
     {
-        var splitIndex = message.IndexOf(' ');
-        if (splitIndex != -1)
-        {
-            await HandleParameterMessages(message[..splitIndex], message[splitIndex..], user);
-            return;
-        }
-
-        await HandleParameterlessMessages(message, user);
+        return HandleUserMessage(user, message.AsMemory());
     }
 
-    protected async Task HandleParameterMessages(string name, string value, User user)
+    /// <summary>
+    /// Takes the frame as memory over the reader's buffer: splitting a command used to cut two
+    /// strings out of every inbound message, and this path runs once per keystroke-rate action
+    /// from every member of every room.
+    /// </summary>
+    public Task HandleUserMessage(User user, ReadOnlyMemory<char> message)
     {
-        switch (name)
+        var splitIndex = message.Span.IndexOf(' ');
+
+        return splitIndex != -1
+            ? HandleParameterMessages(message[..splitIndex], message[splitIndex..], user)
+            : HandleParameterlessMessages(message, user);
+    }
+
+    // deliberately not async: the switch dispatches on a span, and every arm is already a Task,
+    // so returning them directly skips a state machine per message
+    protected Task HandleParameterMessages(ReadOnlyMemory<char> name, ReadOnlyMemory<char> value, User user)
+    {
+        switch (name.Span)
         {
             case "add":
-                var result = await ManagerService.Manager.SearchID(value);
-                if (result is null) return;
-
-                await Player.Enqueue(result);
-                break;
+                return Enqueue(value.ToString());
 
             case "setnext":
-                if (!int.TryParse(value, out var nextIndex)) return;
-                await Player.SetNext(nextIndex);
-                break;
+                return int.TryParse(value.Span, out var nextIndex) ? Player.SetNext(nextIndex) : Task.CompletedTask;
 
             case "skipto":
-                if (!int.TryParse(value, out var skipIndex)) return;
-                await Player.SkipTo(skipIndex);
-                break;
+                return int.TryParse(value.Span, out var skipIndex) ? Player.SkipTo(skipIndex) : Task.CompletedTask;
 
             case "seek":
-                if (!double.TryParse(value, out var seekSeconds)) return;
-                await Player.SeekTo(seekSeconds);
-                break;
+                return double.TryParse(value.Span, out var seekSeconds)
+                    ? Player.SeekTo(seekSeconds)
+                    : Task.CompletedTask;
 
             case "remove":
-                if (!int.TryParse(value, out var removeIndex)) return;
-                await Player.Remove(removeIndex);
-                break;
+                return int.TryParse(value.Span, out var removeIndex) ? Player.Remove(removeIndex) : Task.CompletedTask;
 
             case "chat":
-                await Queue.Add($"chat {user.ChatUsername} %% {value}");
-                break;
+                return Queue.Send($"chat {user.ChatUsername} %% {value}");
 
             case "updateroom":
-                await HandleUpdateRoom(value, user);
-                break;
+                return HandleUpdateRoom(value, user);
+
+            default:
+                return Task.CompletedTask;
         }
     }
 
-    protected async Task HandleUpdateRoom(string value, User user)
+    protected async Task Enqueue(string id)
     {
-        var action = value.Trim();
-        var splitIndex = action.IndexOf(' ');
-        if (splitIndex == -1 || splitIndex + 1 >= value.Length) return;
+        var result = await ManagerService.Manager.SearchID(id);
+        if (result is null) return;
 
-        var parameterKey = action[..splitIndex];
+        await Player.Enqueue(result);
+    }
+
+    protected Task HandleUpdateRoom(ReadOnlyMemory<char> value, User user)
+    {
+        var action = value.Span.Trim();
+        var splitIndex = action.IndexOf(' ');
+        if (splitIndex == -1 || splitIndex + 1 >= value.Length) return Task.CompletedTask;
+
         var parameterValue = action[splitIndex..];
 
-        switch (parameterKey)
+        switch (action[..splitIndex])
         {
             case "name":
-                RoomName = parameterValue;
+                RoomName = parameterValue.ToString();
                 OnInfoModified?.Invoke();
 
-                await user.SendMessageAsync($"room name {RoomName}");
-                break;
+                return user.SendAsync($"room name {RoomName}");
 
             case "description":
-                RoomDescription = parameterValue;
+                RoomDescription = parameterValue.ToString();
                 OnInfoModified?.Invoke();
 
-                await user.SendMessageAsync($"room description {RoomDescription}");
-                break;
+                return user.SendAsync($"room description {RoomDescription}");
+
+            default:
+                return Task.CompletedTask;
         }
     }
 
-    protected async Task HandleParameterlessMessages(string name, User user)
+    protected Task HandleParameterlessMessages(ReadOnlyMemory<char> name, User user)
     {
-        switch (name)
+        switch (name.Span)
         {
             case "end":
-                await Player.SetFinished();
-                return;
+                return Player.SetFinished();
 
             case "next":
-                await Player.Next();
-                return;
+                return Player.Next();
 
             case "previous":
-                await Player.Previous();
-                return;
+                return Player.Previous();
 
             case "playpause":
-                await Player.TogglePlaying();
-                return;
+                return Player.TogglePlaying();
 
             case "stop":
-                await Player.Stop();
-                return;
+                return Player.Stop();
 
             case "shuffle":
-                await Player.Shuffle();
-                return;
+                return Player.Shuffle();
 
             case "loaded":
-                await Player.SetLoaded();
-                break;
+                return Player.SetLoaded();
 
             case "sync":
-                var time = await Player.GetCurrentTime();
-                await user.SendMessageAsync($"sync {time}");
-                return;
+                return SyncTo(user);
+
+            default:
+                return Task.CompletedTask;
         }
+    }
+
+    protected Task SyncTo(User user)
+    {
+        return Player.SyncTo(user);
     }
 }
