@@ -3,6 +3,7 @@ import { audioWsUrl, proxyThumbnails } from '$lib/discord';
 import queue from './queue.svelte';
 import current from './current.svelte';
 import audio from './audio.svelte';
+import { SyncClock, minSyncSpacingMs, syncDeadbandSeconds } from '$lib/syncClock';
 
 /** What the room's `queue` frame actually carries: the raw platform result, not
  *  the search shape. No `contentUrl`, and most fields are nullable. */
@@ -38,11 +39,10 @@ export type SessionStatus =
 	| 'reconnecting';
 
 const maximumChatLines = 200;
-// `sync` replies to the sender only and does not touch anyone else's playback,
-// so a tight interval costs one small frame per second and buys a much shorter
-// window in which a client can sit audibly behind the room.
-const syncIntervalMs = 1_000;
-const driftToleranceSeconds = 0.5;
+// A `sync` reply that never comes must not wedge the loop shut, and only one may
+// be in flight at a time — see `requestSync`.
+const syncTimeoutMs = 5_000;
+
 // The loading barrier holds the whole room, so a client that cannot buffer has
 // to answer late rather than never. Long enough for a slow connection to reach
 // `canplaythrough`, short enough that one bad client is not everyone's problem.
@@ -78,6 +78,21 @@ class Session {
 	 *  frames. Zero frames received is the only "room does not exist" signal. */
 	gone: boolean = $state(false);
 
+	// The clock's readouts, mirrored out of `SyncClock` rather than read through
+	// getters: it is a plain class, so nothing about mutating it is reactive, and
+	// a getter over it would leave the strip showing whatever it first rendered.
+
+	/** How far behind the room this client is, in milliseconds. Positive means
+	 *  the room is ahead and the player is being sped up to catch it. */
+	offsetMs: number = $state(0);
+	/** Round trip to the server, in milliseconds — the quickest seen lately,
+	 *  which is the one the offset is actually derived from. */
+	pingMs: number = $state(0);
+	/** This device's audio clock against the server's, in parts per million,
+	 *  positive when it runs fast. `null` until there is enough history to say —
+	 *  which takes minutes, not seconds. */
+	driftPpm: number | null = $state(null);
+
 	private socket: WebSocket | null = null;
 	private pending: string[] = [];
 	private attempts = 0;
@@ -92,9 +107,12 @@ class Session {
 	private positionedAt: number | null = null;
 	private awaitingBarrier = false;
 	private closing = false;
+	/** The room's clock, and this client's standing on it. */
+	private clock = new SyncClock();
+	private syncSentAt = 0;
+	private syncInFlight = false;
 	private syncTimer: ReturnType<typeof setInterval> | null = null;
 	private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-	private driftTimer: ReturnType<typeof setTimeout> | null = null;
 	private loadTimer: ReturnType<typeof setTimeout> | null = null;
 
 	get inRoom() {
@@ -105,6 +123,8 @@ class Session {
 	get awaitingLoad() {
 		return this.pendingFor !== null;
 	}
+
+
 
 	/** Commands to run as soon as the next connection opens — how a freshly
 	 *  created room gets its name, since `CreateRoom` takes no body. */
@@ -131,6 +151,7 @@ class Session {
 		current.clear();
 		audio.paused = true;
 		audio.currentSeconds = 0;
+		this.rewind();
 		// set before the socket opens so a click in the meantime queues a command
 		// instead of quietly mutating a queue the server owns
 		queue.remote = command => this.send(command);
@@ -147,6 +168,7 @@ class Session {
 		this.awaitingBarrier = false;
 		this.pendingFor = null;
 		this.positionedAt = null;
+		this.rewind();
 		queue.remote = null;
 		queue.clear();
 	}
@@ -208,7 +230,7 @@ class Session {
 		socket.onopen = () => {
 			this.attempts = 0;
 			for (const command of this.pending.splice(0)) socket.send(command);
-			this.syncTimer = setInterval(() => this.send('sync'), syncIntervalMs);
+			this.syncTimer = setInterval(() => this.requestSync(), minSyncSpacingMs);
 		};
 		socket.onmessage = event => {
 			this.frames++;
@@ -219,6 +241,7 @@ class Session {
 
 	private closed() {
 		this.clearTimer('syncTimer');
+		this.syncInFlight = false;
 		this.socket = null;
 		if (this.closing || this.roomId === null) return;
 
@@ -258,10 +281,12 @@ class Session {
 				} else this.status = this.awaitingBarrier ? 'holding' : 'paused';
 				break;
 			case 'seek':
-				audio.currentSeconds = Number(argument);
+				// measured when the server broadcast it, so it is one downlink stale
+				// by the time it lands here
+				audio.currentSeconds = Number(argument) + this.clock.halfRtt;
 				break;
 			case 'sync':
-				this.correctDrift(Number(argument));
+				this.applySync(Number(argument));
 				break;
 			case 'stop':
 				audio.paused = true;
@@ -312,6 +337,7 @@ class Session {
 			queue.currentIndex = index;
 			audio.paused = true;
 			audio.currentSeconds = 0;
+			this.rewind();
 			this.awaitingBarrier = true;
 			this.status = 'holding';
 			this.endedFor = null;
@@ -345,16 +371,75 @@ class Session {
 		this.loadTimer = setTimeout(() => this.reportLoaded(), loadTimeoutMs);
 	}
 
-	private correctDrift(reported: number) {
+	/**
+	 * One reading of the room's clock, and the correction it buys.
+	 *
+	 * The reply is stale by however long the return trip took, which is why this
+	 * cannot compare against the raw number: on a symmetric path a client's own
+	 * lateness and the reply's staleness are the same size and cancel, so a
+	 * client a tenth of a second behind the room measures itself as fine. The
+	 * `SyncClock` credits the trip back; everything here does is spend the result.
+	 */
+	private applySync(reported: number) {
+		this.syncInFlight = false;
 		if (!Number.isFinite(reported)) return;
-		if (Math.abs(audio.currentSeconds - reported) <= driftToleranceSeconds) return;
 
-		audio.currentSeconds = reported;
-		this.status = 'catching up';
-		this.clearTimer('driftTimer');
-		this.driftTimer = setTimeout(() => {
-			if (this.status === 'catching up') this.status = audio.paused ? 'paused' : 'synced';
-		}, 1200);
+		const error = this.clock.sample(
+			this.syncSentAt,
+			performance.now(),
+			reported,
+			audio.currentSeconds,
+		);
+
+		if (this.clock.shouldSeek(error)) {
+			// too far out for the rate budget to close, or the track's opening
+			// reading, where a jump costs nothing and steering costs a slow arrival
+			audio.currentSeconds += error;
+			audio.rate = 1;
+			this.clock.seeked();
+		} else {
+			audio.rate = this.clock.rateFor(error);
+		}
+
+		this.offsetMs = Math.round(error * 1000);
+		this.pingMs = Math.round(this.clock.halfRtt * 2000);
+		const drift = this.clock.drift;
+		this.driftPpm = drift === null ? null : Math.round(drift * 1e6);
+
+		// the word on the strip now follows the measurement rather than a timeout
+		if (this.awaitingBarrier || audio.paused) return;
+		// the same threshold the loop steers on, so the word means exactly what the
+		// rate is doing: `synced` is the deadband, `catching up` is the correction
+		this.status = Math.abs(error) > syncDeadbandSeconds ? 'catching up' : 'synced';
+	}
+
+	/**
+	 * Asks the room where it is. Replies carry no request id, so a second request
+	 * in flight would be answered by the first reply and time a 600 ms link at
+	 * 1 ms — hence one at a time, self-clocked off the answers rather than a fixed
+	 * interval. This is sent past `send`, because a `sync` stranded by a dropped
+	 * socket describes a moment that has passed and must not be flushed later.
+	 */
+	private requestSync() {
+		if (this.syncInFlight) {
+			if (performance.now() - this.syncSentAt < syncTimeoutMs) return;
+			this.syncInFlight = false;
+		}
+		if (this.socket?.readyState !== WebSocket.OPEN) return;
+
+		this.syncInFlight = true;
+		this.syncSentAt = performance.now();
+		this.socket.send('sync');
+	}
+
+	/** A track change, a join, a leave: the samples describe a position that no
+	 *  longer exists. What the clock knows about the *link*, and about this
+	 *  device's drift, survives — neither of those changed. */
+	private rewind() {
+		this.clock.reset();
+		this.offsetMs = 0;
+		audio.rate = 1;
+		// `pingMs` and `driftPpm` stay: the link and the device are what they were
 	}
 
 	private addChat(argument: string) {
@@ -403,7 +488,7 @@ class Session {
 		else if (field === 'description') this.description = value;
 	}
 
-	private clearTimer(which: 'syncTimer' | 'reconnectTimer' | 'driftTimer' | 'loadTimer') {
+	private clearTimer(which: 'syncTimer' | 'reconnectTimer' | 'loadTimer') {
 		const timer = this[which];
 		if (timer === null) return;
 		clearTimeout(timer as ReturnType<typeof setTimeout>);
@@ -415,7 +500,6 @@ class Session {
 	private teardown() {
 		this.clearTimer('syncTimer');
 		this.clearTimer('reconnectTimer');
-		this.clearTimer('driftTimer');
 		this.clearTimer('loadTimer');
 		if (!this.socket) return;
 		this.socket.onclose = null;

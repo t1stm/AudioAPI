@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { minSyncSpacingMs, proportionalGain, syncDeadbandSeconds } from '$lib/syncClock';
 import type Session from './session.svelte';
 import type Queue from './queue.svelte';
 import type Audio from './audio.svelte';
@@ -300,14 +301,137 @@ describe('parsing', () => {
 	});
 });
 
-describe('drift', () => {
-	it('corrects only past the tolerance', () => {
-		audio.currentSeconds = 10;
-		receive('sync 10.3');
-		expect(audio.currentSeconds).toBe(10);
+describe('the shared clock', () => {
+	/** Runs the clock up to the moment the next `sync` actually leaves — the
+	 *  interval's own phase would otherwise be added to every round trip — then
+	 *  waits one out and answers it. */
+	function roundTrip(reported: number, rttMs = 200) {
+		const before = FakeSocket.last.sent.length;
+		while (FakeSocket.last.sent.length === before) vi.advanceTimersByTime(1);
+		vi.advanceTimersByTime(rttMs);
+		receive(`sync ${reported}`);
+	}
 
-		receive('sync 12.3456789');
-		expect(audio.currentSeconds).toBeCloseTo(12.3456789);
+	beforeEach(() => {
+		// the loop is timed off `performance.now()`, so that has to move with the
+		// timers or every trip reads as one enormous round trip
+		vi.useFakeTimers({
+			toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'],
+		});
+		session.connect('0f0f4e0c', 'Kris G');
+		FakeSocket.last.onopen?.();
+
+		receive(`queue ${JSON.stringify([item()])}`);
+		receive('current 0');
+		receive('playing True');
+		FakeSocket.last.sent.length = 0;
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it('keeps one sync in flight, since the replies carry no id', () => {
+		vi.advanceTimersByTime(minSyncSpacingMs * 4);
+		expect(FakeSocket.last.sent.filter(command => command === 'sync')).toHaveLength(1);
+
+		receive('sync 0');
+		vi.advanceTimersByTime(minSyncSpacingMs);
+		expect(FakeSocket.last.sent.filter(command => command === 'sync')).toHaveLength(2);
+	});
+
+	it('does not wedge shut when a reply never comes', () => {
+		vi.advanceTimersByTime(minSyncSpacingMs);
+		expect(FakeSocket.last.sent.filter(command => command === 'sync')).toHaveLength(1);
+
+		// nothing answers it: the loop has to give up on that trip and ask again
+		vi.advanceTimersByTime(6_000);
+		expect(FakeSocket.last.sent.filter(command => command === 'sync').length).toBeGreaterThan(1);
+	});
+
+	it('snaps once at the top of a track, crediting the trip in flight', () => {
+		audio.currentSeconds = 10;
+		// the room said 10.3 a hundred milliseconds ago, so it is really at 10.4
+		roundTrip(10.3);
+
+		expect(audio.currentSeconds).toBeCloseTo(10.4);
+		expect(audio.rate).toBe(1);
+	});
+
+	it('steers with the rate once the track has had its opening jump', () => {
+		audio.currentSeconds = 10;
+		roundTrip(10.3);
+		const settled = audio.currentSeconds;
+
+		// 100 ms out: well inside what the rate can close
+		roundTrip(settled + 0.05, 100);
+
+		expect(audio.currentSeconds).toBeCloseTo(settled);
+		expect(audio.rate).toBeCloseTo(1 + proportionalGain * (0.1 - syncDeadbandSeconds));
+	});
+
+	it('never asks for more than the rate budget allows', () => {
+		roundTrip(0);
+		roundTrip(0.7, 200);
+
+		expect(audio.rate).toBeLessThanOrEqual(1.02);
+		expect(audio.rate).toBeGreaterThanOrEqual(0.98);
+	});
+
+	it('leads a seek frame by the trip it spent arriving', () => {
+		roundTrip(0, 200);
+		receive('seek 30');
+
+		expect(audio.currentSeconds).toBeCloseTo(30.1);
+	});
+
+	it('hands the track change a clock that knows the link but not the position', () => {
+		roundTrip(0, 200);
+		audio.rate = 1.01;
+
+		receive('current 1');
+
+		expect(audio.rate).toBe(1);
+		expect(session.offsetMs).toBe(0);
+		// the link did not change, so the seek lead has to survive
+		receive('seek 5');
+		expect(audio.currentSeconds).toBeCloseTo(5.1);
+	});
+
+	it('holds the rate at exactly 1 while the room is together enough', () => {
+		roundTrip(0);
+		roundTrip(audio.currentSeconds + 0.005, 20);
+
+		// 15 ms out, and the loop must not be reaching for it
+		expect(session.offsetMs).toBe(15);
+		expect(audio.rate).toBe(1);
+		expect(session.status).toBe('synced');
+	});
+
+	it('says catching up while it is, and synced once it is not', () => {
+		audio.currentSeconds = 10;
+		roundTrip(10.3);
+		roundTrip(audio.currentSeconds + 0.2, 400);
+		expect(session.status).toBe('catching up');
+
+		// a quicker trip, so this is the sample the estimator ends up trusting
+		roundTrip(audio.currentSeconds + 0.005, 20);
+		expect(session.status).toBe('synced');
+	});
+
+	it('withholds a drift reading until the history can support one', () => {
+		roundTrip(0);
+		expect(session.driftPpm).toBeNull();
+	});
+
+	it('mirrors the readings out of the clock, which is not reactive itself', () => {
+		audio.currentSeconds = 10;
+		roundTrip(10.3, 180);
+
+		// 300 ms reported plus the 90 ms the reply spent arriving
+		expect(session.offsetMs).toBe(390);
+		expect(session.pingMs).toBe(180);
+		expect(session.driftPpm).toBeNull();
 	});
 });
 

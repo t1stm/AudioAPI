@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { Icon, PencilSquare } from 'svelte-hero-icons';
 	import session from '$states/session.svelte';
+	import audio from '$states/audio.svelte';
 
 	// decorative only — the state word and the rail carry the meaning
 	const drops = Array.from({ length: 48 }, (_, index) => index);
@@ -12,6 +13,38 @@
 	let title = $derived(session.name || 'Untitled room');
 	let holdState = $derived(
 		session.status === 'holding' ? 'holding' : session.status === 'synced' ? 'playing' : 'idle'
+	);
+
+	// The honest version of what the state word claims, in the order the loop
+	// works in: how far out we are, what it was measured over, what is being done
+	// about it, and what the device does on its own.
+	const signed = (value: number, unit: string) =>
+		`${value > 0 ? '+' : value < 0 ? '−' : ''}${Math.abs(value)} ${unit}`;
+
+	let stats = $derived(
+		[
+			signed(session.offsetMs, 'ms'),
+			`${session.pingMs} ms rtt`,
+			`${audio.rate.toFixed(4)}×`,
+			// Tens of ppm take minutes to rise out of the network's noise, so this
+			// says nothing at all until it has something to say.
+			session.driftPpm === null ? '? ppm' : signed(session.driftPpm, 'ppm')
+		].join(' · ')
+	);
+
+	// the legend, since four bare numbers in a strip are a puzzle
+	let standing = $derived(
+		session.offsetMs === 0
+			? 'level with the room'
+			: `${Math.abs(session.offsetMs)} ms ${session.offsetMs > 0 ? 'behind' : 'ahead of'} the room`
+	);
+	let drift = $derived(
+		session.driftPpm === null
+			? 'clock drift still measuring'
+			: `clock runs ${Math.abs(session.driftPpm)} ppm ${session.driftPpm > 0 ? 'fast' : 'slow'}`
+	);
+	let legend = $derived(
+		`${standing} · ${session.pingMs} ms round trip · playing at ${audio.rate.toFixed(4)}× · ${drift}`
 	);
 
 	function startRename() {
@@ -62,6 +95,11 @@
 
 	<div class="flex shrink-0 items-center gap-3">
 		<span class="font-mono text-[0.72rem] tracking-[0.08em] state">{session.status}</span>
+		{#if session.status !== 'offline'}
+			<span class="hidden font-mono text-[0.68rem] text-fog md:block" title={legend}
+				>[{stats}]</span
+			>
+		{/if}
 		<span class="hidden font-mono text-[0.68rem] text-fog md:block"
 			>here since you joined · {session.roster.length}</span
 		>

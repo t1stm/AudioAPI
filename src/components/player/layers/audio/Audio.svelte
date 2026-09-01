@@ -76,6 +76,17 @@
 		return () => cancelAnimationFrame(frame);
 	});
 
+	// The room's clock steers the rate to hold everyone together. `preservesPitch`
+	// off is deliberate: on, the browser time-stretches, and a phase vocoder is
+	// audibly grainy on transients. Off, it resamples — and the loop settles
+	// within a few parts in ten thousand of 1.0, which is a pitch shift of about
+	// a cent. The clamp that keeps it there lives in `syncClock.ts`.
+	$effect(() => {
+		if (!element) return;
+		element.preservesPitch = false;
+		element.playbackRate = audio.rate;
+	});
+
 	// a write to the state the element did not make is a seek. The tolerance is
 	// what stops this component's own writes from bouncing back in as one.
 	$effect(() => {
