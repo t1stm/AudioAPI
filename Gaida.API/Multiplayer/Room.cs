@@ -49,6 +49,10 @@ public class Room
     public async Task RemoveUser(string id)
     {
         var user = await Store.GetUser(id);
+        // a socket can close without ever having joined — nothing left, so
+        // nothing to announce and no barrier that could have changed
+        if (user is null) return;
+
         await Store.RemoveUser(id);
         await Queue.Add($"chat System %% User '{user.ChatUsername}' left from the session.");
         await Player.HandleLoaded();

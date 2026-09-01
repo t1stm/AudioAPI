@@ -39,11 +39,19 @@ public class UserStore
         Sync.Release();
     }
 
-    public async Task<User> GetUser(string id)
+    /// <returns>The user, or null when this id was never in the store.</returns>
+    public async Task<User?> GetUser(string id)
     {
         await Sync.WaitAsync();
-        var user = Users[id];
-        Sync.Release();
-        return user;
+        try
+        {
+            // an indexer here throws on an unknown id, and the throw used to skip
+            // the release and leave the store's semaphore held for good
+            return Users.GetValueOrDefault(id);
+        }
+        finally
+        {
+            Sync.Release();
+        }
     }
 }

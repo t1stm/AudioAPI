@@ -23,6 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Gaida.API\Gaida.API.csproj" />
     <ProjectReference Include="..\Gaida.Core\Gaida.Core.csproj" />
     <ProjectReference Include="..\Platforms\Gaida.Platforms.MusicDatabase\Gaida.Platforms.MusicDatabase.csproj" />
     <ProjectReference Include="..\Platforms\Gaida.Platforms.YouTube\Gaida.Platforms.YouTube.csproj" />

@@ -31,7 +31,15 @@ public class WebSocketTextReader
 
             return Builder.ToString();
         }
-        catch (Exception)
+        // A connection that goes away is the end of the session, not a fault:
+        // null is what the caller already treats as "this socket is done". Any
+        // other exception is our own bug and has to stay visible — swallowing
+        // everything turned a crash into a session that quietly stopped, with
+        // the client left to guess from a socket that never says why.
+        catch (Exception exception) when (exception is OperationCanceledException
+                                              or WebSocketException
+                                              or ObjectDisposedException
+                                              or IOException)
         {
             return null;
         }

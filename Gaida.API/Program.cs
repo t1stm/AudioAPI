@@ -21,9 +21,11 @@ foreach (var key in (string[]) ["DOMAIN", "STORAGE", "ALBUM_COVERS"])
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddSerilog();
-var configuredOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+// Wide open on purpose: everything served here is public read-only audio and
+// there are no cookies or credentials to protect, while an allowlist quietly
+// costs us the Discord activity, every preview deploy and every LAN device.
 builder.Services.AddCors(options => options.AddPolicy("Frontend", policy => policy
-    .SetIsOriginAllowed(origin => IsFrontendOrLocalVite(origin, configuredOrigins))
+    .AllowAnyOrigin()
     .AllowAnyHeader()
     .AllowAnyMethod()));
 
@@ -50,14 +52,3 @@ app.UseAuthorization();
 app.MapControllers();
 app.Run();
 
-static bool IsFrontendOrLocalVite(string origin, IReadOnlyCollection<string> configuredOrigins)
-{
-    if (configuredOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase)) return true;
-    if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return false;
-
-    return uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
-           uri.Host.Equals("127.0.0.1", StringComparison.Ordinal) ||
-           uri.Host.Equals("::1", StringComparison.Ordinal) ||
-           uri.Host.Equals("gergov.bg", StringComparison.OrdinalIgnoreCase) ||
-           uri.Host.EndsWith(".gergov.bg", StringComparison.OrdinalIgnoreCase);
-}

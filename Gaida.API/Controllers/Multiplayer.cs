@@ -100,22 +100,33 @@ public class Multiplayer(ILogger<Multiplayer> logger, MultiplayerManager manager
     private async Task HandleRoomJoinWebSocket(WebSocket webSocket, Guid roomID, string? username, string id,
         CancellationToken cancellationToken)
     {
-        var reader = new WebSocketTextReader();
-        var open = await HandleUserMessage(id, roomID, webSocket, string.Empty, username);
-
-        while (open)
+        try
         {
-            var message = await reader.ReadWholeMessageAsync(webSocket, cancellationToken);
-            if (message is null) break;
+            var reader = new WebSocketTextReader();
+            var open = await HandleUserMessage(id, roomID, webSocket, string.Empty, username);
 
-            open = await HandleUserMessage(id, roomID, webSocket, message);
+            while (open)
+            {
+                var message = await reader.ReadWholeMessageAsync(webSocket, cancellationToken);
+                if (message is null) break;
+
+                open = await HandleUserMessage(id, roomID, webSocket, message);
+            }
+
+            await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
         }
+        finally
+        {
+            // The user is in the store from the first HandleUserMessage onward, so
+            // anything it throws afterwards — a send onto a socket the peer has
+            // already dropped, a lookup that fails — used to strand them there.
+            // The barriers count against the live member list, so one stranded
+            // member is a room that never advances past its current track again.
+            var room = manager.GetRoom(roomID);
+            await (room?.RemoveUser(id) ?? Task.CompletedTask);
 
-        var room = manager.GetRoom(roomID);
-        await (room?.RemoveUser(id) ?? Task.CompletedTask);
-
-        await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
-        logger.LogDebug("WebSocket '{ID}' disconnected", id);
+            logger.LogDebug("WebSocket '{ID}' disconnected", id);
+        }
     }
 
     /// <returns>Whether the room is still open.</returns>

@@ -85,7 +85,11 @@ public class VirtualPlayer(MessageQueue messageQueue)
 
     public async Task HandleFinished()
     {
-        if (FinishedCount < messageQueue.CurrentStore.Count) return;
+        var count = messageQueue.CurrentStore.Count;
+        // An empty room has nobody to wait for and nobody to tell. Without the
+        // count check `0 < 0` reads as "everybody reported", so the last user
+        // leaving advances the room a track on their way out.
+        if (count == 0 || FinishedCount < count) return;
 
         FinishedCount = 0;
         await Next();
@@ -138,10 +142,22 @@ public class VirtualPlayer(MessageQueue messageQueue)
     public async Task Enqueue(PlatformResult result)
     {
         await Sync.WaitAsync();
+        // current sits past the end of the queue exactly when nothing is playing,
+        // so the item going in is the one that becomes current
+        var startsPlayback = CurrentIndex >= Items.Count;
         Items.Add(result);
         Sync.Release();
 
         await Broadcast(Queue());
+        if (!startsPlayback) return;
+
+        // That is a track change like any other and has to go through the loading
+        // barrier. Without it the room plays its first track against whatever the
+        // clock already read, so a song added to an idle room starts however many
+        // seconds into itself.
+        UpdateStart();
+        await SetPlaying(false);
+        await Broadcast(Current());
     }
 
     public async Task Joined(User user)
@@ -179,7 +195,13 @@ public class VirtualPlayer(MessageQueue messageQueue)
 
     public async Task HandleLoaded()
     {
-        if (LoadedCount < messageQueue.CurrentStore.Count) return;
+        var count = messageQueue.CurrentStore.Count;
+        // as in HandleFinished: on an empty room `0 < 0` is false, and this
+        // releases the barrier — rewinding the clock and force-playing a room
+        // that the next person to join then walks into mid-track. An empty queue
+        // is the same mistake in the other direction: starting the clock with
+        // nothing to play leaves it running until something is added.
+        if (count == 0 || Items.Count == 0 || LoadedCount < count) return;
 
         LoadedCount = 0;
         StartTime = Stopwatch.GetTimestamp();
