@@ -63,7 +63,7 @@
 	}
 </script>
 
-<div class="strip" data-hold={holdState}>
+<div class="strip micro:hidden" data-hold={holdState}>
 	<div class="flex min-w-0 items-center gap-3">
 		{#if renaming}
 			<input
@@ -94,18 +94,17 @@
 	</div>
 
 	<div class="flex shrink-0 items-center gap-3">
-		<span class="font-mono text-[0.72rem] tracking-[0.08em] state">{session.status}</span>
+		<span class="state font-mono text-[0.72rem] tracking-[0.08em]"
+			>{session.status}{session.roster.length > 0 ? ` · ${session.roster.length}` : ''}</span
+		>
 		{#if session.status !== 'offline'}
 			<span class="hidden font-mono text-[0.68rem] text-fog md:block" title={legend}
 				>[{stats}]</span
 			>
 		{/if}
-		<span class="hidden font-mono text-[0.68rem] text-fog md:block"
-			>here since you joined · {session.roster.length}</span
-		>
 		<button
 			type="button"
-			class="rounded-row border border-haze px-2 py-1 text-xs font-semibold text-fog hover:bg-surface-200 hover:text-chalk"
+			class="min-h-8 rounded-row border border-haze px-2 py-1 text-xs font-semibold text-fog hover:bg-surface-200 hover:text-chalk"
 			onclick={leave}
 		>
 			Leave
@@ -128,13 +127,22 @@
 	.strip {
 		position: relative;
 		display: flex;
+		flex-shrink: 0;
 		align-items: center;
 		justify-content: space-between;
-		gap: 1rem;
+		gap: 0.5rem;
 		overflow: hidden;
-		height: 46px;
-		padding: 0 1rem;
+		height: 38px;
+		padding: 0 0.75rem;
 		background: var(--color-surface-100);
+	}
+
+	@media (min-width: 640px) {
+		.strip {
+			gap: 1rem;
+			height: 46px;
+			padding: 0 1rem;
+		}
 	}
 
 	.state {

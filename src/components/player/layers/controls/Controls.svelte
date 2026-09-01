@@ -43,10 +43,10 @@
   })
 </script>
 
-<div id="controls" class="flex shrink-0 gap-2">
+<div id="controls" class="flex shrink-0 items-center gap-1 sm:order-1 sm:gap-2">
 	{#each buttons as button (button.icon)}
 		<button
-			class="cursor-pointer ring-0 focus-visible:bg-surface-300 focus-visible:outline-5 outline-surface-300 rounded-lg duration-75"
+			class="flex size-11 cursor-pointer items-center justify-center rounded-lg outline-surface-300 ring-0 duration-75 focus-visible:bg-surface-300 focus-visible:outline-5 sm:size-8"
 			onclick={button.onClick}
 		>
 			<Icon src={button.icon} color="white" mini size="24" />

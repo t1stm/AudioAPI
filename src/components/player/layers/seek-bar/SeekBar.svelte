@@ -57,19 +57,21 @@
     })
   })
 
+  // ponytail: whole seconds. This crosses into the browser process to redraw the
+  // OS media notification, which shows seconds — so rounding is both the only
+  // precision the call can use and the thing that stops the effect re-running on
+  // every tick, since a $derived that lands on the same value propagates nothing.
+  let positionSecond = $derived(Math.round(audio.currentSeconds));
   $effect(() => {
-    const position = audio.currentSeconds;
-    const length = current.lengthSeconds > audio.currentSeconds ? current.lengthSeconds : audio.currentSeconds;
-
     navigator.mediaSession.setPositionState({
-      duration: length,
-      position: position,
+      duration: Math.max(current.lengthSeconds, positionSecond),
+      position: positionSecond,
       playbackRate: 1,
     })
   })
 </script>
 
-<div id="seekbar" class="flex items-center gap-2 w-full max-w-lg">
+<div id="seekbar" class="flex w-full min-w-0 max-w-lg items-center gap-2 sm:order-3 sm:flex-1">
 	<div
 		class="relative h-7 w-3.5 shrink-0 overflow-hidden rounded-art border bg-dark-0 transition-opacity duration-150"
 		class:opacity-0={!isBuffering}
@@ -79,7 +81,9 @@
 		aria-label="Buffering"
 		aria-hidden={!isBuffering}
 	>
-		<div class="rain-streak"></div>
+		{#if isBuffering}
+			<div class="rain-streak"></div>
+		{/if}
 		<div
 			class="absolute inset-x-0 bottom-0 border-t border-primary-500 bg-primary-0/40 duration-150"
 			style:height={gaugeLevel + '%'}
@@ -87,19 +91,20 @@
 	</div>
 	<span class="font-mono text-xs text-fog select-none">{currentTime}</span>
 	<div
-		class="flex h-2 hover:h-3 rounded-lg w-full relative bg-surface-200 cursor-pointer duration-150 focus-visible:h-3 focus-visible:outline-4 outline-surface-300"
+		class="relative flex h-2 w-full cursor-pointer touch-none rounded-lg bg-surface-200 duration-150 hover:h-3 focus-visible:h-3 focus-visible:outline-4 outline-surface-300"
 		tabindex="0"
 		role="slider"
 		aria-valuenow={currentPercentage}
 		aria-valuemin="0"
 		aria-valuemax="100"
 		onfocusin={slider.enter}
-		onmouseenter={slider.enter}
-		onmouseleave={slider.leave}
+		onpointerenter={slider.enter}
+		onpointerleave={slider.leave}
 		onfocusout={slider.leave}
-		onmouseup={slider.mouseUp}
-		onmousedown={slider.mouseDown}
-		onmousemove={slider.mouseMove}
+		onpointerup={slider.pointerUp}
+		onpointercancel={slider.pointerUp}
+		onpointerdown={slider.pointerDown}
+		onpointermove={slider.pointerMove}
 		onkeydown={slider.keydown}
 	>
 		<div

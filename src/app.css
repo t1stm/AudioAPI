@@ -2,7 +2,18 @@
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
 
+/* The plan docs quote class names; without this every `micro:fixed` written in
+   prose becomes a real rule. Markdown is documentation, not markup. */
+@source not "../**/*.md";
+
 @custom-variant dark (&:where(.dark, .dark *));
+
+/* Player-only mode: a Discord picture-in-picture frame, a popped-out window, a
+   phone on its side. Height, not width — a phone is narrow *and tall* and wants
+   the compact page, while 320px of height means there is no room for a page at
+   all. An iframe's own size is what its media queries measure, so this one rule
+   covers Discord PiP without the SDK's layout-mode event. */
+@custom-variant micro (@media (max-height: 320px));
 
 @theme {
 	--color-dark-0: #06060d;
@@ -38,6 +49,58 @@
 	--font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
 }
 
+/* Tailwind v4's preflight sets `cursor: default` on buttons. Put the pointer
+   back once, here, instead of on every button in the app. Disabled controls
+   keep the default arrow — nothing happens when you click them. */
+@layer base {
+	button:not(:disabled),
+	[role='button']:not([aria-disabled='true']),
+	summary {
+		cursor: pointer;
+	}
+}
+
+/* Touch has no hover, so the press is the entire feedback channel — and the
+   browser's own grey rectangle is not it. One rule covers every control in the
+   app rather than a press state per component. Anything wider than a thumb (a
+   search row, a queue item) takes colour instead of scale, from `active:`
+   utilities at the call site, because a full-width row cannot shrink
+   convincingly. Sliders are excluded: they answer to the finger's position. */
+:root {
+	-webkit-tap-highlight-color: transparent;
+}
+
+@layer base {
+	button,
+	[role='button'],
+	summary,
+	a {
+		transition:
+			transform 120ms cubic-bezier(0.2, 0.7, 0.3, 1),
+			filter 120ms ease,
+			opacity 150ms ease,
+			color 150ms ease,
+			background-color 150ms ease;
+	}
+
+	button:not(:disabled):active,
+	summary:active,
+	a[href]:active {
+		transform: scale(0.955);
+		filter: brightness(1.25);
+	}
+}
+
+/* keep the acknowledgement, drop the movement */
+@media (prefers-reduced-motion: reduce) {
+	button:not(:disabled):active,
+	summary:active,
+	a[href]:active {
+		transform: none;
+		filter: brightness(1.4);
+	}
+}
+
 /* Names of things people made get the humanist face; facts the machine
    measured get the mono — and the digits line up down every column. */
 .font-mono {
@@ -62,15 +125,18 @@
 /* The rain gauge. The API transcodes on demand, so the first seconds of a new
    track are a real wait — name it instead of hiding it behind a spinner. */
 @keyframes rain-fall {
+	from {
+		transform: translateY(-100%);
+	}
 	to {
-		top: 100%;
+		transform: translateY(100%);
 	}
 }
 
 @utility rain-streak {
 	position: absolute;
 	inset-inline: 0;
-	top: -100%;
+	top: 0;
 	height: 100%;
 	background: linear-gradient(
 		to bottom,
@@ -83,7 +149,6 @@
 
 @media (prefers-reduced-motion: reduce) {
 	.rain-streak {
-		top: 0;
 		opacity: 0.35;
 		animation: none;
 	}
@@ -134,4 +199,159 @@
 
 ::-webkit-scrollbar-button {
 	display: none;
+}
+
+/* ── Micro: the player is the whole interface ────────────────────────────────
+   A Discord picture-in-picture frame, a popped-out window, a phone on its side.
+   Deliberately plain CSS rather than `micro:` utilities: a 700×300 window
+   matches both `micro` and `sm`, and nothing guarantees which variant Tailwind
+   emits last. Every rule below is anchored on an id (1,0,0), so it outranks any
+   utility class whatever the order — and sitting outside `@layer` puts it above
+   the utilities layer besides.
+
+   The frame has two edges and a cover. The top edge is the room, the bottom
+   edge is the track, and the artwork gets everything in between. */
+@media (max-height: 320px) {
+	#player {
+		position: fixed;
+		inset: 0;
+		z-index: 30;
+		isolation: isolate;
+		margin: 0;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		gap: 0.5rem;
+		padding: 0.75rem 0.75rem 0;
+		border: 0;
+		border-radius: 0;
+		background: var(--color-dark-0);
+		backdrop-filter: none;
+		transform: none;
+		width: auto;
+		min-height: 0;
+	}
+
+	/* the two compact rows dissolve so `order` can deal the children into one column */
+	.player-row {
+		display: contents;
+	}
+
+	/* no room for a dock, a format picker, or a volume slider in 200px */
+	#player-docks {
+		display: none;
+	}
+
+	#player-cover {
+		display: block;
+		position: absolute;
+		inset: 0;
+		z-index: -1;
+		overflow: hidden;
+	}
+	#player-cover img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+	#player-cover span {
+		position: absolute;
+		inset: 0;
+		background: color-mix(in srgb, var(--color-dark-0) 74%, transparent);
+		backdrop-filter: blur(2px);
+	}
+
+	/* The room, in one pixel — the same three states the session strip's rail
+	   carries, because there is no room here for the word. */
+	#room-rail {
+		display: block;
+		position: absolute;
+		inset-inline: 0;
+		top: 0;
+		height: 1px;
+		background: var(--color-haze);
+		transition: background-color 0.4s ease;
+	}
+	#player[data-hold='holding'] #room-rail {
+		background: var(--color-gold);
+	}
+	#player[data-hold='playing'] #room-rail {
+		background: var(--color-primary-0);
+	}
+
+	/* Unbounded is too wide to read at this size and TrackInfo never used it —
+	   Golos does the title, JetBrains keeps the clock. */
+	#track-info {
+		order: 2;
+		flex: 1 1 auto;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.15rem;
+		width: 100%;
+		max-width: none;
+		text-align: center;
+	}
+	#track-info img {
+		display: none;
+	}
+	#track-info span {
+		text-align: center;
+		white-space: normal;
+	}
+	#track-info > div > span:first-child {
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		font-size: 0.95rem;
+		line-height: 1.15;
+	}
+
+	#controls {
+		order: 3;
+		justify-content: center;
+		gap: 1.25rem;
+		width: 100%;
+	}
+	#controls button:nth-child(2) svg {
+		width: 32px;
+		height: 32px;
+	}
+
+	#seekbar {
+		order: 4;
+		/* the track is the frame's bottom edge whether or not a title is above it */
+		margin-top: auto;
+		width: 100%;
+		max-width: none;
+		flex-wrap: wrap;
+		gap: 0;
+		align-items: center;
+	}
+	/* the rain gauge is a column beside a bar; here the bar itself reports the buffer */
+	#seekbar [role='img'] {
+		display: none;
+	}
+	#seekbar > span:first-of-type {
+		order: 1;
+	}
+	#seekbar > span:last-of-type {
+		order: 2;
+		margin-left: auto;
+	}
+	#seekbar > [role='slider'],
+	#seekbar > [role='slider']:hover {
+		order: 3;
+		width: calc(100% + 1.5rem);
+		height: 3px;
+		margin: 0.3rem -0.75rem 0;
+		border-radius: 0;
+	}
+	/* 3px is not a tap target; the hit area is 30px and invisible */
+	#seekbar > [role='slider']::before {
+		content: '';
+		position: absolute;
+		inset: -14px 0;
+	}
 }

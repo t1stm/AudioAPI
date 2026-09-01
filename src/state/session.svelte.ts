@@ -3,7 +3,11 @@ import { audioWsUrl, proxyThumbnails } from '$lib/discord';
 import queue from './queue.svelte';
 import current from './current.svelte';
 import audio from './audio.svelte';
-import { SyncClock, minSyncSpacingMs, syncDeadbandSeconds } from '$lib/syncClock';
+import {
+	SyncClock,
+	minSyncSpacingMs,
+	settledSyncSpacingMs,
+} from '$lib/syncClock';
 
 /** What the room's `queue` frame actually carries: the raw platform result, not
  *  the search shape. No `contentUrl`, and most fields are nullable. */
@@ -58,6 +62,17 @@ function toSearchResult(item: RoomQueueItem): SearchResult {
 		duration: item.duration,
 		thumbnailUrl: item.thumbnailUrl,
 	};
+}
+
+/**
+ * `<seconds> [<serverUtcMs>]`, which is what every frame that moves the shared
+ * clock now carries. The stamp is optional on purpose: against a server that does
+ * not send one the parse yields `NaN` and the clock falls back to half a round
+ * trip, which is what it did before the stamps existed.
+ */
+function timedFrame(argument: string) {
+	const [seconds, stamp] = argument.trim().split(/\s+/);
+	return { seconds: Number(seconds), stamp: Number(stamp) };
 }
 
 let nextLineId = 0;
@@ -281,13 +296,13 @@ class Session {
 				} else this.status = this.awaitingBarrier ? 'holding' : 'paused';
 				break;
 			case 'seek':
-				// measured when the server broadcast it, so it is one downlink stale
-				// by the time it lands here
-				audio.currentSeconds = Number(argument) + this.clock.halfRtt;
+				this.placeAt(timedFrame(argument));
 				break;
-			case 'sync':
-				this.applySync(Number(argument));
+			case 'sync': {
+				const { seconds, stamp } = timedFrame(argument);
+				this.applySync(seconds, stamp);
 				break;
+			}
 			case 'stop':
 				audio.paused = true;
 				this.awaitingBarrier = false;
@@ -372,6 +387,19 @@ class Session {
 	}
 
 	/**
+	 * A `seek` frame: where the room is, and when it was there.
+	 *
+	 * The position was measured when the server broadcast it, so it is one downlink
+	 * stale by the time it lands here. The stamp says exactly how stale; without one
+	 * the best available guess is half a round trip, which is only right on a
+	 * symmetric path.
+	 */
+	private placeAt({ seconds, stamp }: { seconds: number; stamp: number }) {
+		if (!Number.isFinite(seconds)) return;
+		audio.currentSeconds = seconds + this.clock.stalenessOf(stamp, performance.now());
+	}
+
+	/**
 	 * One reading of the room's clock, and the correction it buys.
 	 *
 	 * The reply is stale by however long the return trip took, which is why this
@@ -380,7 +408,7 @@ class Session {
 	 * client a tenth of a second behind the room measures itself as fine. The
 	 * `SyncClock` credits the trip back; everything here does is spend the result.
 	 */
-	private applySync(reported: number) {
+	private applySync(reported: number, serverUtcMs: number) {
 		this.syncInFlight = false;
 		if (!Number.isFinite(reported)) return;
 
@@ -388,13 +416,14 @@ class Session {
 			this.syncSentAt,
 			performance.now(),
 			reported,
-			audio.currentSeconds,
+			audio.positionNow(),
+			serverUtcMs,
 		);
 
 		if (this.clock.shouldSeek(error)) {
 			// too far out for the rate budget to close, or the track's opening
 			// reading, where a jump costs nothing and steering costs a slow arrival
-			audio.currentSeconds += error;
+			audio.currentSeconds = audio.positionNow() + error;
 			audio.rate = 1;
 			this.clock.seeked();
 		} else {
@@ -408,9 +437,17 @@ class Session {
 
 		// the word on the strip now follows the measurement rather than a timeout
 		if (this.awaitingBarrier || audio.paused) return;
-		// the same threshold the loop steers on, so the word means exactly what the
-		// rate is doing: `synced` is the deadband, `catching up` is the correction
-		this.status = Math.abs(error) > syncDeadbandSeconds ? 'catching up' : 'synced';
+		this.status = this.converging ? 'catching up' : 'synced';
+	}
+
+	/**
+	 * Whether this client is still chasing the room: either the loop has hold of
+	 * the rate, or the last reading was outside the band and it is about to. Drives
+	 * both the word on the strip and how hard to poll, so the two cannot disagree —
+	 * and the loop's own latch does the hysteresis, so neither can flap.
+	 */
+	private get converging() {
+		return this.clock.steering || Math.abs(this.offsetMs) > this.clock.deadband * 1000;
 	}
 
 	/**
@@ -425,11 +462,24 @@ class Session {
 			if (performance.now() - this.syncSentAt < syncTimeoutMs) return;
 			this.syncInFlight = false;
 		}
+		if (performance.now() - this.syncSentAt < this.syncSpacing) return;
 		if (this.socket?.readyState !== WebSocket.OPEN) return;
 
 		this.syncInFlight = true;
 		this.syncSentAt = performance.now();
 		this.socket.send('sync');
+	}
+
+	/**
+	 * How hard to poll. Four times a second is what *converging* costs, not what
+	 * holding costs: a track that has had its opening correction and is sitting
+	 * inside the deadband has nothing left to chase but the device's own drift,
+	 * which moves a few milliseconds a minute. Every real disturbance — a seek, a
+	 * pause, a resume, a track change — arrives as a stamped frame that places
+	 * itself without waiting for a poll, and resets `settled` on the way through.
+	 */
+	private get syncSpacing() {
+		return this.clock.settled && !this.converging ? settledSyncSpacingMs : minSyncSpacingMs;
 	}
 
 	/** A track change, a join, a leave: the samples describe a position that no

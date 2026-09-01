@@ -65,44 +65,52 @@
 	});
 </script>
 
-<div class="relative flex flex-col w-full h-svh overflow-hidden">
+<div class="relative flex h-svh w-full flex-col overflow-hidden">
+	<!-- micro hides the page rather than unmounting it: the route component owns
+	     the room's connect effect, so tearing it down would drop the listener out
+	     of the room the player is still playing. -->
 	<Header />
 	{#if session.inRoom}
 		<SessionStrip />
 	{/if}
-	<main
-		class:queue-open={dock !== null}
-		class="relative m-2 mt-0 flex h-full min-h-0 flex-col rounded-lg bg-dark-0 transition-[margin]"
-	>
-		{@render children()}
-	</main>
-	{#if dock}
-		<!-- a sheet on narrow screens, a dock that narrows the page from lg up. One
-		     surface, two tabs — chat and queue never compete for the right edge. -->
-		<aside
-			class="absolute inset-x-2 bottom-20 top-1/3 z-20 flex flex-col overflow-hidden rounded-panel border border-haze bg-surface-100/95 backdrop-blur-xl sm:inset-x-auto sm:right-2 sm:top-16 sm:w-[380px]"
+	<!-- Page and dock share a box that stops where the player starts, so the sheet
+	     can sit on the page without ever covering the transport. -->
+	<div class="relative flex min-h-0 flex-1 flex-col micro:hidden">
+		<main
+			class:queue-open={dock !== null}
+			class="relative m-2 mt-0 flex h-full min-h-0 flex-col rounded-lg bg-dark-0 transition-[margin]"
 		>
-			<div class="flex shrink-0 border-b border-haze">
-				{#each [{ id: 'queue' as const, label: `Queue · ${queue.items.length}` }, { id: 'chat' as const, label: 'Chat' }] as tab (tab.id)}
-					<button
-						type="button"
-						class="flex-1 px-3 py-2 text-xs font-semibold text-fog hover:text-chalk focus-visible:outline-2 focus-visible:outline-primary-200"
-						class:bg-surface-200={dock === tab.id}
-						class:text-chalk={dock === tab.id}
-						onclick={() => (dock = tab.id)}
-					>
-						{tab.label}
-					</button>
-				{/each}
-			</div>
-			<div class="flex min-h-0 flex-1 flex-col px-3 pb-3 text-chalk">
-				{#if dock === 'queue'}
-					<Queue />
-				{:else}
-					<Chat />
-				{/if}
-			</div>
-		</aside>
-	{/if}
+			{@render children()}
+		</main>
+		{#if dock}
+			<!-- a bottom sheet on narrow screens, a dock that narrows the page from lg
+			     up. One surface, two tabs — chat and queue never compete for the right
+			     edge. -->
+			<aside
+				class="absolute inset-x-0 bottom-0 z-20 flex h-[70dvh] max-h-full flex-col overflow-hidden rounded-panel rounded-b-none border border-haze bg-surface-100/95 backdrop-blur-xl sm:inset-x-auto sm:bottom-20 sm:right-2 sm:top-2 sm:h-auto sm:w-[380px] sm:rounded-b-panel"
+			>
+				<div class="flex shrink-0 border-b border-haze">
+					{#each [{ id: 'queue' as const, label: `Queue · ${queue.items.length}` }, { id: 'chat' as const, label: 'Chat' }] as tab (tab.id)}
+						<button
+							type="button"
+							class="min-h-11 flex-1 px-3 py-2 text-xs font-semibold text-fog hover:text-chalk focus-visible:outline-2 focus-visible:outline-primary-200"
+							class:bg-surface-200={dock === tab.id}
+							class:text-chalk={dock === tab.id}
+							onclick={() => (dock = tab.id)}
+						>
+							{tab.label}
+						</button>
+					{/each}
+				</div>
+				<div class="flex min-h-0 flex-1 flex-col px-3 pb-3 text-chalk">
+					{#if dock === 'queue'}
+						<Queue />
+					{:else}
+						<Chat />
+					{/if}
+				</div>
+			</aside>
+		{/if}
+	</div>
 	<Player bind:dock />
 </div>

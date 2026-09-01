@@ -47,9 +47,9 @@
 
 <svelte:head><title>Rooms · musicrain</title></svelte:head>
 
-<div class="page gap-8 p-4 pb-28 sm:p-8 sm:pb-32">
+<div class="page gap-6 p-4 sm:gap-8 sm:p-8 sm:pb-32">
 	<header class="flex items-baseline justify-between gap-4">
-		<h1 class="font-display text-2xl font-extralight tracking-tight">Rooms</h1>
+		<h1 class="font-display text-xl font-extralight tracking-tight sm:text-2xl">Rooms</h1>
 		<span class="eyebrow" class:text-primary-500={rooms.connected}>
 			{rooms.connected ? 'live' : 'connecting'}
 		</span>
@@ -75,7 +75,7 @@
 			<button
 				type="submit"
 				disabled={starting}
-				class="shrink-0 rounded-row bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-0 disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-primary-200"
+				class="min-h-11 shrink-0 rounded-row bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-0 focus-visible:outline-2 focus-visible:outline-primary-200 disabled:opacity-60"
 			>
 				{starting ? 'Starting…' : 'Start a room'}
 			</button>
@@ -129,7 +129,7 @@
 							>
 							<a
 								href={`${resolve('/room')}?id=${room.roomID}`}
-								class="shrink-0 rounded-row border border-haze px-3 py-1.5 text-xs font-semibold hover:bg-surface-200 focus-visible:outline-2 focus-visible:outline-primary-200"
+								class="flex min-h-11 shrink-0 items-center rounded-row border border-haze px-3 text-xs font-semibold hover:bg-surface-200 focus-visible:outline-2 focus-visible:outline-primary-200"
 							>
 								Join
 							</a>

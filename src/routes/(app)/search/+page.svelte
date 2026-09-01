@@ -8,8 +8,8 @@
 	let youtubeResults = $derived(results.filter((result) => !result.id.startsWith('audio://')));
 </script>
 
-<div class="page mx-auto max-w-5xl gap-9 p-4 pb-36 sm:pb-28 sm:p-6">
-	<h1 class="font-display text-xl font-light leading-tight tracking-tight text-chalk sm:text-2xl">
+<div class="page mx-auto w-full max-w-5xl gap-6 p-4 sm:gap-9 sm:p-6 sm:pb-28">
+	<h1 class="font-display text-lg font-light leading-tight tracking-tight text-chalk sm:text-2xl">
 		{results.length} results for “{data.term}”
 	</h1>
 

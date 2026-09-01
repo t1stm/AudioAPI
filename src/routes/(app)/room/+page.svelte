@@ -38,7 +38,7 @@
 
 <svelte:head><title>{heading} · musicrain</title></svelte:head>
 
-<div class="page gap-6 p-4 pb-28 sm:p-8 sm:pb-32">
+<div class="page gap-5 p-4 sm:gap-6 sm:p-8 sm:pb-32">
 	{#if !roomId}
 		<p class="text-sm text-fog">
 			No room in the link. <a class="text-primary-500 underline-offset-4 hover:underline" href={resolve('/rooms')}>Browse rooms</a>
@@ -49,7 +49,7 @@
 			<p class="text-sm text-fog">Rooms disappear when the server restarts.</p>
 			<a
 				href={resolve('/rooms')}
-				class="mt-4 inline-block rounded-row bg-primary-600 px-3 py-2 text-sm font-semibold text-white hover:bg-primary-0"
+				class="mt-4 inline-flex min-h-11 items-center rounded-row bg-primary-600 px-3 py-2 text-sm font-semibold text-white hover:bg-primary-0"
 			>
 				Browse rooms
 			</a>
@@ -79,7 +79,7 @@
 					<button
 						type="submit"
 						disabled={!draftName.trim()}
-						class="rounded-row bg-primary-600 px-3 py-2 text-sm font-semibold text-white hover:bg-primary-0 disabled:opacity-60"
+						class="min-h-11 rounded-row bg-primary-600 px-3 py-2 text-sm font-semibold text-white hover:bg-primary-0 disabled:opacity-60"
 					>
 						Join {heading}
 					</button>
@@ -101,7 +101,7 @@
 					<img
 						src={current.thumbnail || '/empty.png'}
 						alt=""
-						class="size-20 rounded-art object-cover"
+						class="size-16 rounded-art object-cover sm:size-20"
 						onerror={imageFallback}
 					/>
 					<div class="min-w-0">
@@ -139,7 +139,7 @@
 							</div>
 							<button
 								type="button"
-								class="rounded-row border border-haze px-2 py-1 text-xs hover:bg-surface-200"
+								class="flex min-h-11 min-w-11 items-center justify-center rounded-row border border-haze px-2 text-xs hover:bg-surface-200"
 								onclick={() => queue.playIndex(queue.currentIndex + offset + 1)}
 							>
 								Play

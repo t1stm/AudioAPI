@@ -95,7 +95,7 @@
 					{@const index = currentIndex + offset + 1}
 					<li
 						draggable="true"
-						class="group flex cursor-grab items-center gap-2 rounded-[5px] px-1 py-1.5 hover:bg-surface-0 active:cursor-grabbing"
+						class="group flex cursor-grab items-center gap-2 rounded-[5px] px-1 py-1.5 transition-colors hover:bg-surface-0 active:cursor-grabbing active:bg-surface-200"
 						ondragstart={(event) => dragStart(index, event)}
 						ondblclick={(event) => playUnlessLink(index, event)}
 						title={`Double-click to play ${itemLabel(item)}`}
@@ -109,7 +109,7 @@
 						<button
 							type="button"
 							aria-label={`Remove ${itemLabel(item)} from queue`}
-							class="rounded-art p-1 text-fog opacity-0 hover:bg-surface-200 hover:text-chalk focus-visible:opacity-100 group-hover:opacity-100"
+							class="flex size-9 shrink-0 items-center justify-center rounded-art text-fog opacity-100 hover:bg-surface-200 hover:text-chalk focus-visible:opacity-100 group-hover:opacity-100 sm:opacity-0"
 							onclick={(event) => remove(index, event)}
 						>
 							×
@@ -141,12 +141,12 @@
 
 	<footer class="flex items-center gap-2 border-t border-haze pt-3">
 		<span class="mr-auto font-mono text-[0.68rem] uppercase tracking-[0.13em] text-fog">{items.length} tracks · {remainingTime} left</span>
-		<button type="button" class="rounded-[5px] border border-haze px-2 py-1 text-xs font-semibold hover:bg-surface-200" onclick={() => queue.shuffle()}>
+		<button type="button" class="min-h-9 rounded-[5px] border border-haze px-2 py-1 text-xs font-semibold hover:bg-surface-200" onclick={() => queue.shuffle()}>
 			Shuffle
 		</button>
 		{#if !session.inRoom}
 			<!-- the protocol has no clear -->
-			<button type="button" class="rounded-[5px] border border-haze px-2 py-1 text-xs font-semibold text-fog hover:bg-surface-200 hover:text-chalk" onclick={() => queue.clearOthers()}>
+			<button type="button" class="min-h-9 rounded-[5px] border border-haze px-2 py-1 text-xs font-semibold text-fog hover:bg-surface-200 hover:text-chalk" onclick={() => queue.clearOthers()}>
 				Clear
 			</button>
 		{/if}

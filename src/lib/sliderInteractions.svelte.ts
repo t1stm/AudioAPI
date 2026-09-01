@@ -1,5 +1,7 @@
+type TrackPointerEvent = PointerEvent & { currentTarget: EventTarget & HTMLDivElement };
+
 export class SliderInteractions {
-	isMouseDown = $state(false);
+	isPointerDown = $state(false);
 	blipVisible = $state(false);
 
 	stepValue = 2;
@@ -11,24 +13,28 @@ export class SliderInteractions {
 		this.percentage = percentage;
 	}
 
-	mouseMove = (event: MouseEvent & { currentTarget: EventTarget & HTMLDivElement }) => {
+	pointerMove = (event: TrackPointerEvent) => {
 		const rect = event.currentTarget?.getBoundingClientRect();
-		if (!rect) return;
+		if (!rect?.width) return;
 		this.hoverValue = Math.max(Math.min((event.clientX - rect.left) / rect.width, 1), 0) * 100;
-		if (!this.isMouseDown) return;
+		if (!this.isPointerDown) return;
 
 		this.percentage = this.hoverValue;
 		this.onChange();
 	};
 
-	mouseDown = () => {
-		this.percentage = this.hoverValue;
-		this.isMouseDown = true;
-		this.onChange();
+	pointerDown = (event: TrackPointerEvent) => {
+		// A finger has no hover, so the press is the only thing that says where it
+		// landed — read the position off this event instead of the last move.
+		// Capture keeps a drag alive once it wanders off an 8px-tall track, which
+		// is most of them, and guarantees the matching pointerup lands here.
+		event.currentTarget.setPointerCapture?.(event.pointerId);
+		this.isPointerDown = true;
+		this.pointerMove(event);
 	};
 
-	mouseUp = () => {
-		this.isMouseDown = false;
+	pointerUp = () => {
+		this.isPointerDown = false;
 	};
 
 	enter = () => {
@@ -37,7 +43,6 @@ export class SliderInteractions {
 
 	leave = () => {
 		this.blipVisible = false;
-		this.isMouseDown = false;
 	};
 
 	keydown = (event: KeyboardEvent) => {

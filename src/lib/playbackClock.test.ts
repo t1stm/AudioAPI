@@ -18,3 +18,9 @@ describe('interpolate', () => {
 		expect(interpolate(0, 0.01, 1, 0.05)).toBe(0);
 	});
 });
+
+describe('interpolate at the anchor', () => {
+	it('agrees with the re-anchor, so a timeupdate does not step the position', () => {
+		expect(interpolate(10, 0, 1, 0.02)).toBeCloseTo(9.98);
+	});
+});

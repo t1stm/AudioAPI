@@ -22,18 +22,20 @@
 	}
 </script>
 
-<header class="box-border bg-surface-0 w-full h-14 py-2 px-4 flex justify-center">
-	<div class="flex justify-between w-full h-full">
+<header
+	class="box-border flex h-12 w-full shrink-0 justify-center bg-surface-0 px-3 py-1.5 micro:hidden sm:h-14 sm:px-4 sm:py-2"
+>
+	<div class="flex h-full w-full justify-between gap-2">
 		<a
 			href={resolve('/')}
 			class="flex items-center gap-1.5 rounded-row outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
 		>
-			<span class="font-display text-lg font-extralight tracking-tight text-chalk"
+			<span class="hidden font-display text-lg font-extralight tracking-tight text-chalk sm:inline"
 				>music<b class="font-medium text-primary-500">rain</b></span
 			>
-			<Icon src={Cloud} solid class="size-6 text-primary-500" />
+			<Icon src={Cloud} solid class="size-6 shrink-0 text-primary-500" />
 			{#if isAlpha}
-				<Icon src={Beaker} micro class="size-3.5 text-fog mt-auto mb-1" />
+				<Icon src={Beaker} micro class="mt-auto mb-1 hidden size-3.5 text-fog sm:block" />
 			{/if}
 		</a>
 
@@ -45,8 +47,9 @@
 				placeholder="Search"
 				class="rounded-row border border-haze bg-dark-0 w-full text-chalk placeholder:text-fog ring-primary-0 focus:border-primary-0 focus-visible:ring-2"
 			/>
+			<!-- the form already submits on Enter; the button is a desktop affordance -->
 			<button
-				class="cursor-pointer min-w-10 size-10 flex items-center justify-center rounded-row bg-primary-600"
+				class="hidden size-10 min-w-10 cursor-pointer items-center justify-center rounded-row bg-primary-600 sm:flex"
 				type="submit"
 			>
 				<Icon src={MagnifyingGlass} micro color="white" size="24" />
@@ -58,7 +61,7 @@
 				type="button"
 				aria-label={user.username ? `You are ${user.username}` : 'Set your name'}
 				aria-expanded={editingName}
-				class="flex w-10 h-10 overflow-hidden rounded-full bg-primary-600 items-center justify-center cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary-200"
+				class="flex size-9 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-primary-600 outline-none focus-visible:ring-2 focus-visible:ring-primary-200 sm:size-10"
 				onclick={openName}
 			>
 				{#if user.avatarUrl}
@@ -76,7 +79,7 @@
 
 			{#if editingName}
 				<form
-					class="absolute right-0 z-30 mt-2 w-72 rounded-panel border border-haze bg-surface-100 p-3 text-left"
+					class="absolute right-0 z-30 mt-2 w-[min(18rem,calc(100vw-1.5rem))] rounded-panel border border-haze bg-surface-100 p-3 text-left"
 					onsubmit={saveName}
 				>
 					<h2 class="eyebrow mb-2">Your name</h2>

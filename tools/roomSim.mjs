@@ -13,7 +13,7 @@
  * What comes out is the spread between clients — how far apart two people in the
  * room actually are — sampled 20 times a second through a scripted session.
  */
-import { SyncClock, minSyncSpacingMs } from '../src/lib/syncClock.ts';
+import { SyncClock, minSyncSpacingMs, settledSyncSpacingMs } from '../src/lib/syncClock.ts';
 
 const API = process.env.API ?? 'http://localhost:5226';
 const WS = API.replace(/^http/, 'ws');
@@ -63,6 +63,7 @@ class Listener {
 		this.inFlight = false;
 		this.seeks = 0;
 		this.rates = [];
+		this.rateTimes = [];
 		this.loadedFor = new Set();
 		this.up = new Pipe(() => this.oneWay());
 		this.down = new Pipe(() => this.oneWay());
@@ -111,17 +112,23 @@ class Listener {
 			case 'playing':
 				this.playing = argument.trim() === 'True';
 				break;
-			case 'seek':
-				// measured at broadcast, so one downlink stale by the time it lands
-				this.position = Number(argument) + (MODE === 'rate' ? this.clock.halfRtt : 0);
+			case 'seek': {
+				// measured at broadcast, so one downlink stale by the time it lands.
+				// The stamp says how stale; `stalenessOf` falls back to half a round
+				// trip without one, which is what the naive mode is made of.
+				const { seconds, stamp } = timed(argument);
+				this.position = seconds + (MODE === 'rate' ? this.clock.stalenessOf(stamp, now()) : 0);
 				break;
-			case 'sync':
-				this.onSync(Number(argument));
+			}
+			case 'sync': {
+				const { seconds, stamp } = timed(argument);
+				this.onSync(seconds, stamp);
 				break;
+			}
 		}
 	}
 
-	onSync(reported) {
+	onSync(reported, stamp) {
 		const at = now();
 		this.inFlight = false;
 		this.rtts.push(at - this.sentAt);
@@ -133,7 +140,7 @@ class Listener {
 			return;
 		}
 
-		const error = this.clock.sample(this.sentAt, at, reported, this.position);
+		const error = this.clock.sample(this.sentAt, at, reported, this.position, stamp);
 		if (this.clock.shouldSeek(error)) {
 			this.position += error;
 			this.seeks++;
@@ -143,6 +150,7 @@ class Listener {
 		}
 		this.rate = this.clock.rateFor(error);
 		this.rates.push(this.rate);
+		this.rateTimes.push(now());
 	}
 
 	setCurrent(index) {
@@ -167,10 +175,17 @@ class Listener {
 		setTimeout(() => this.send('loaded'), this.buffer);
 	}
 
-	/** `sync` replies carry no request id, so only one may be outstanding. */
+	/** `sync` replies carry no request id, so only one may be outstanding. The
+	 *  spacing backs off once the track has settled — same rule the browser runs,
+	 *  so the sample rate the simulator measures is the one that ships. */
 	startSync() {
 		this.syncTimer = setInterval(() => {
 			if (this.inFlight) return;
+			const spacing =
+				MODE === 'rate' && this.clock.settled && Math.abs(this.clock.error) <= this.clock.deadband / 2
+					? settledSyncSpacingMs
+					: minSyncSpacingMs;
+			if (now() - this.sentAt < spacing) return;
 			this.inFlight = true;
 			this.sentAt = now();
 			this.send('sync');
@@ -182,6 +197,13 @@ class Listener {
 		try { this.socket.close(); } catch { /* already gone */ }
 	}
 }
+
+/** `<seconds> [<serverUtcMs>]`. The stamp is `NaN` when the server did not send
+ *  one, which is exactly what `stalenessOf` and `sample` treat as "no stamp". */
+const timed = argument => {
+	const [seconds, stamp] = argument.trim().split(/\s+/);
+	return { seconds: Number(seconds), stamp: Number(stamp) };
+};
 
 const profiles = {
 	LAN: { ping: 10, jitter: 2, driftPpm: 30, buffer: 120 },
@@ -205,6 +227,7 @@ for (const track of tracks) { lan.send(`add ${track.id}`); await wait(600); }
 
 const samples = [];
 const marks = [];
+const startedAt = now();
 const sampler = setInterval(() => {
 	for (const listener of listeners) listener.tick();
 	const live = listeners.filter(l => l.socket && l.playing);
@@ -220,7 +243,7 @@ const sampler = setInterval(() => {
 const phase = async (label, ms, act) => {
 	if (act) await act();
 	await wait(ms);
-	marks.push([label, samples.length]);
+	marks.push([label, samples.length, now()]);
 };
 
 await phase('three clients, steady', 25_000);
@@ -250,6 +273,17 @@ const motion = rates => {
   return `${((sum / (rates.length - 1)) * 1e6).toFixed(0)}ppm`;
 };
 
+/** Commanded-rate changes per minute. This is the artifact metric: what the ear
+ *  catches is the resampling ratio *moving*, not the value it sits at — 200 ppm is
+ *  a third of a cent, and inaudible, but a ratio that never holds still is not.
+ *  The requirement is a handful per song, so a song is the unit to think in. */
+const churn = minutes => rates => {
+	if (rates.length < 2) return '-';
+	let changes = 0;
+	for (let i = 1; i < rates.length; i++) if (rates[i] !== rates[i - 1]) changes++;
+	return `${(changes / minutes).toFixed(1)}/min`;
+};
+
 const summarise = values => {
 	const sorted = values.slice().sort((a, b) => a - b);
 	if (sorted.length === 0) return 'no data';
@@ -264,6 +298,28 @@ for (const [label, to] of marks) {
 	from = to;
 }
 
+const changesPerMinute = churn((now() - startedAt) / 60_000);
+
+/** Churn inside one phase — the steady one is the honest stand-in for a song,
+ *  since the scripted session packs a join, a track change and a pause into 95
+ *  seconds and a song contains none of that after its first moment. */
+const phaseChurn = (listener, from, to) => {
+	const rates = listener.rates.filter((_, i) => listener.rateTimes[i] >= from && listener.rateTimes[i] < to);
+	return churn((to - from) / 60_000)(rates);
+};
+
+console.log('\nrate churn by phase (a song looks like the steady phase):');
+{
+	let from = startedAt;
+	for (const [label, , until] of marks) {
+		const per = listeners
+			.map(l => `${l.name} ${phaseChurn(l, from, until)}`.padEnd(18))
+			.join(' ');
+		console.log(`  ${label.padEnd(30)} ${per}`);
+		from = until;
+	}
+}
+
 console.log('\nper listener:');
 for (const listener of listeners) {
 	const rtt = listener.rtts.slice().sort((a, b) => a - b);
@@ -271,7 +327,8 @@ for (const listener of listeners) {
 	console.log(
 		`  ${listener.name.padEnd(7)} rtt min ${String(rtt[0]?.toFixed(0)).padStart(4)}ms` +
 			` | off median ${summarise(listener.offsets).slice(10)}` +
-			` | rate ${listener.rate.toFixed(5)} still ${still(listener.rates)}% move ${motion(listener.rates)}` +
+			` | rate ${listener.rate.toFixed(5)} still ${still(listener.rates)}%` +
+			` move ${motion(listener.rates)} churn ${changesPerMinute(listener.rates)}` +
 			` | hard seeks ${listener.seeks}` +
 			` | drift ${drift === null ? 'unknown' : `${(drift * 1e6).toFixed(0)}ppm`} (real ${listener.driftPpm})`,
 	);

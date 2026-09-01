@@ -26,7 +26,7 @@
 	// upstream of the node. Add one if a browser turns out to ignore it.
 	$effect(() => {
 		if (!element || context) return;
-		const built = new AudioContext({ latencyHint: 'interactive' });
+		const built = new AudioContext({ latencyHint: 'playback' });
 		built.createMediaElementSource(element).connect(built.destination);
 		context = built;
 		return () => {
@@ -35,13 +35,20 @@
 		};
 	});
 
+	// what the graph has not played out yet: everything the element reports is
+	// this far ahead of the sound, and everything the room says is a position in
+	// the sound. Every crossing between the two domains pays it.
+	const latency = () => context?.outputLatency || 0;
+
 	function anchor() {
 		if (!element) return;
 		anchorMedia = element.currentTime;
 		anchorClock = context ? context.currentTime : 0;
-		// writing here too is what keeps a background tab moving: rAF is throttled
-		// to a stop there, `timeupdate` is not.
-		audio.currentSeconds = anchorMedia;
+		// writing here too is what keeps a background tab moving: the sampling timer
+		// is throttled to about once a second there, `timeupdate` is not. Same
+		// conversion `position` makes, or the reported position steps by the
+		// latency four times a second and the room samples the step.
+		audio.currentSeconds = interpolate(anchorMedia, 0, 1, latency());
 	}
 
 	function hold() {
@@ -54,26 +61,32 @@
 		anchor();
 	}
 
-	function tick() {
-		if (!context || !advancing) return;
-		// what you hear trails the clock by whatever the graph has not played out
-		// yet; reporting the audible position is the point of doing this at all,
-		// since a room syncs against sound, not buffers.
-		audio.currentSeconds = interpolate(
+	// what you hear trails the clock by whatever the graph has not played out
+	// yet; reporting the audible position is the point of doing this at all,
+	// since a room syncs against sound, not buffers.
+	function position() {
+		if (!context || !advancing) return audio.currentSeconds;
+		return interpolate(
 			anchorMedia,
 			context.currentTime - anchorClock,
 			element?.playbackRate ?? 1,
-			context.outputLatency || 0
+			latency()
 		);
 	}
 
+	// The room reads this per `sync` reply rather than the sampled state, so the
+	// polling rate below costs accuracy nothing. A closed context falls the
+	// function back to the sampled value on its own, so unmounting needs no undo.
+	audio.positionNow = position;
+
+	// ponytail: 10 Hz, not a frame loop. This feeds the display only — a seek bar
+	// a few hundred pixels wide and a readout in whole seconds — and every write
+	// costs a layout, a paint, a re-raster of the player's backdrop blur and a
+	// mediaSession IPC. Raise it if a bar ever gets wide enough to show the steps.
 	$effect(() => {
 		if (!element || audio.paused) return;
-		let frame = requestAnimationFrame(function next() {
-			tick();
-			frame = requestAnimationFrame(next);
-		});
-		return () => cancelAnimationFrame(frame);
+		const timer = setInterval(() => (audio.currentSeconds = position()), 100);
+		return () => clearInterval(timer);
 	});
 
 	// The room's clock steers the rate to hold everyone together. `preservesPitch`
@@ -88,10 +101,15 @@
 	});
 
 	// a write to the state the element did not make is a seek. The tolerance is
-	// what stops this component's own writes from bouncing back in as one.
+	// what stops this component's own writes from bouncing back in as one — which
+	// needs the target back in the element's domain first, or a client lands the
+	// latency late on every correction and this component's own reports read as
+	// seeks once the graph buffers deeper than the tolerance.
 	$effect(() => {
 		const seconds = audio.currentSeconds;
-		if (element && Math.abs(element.currentTime - seconds) > 0.25) element.currentTime = seconds;
+		if (!element) return;
+		const target = seconds + latency();
+		if (Math.abs(element.currentTime - target) > 0.25) element.currentTime = target;
 	});
 
 	// ponytail: not `bind:paused`. Its write runs in the same flush as a `src`

@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { minSyncSpacingMs, proportionalGain, syncDeadbandSeconds } from '$lib/syncClock';
+import {
+	minSteeringSamples,
+	minSyncSpacingMs,
+	proportionalGain,
+	settledSyncSpacingMs,
+} from '$lib/syncClock';
 import type Session from './session.svelte';
 import type Queue from './queue.svelte';
 import type Audio from './audio.svelte';
@@ -30,6 +35,10 @@ class FakeSocket {
 let session: typeof Session;
 let queue: typeof Queue;
 let audio: typeof Audio;
+
+/** Any constant offset between the server's UTC clock and this client's
+ *  `performance.now()`; the estimator has to derive it either way. */
+const serverEpoch = 1_700_000_000_000;
 
 /** Everything the server can say arrives as one text frame. */
 function receive(frame: string) {
@@ -305,12 +314,15 @@ describe('the shared clock', () => {
 	/** Runs the clock up to the moment the next `sync` actually leaves — the
 	 *  interval's own phase would otherwise be added to every round trip — then
 	 *  waits one out and answers it. */
-	function roundTrip(reported: number, rttMs = 200) {
+	function roundTrip(reported: number, rttMs = 200, stamped = false) {
 		const before = FakeSocket.last.sent.length;
 		while (FakeSocket.last.sent.length === before) vi.advanceTimersByTime(1);
+		const sentAt = performance.now();
 		vi.advanceTimersByTime(rttMs);
-		receive(`sync ${reported}`);
+		receive(stamped ? `sync ${reported} ${serverEpoch + sentAt + rttMs / 2}` : `sync ${reported}`);
 	}
+
+	const syncs = () => FakeSocket.last.sent.filter(command => command === 'sync').length;
 
 	beforeEach(() => {
 		// the loop is timed off `performance.now()`, so that has to move with the
@@ -349,6 +361,21 @@ describe('the shared clock', () => {
 		expect(FakeSocket.last.sent.filter(command => command === 'sync').length).toBeGreaterThan(1);
 	});
 
+	it('measures against the player now, not the last displayed sample', () => {
+		// `currentSeconds` is only sampled for the UI, so it lags the sound by up to
+		// one tick. Reading it here would book that lag as room error — and `error`
+		// picks its winning sample by round trip, not by freshness, so nothing
+		// downstream filters it back out.
+		audio.currentSeconds = 10;
+		audio.positionNow = () => 10.08;
+
+		// the room said 9.98 one downlink ago, so it is at 10.08: exactly level
+		roundTrip(9.98);
+
+		expect(session.offsetMs).toBe(0);
+		expect(audio.rate).toBe(1);
+	});
+
 	it('snaps once at the top of a track, crediting the trip in flight', () => {
 		audio.currentSeconds = 10;
 		// the room said 10.3 a hundred milliseconds ago, so it is really at 10.4
@@ -363,11 +390,13 @@ describe('the shared clock', () => {
 		roundTrip(10.3);
 		const settled = audio.currentSeconds;
 
-		// 100 ms out: well inside what the rate can close
-		roundTrip(settled + 0.05, 100);
+		// 100 ms out: well inside what the rate can close. Four readings, because the
+		// loop will not steer on a window it has not been able to filter yet — the
+		// first seconds of a track are exactly where a single trip is all noise.
+		for (let i = 0; i < minSteeringSamples; i++) roundTrip(settled + 0.05, 100);
 
 		expect(audio.currentSeconds).toBeCloseTo(settled);
-		expect(audio.rate).toBeCloseTo(1 + proportionalGain * (0.1 - syncDeadbandSeconds));
+		expect(audio.rate).toBeCloseTo(1 + proportionalGain * 0.1);
 	});
 
 	it('never asks for more than the rate budget allows', () => {
@@ -417,6 +446,56 @@ describe('the shared clock', () => {
 		// a quicker trip, so this is the sample the estimator ends up trusting
 		roundTrip(audio.currentSeconds + 0.005, 20);
 		expect(session.status).toBe('synced');
+	});
+
+	it('places a stamped seek by the flight it took, not by half a round trip', () => {
+		roundTrip(0, 200, true);
+
+		// the room broadcast this 300 ms ago, on a link whose best trip is 200 ms —
+		// half the round trip would have put this client 200 ms ahead of everybody
+		receive(`seek 30 ${serverEpoch + performance.now() - 300}`);
+
+		expect(audio.currentSeconds).toBeCloseTo(30.3);
+	});
+
+	it('still leads an unstamped seek by half the trip', () => {
+		roundTrip(0, 200, true);
+		receive('seek 30');
+
+		expect(audio.currentSeconds).toBeCloseTo(30.1);
+	});
+
+	it('backs off the polling once the track is settled inside the deadband', () => {
+		audio.currentSeconds = 10;
+		roundTrip(10.3); // the opening snap, which is what `settled` turns on
+		// well inside the band, not merely within it — the backoff wants half of it,
+		// so a client hovering on the edge does not flap between the two spacings
+		roundTrip(audio.currentSeconds + 0.001, 10);
+		expect(session.status).toBe('synced');
+
+		// four times a second is what converging costs; holding costs a reading
+		// every couple of seconds, because drift moves milliseconds a minute
+		const before = syncs();
+		vi.advanceTimersByTime(minSyncSpacingMs * 4);
+		expect(syncs()).toBe(before);
+
+		vi.advanceTimersByTime(settledSyncSpacingMs);
+		expect(syncs()).toBeGreaterThan(before);
+	});
+
+	it('goes back to asking hard for a track that has not settled yet', () => {
+		audio.currentSeconds = 10;
+		roundTrip(10.3);
+		roundTrip(audio.currentSeconds + 0.005, 20);
+		expect(session.status).toBe('synced');
+
+		// a track change throws the position away, and the next reading is the one
+		// that decides where this client starts — no backing off through that
+		receive('current 1');
+
+		const before = syncs();
+		vi.advanceTimersByTime(minSyncSpacingMs);
+		expect(syncs()).toBeGreaterThan(before);
 	});
 
 	it('withholds a drift reading until the history can support one', () => {

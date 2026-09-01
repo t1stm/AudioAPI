@@ -120,22 +120,22 @@
 	}
 </script>
 
-<div class="page gap-10 p-4 pb-36 sm:pb-28 sm:p-6">
+<div class="page gap-10 p-4 sm:p-6 sm:pb-28">
 	<section
 		class="overflow-hidden rounded-panel border border-haze bg-surface-100 bg-[radial-gradient(120%_140%_at_8%_20%,color-mix(in_srgb,var(--color-primary-0)_26%,transparent),transparent_62%)]"
 	>
 		{#if hero}
-			<div class="grid gap-6 p-5 sm:grid-cols-[11rem_1fr] sm:items-center sm:p-6 lg:grid-cols-[15rem_1fr] lg:gap-8 lg:p-8">
+			<div class="grid gap-5 p-4 sm:grid-cols-[11rem_1fr] sm:items-center sm:gap-6 sm:p-6 lg:grid-cols-[15rem_1fr] lg:gap-8 lg:p-8">
 				<img
 					src={hero.thumbnailUrl ?? '/empty.png'}
 					alt=""
-					class="aspect-square w-full max-w-44 rounded-row object-cover lg:max-w-60"
+					class="aspect-square w-full max-w-32 rounded-row object-cover sm:max-w-44 lg:max-w-60"
 					onerror={imageFallback}
 				/>
 				<div class="flex min-w-0 flex-col justify-center">
 					<p class="eyebrow text-primary-500">The roll</p>
 					<h1
-						class="mt-2 font-display text-2xl font-light leading-tight tracking-tight text-chalk sm:text-3xl"
+						class="mt-2 font-display text-xl font-light leading-tight tracking-tight text-chalk sm:text-2xl lg:text-3xl"
 					>
 						{hero.name}
 					</h1>
@@ -145,20 +145,20 @@
 						{#if !session.inRoom}
 							<button
 								type="button"
-								class="inline-flex items-center gap-2 rounded-row bg-primary-600 px-3 py-2 text-sm font-semibold text-white"
+								class="inline-flex min-h-11 items-center gap-2 rounded-row bg-primary-600 px-3 py-2 text-sm font-semibold text-white"
 								onclick={playHero}><Icon src={Play} mini size="16" /> Play</button
 							>
 						{/if}
 						<button
 							type="button"
-							class="rounded-row px-3 py-2 text-sm font-semibold {session.inRoom
+							class="min-h-11 rounded-row px-3 py-2 text-sm font-semibold {session.inRoom
 								? 'bg-primary-600 text-white'
 								: 'border border-haze text-chalk hover:bg-surface-200'}"
 							onclick={queueHero}>Add to queue</button
 						>
 						<button
 							type="button"
-							class="inline-flex items-center gap-2 rounded-row border border-haze px-3 py-2 text-sm font-semibold text-chalk hover:bg-surface-200 disabled:opacity-60"
+							class="inline-flex min-h-11 items-center gap-2 rounded-row border border-haze px-3 py-2 text-sm font-semibold text-chalk hover:bg-surface-200 disabled:opacity-60"
 							onclick={rollAgain}
 							disabled={rolling}
 							><Icon src={ArrowPath} mini size="16" class={rolling ? 'animate-spin' : ''} /> Roll again</button
@@ -195,7 +195,7 @@
 			/>
 			<button
 				type="submit"
-				class="rounded-row bg-primary-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+				class="min-h-11 rounded-row bg-primary-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
 				disabled={resolving}>{resolving ? 'Resolving…' : 'Play'}</button
 			>
 		</form>
@@ -226,7 +226,7 @@
 			{#each artists as [artist, count] (artist)}
 				<a
 					href={artistUrl(artist)}
-					class="rounded-full border border-haze bg-surface-0 px-3 py-1 text-sm text-chalk transition-colors hover:border-gold hover:text-gold"
+					class="inline-flex min-h-9 items-center rounded-full border border-haze bg-surface-0 px-3 py-1 text-sm text-chalk transition-colors hover:border-gold hover:text-gold"
 					>{artist}<span class="ml-1.5 font-mono text-[0.68rem] text-fog">{count}</span></a
 				>
 			{/each}
@@ -238,13 +238,13 @@
 			<h2 class="eyebrow">(Curated) Picks</h2>
 			<button
 				type="button"
-				class="inline-flex items-center gap-1.5 rounded-[5px] border border-haze px-2.5 py-1 text-xs font-semibold text-chalk hover:bg-surface-200 disabled:opacity-60"
+				class="inline-flex min-h-9 items-center gap-1.5 rounded-[5px] border border-haze px-2.5 py-1 text-xs font-semibold text-chalk hover:bg-surface-200 disabled:opacity-60"
 				onclick={rollPicks}
 				disabled={rollingPicks}
 				><Icon src={ArrowPath} mini size="14" class={rollingPicks ? 'animate-spin' : ''} /> Roll again</button
 			>
 		</div>
-		<div class="grid grid-flow-col-dense grid-rows-2 gap-6 overflow-x-auto p-2">
+		<div class="grid grid-flow-col-dense grid-rows-2 gap-4 overflow-x-auto p-2 sm:gap-6">
 			{#each curated as song (song.id)}<Song {song} />{/each}
 		</div>
 	</section>

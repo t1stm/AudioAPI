@@ -14,12 +14,13 @@
 <div class="flex relative w-24 items-center gap-2">
 	<Icon src={icon} mini size="20" color="white" class="cursor-pointer" />
 	<div
-		class="flex relative h-1 group hover:h-2 focus-visible:h-2 rounded-full w-full bg-surface-200 cursor-pointer ring-0 focus-visible:outline-4 outline-surface-300 duration-150"
-		onmouseenter={slider.enter}
-		onmouseleave={slider.leave}
-		onmousedown={slider.mouseDown}
-		onmousemove={slider.mouseMove}
-		onmouseup={slider.mouseUp}
+		class="group relative flex h-1 w-full cursor-pointer touch-none rounded-full bg-surface-200 ring-0 duration-150 hover:h-2 focus-visible:h-2 focus-visible:outline-4 outline-surface-300"
+		onpointerenter={slider.enter}
+		onpointerleave={slider.leave}
+		onpointerdown={slider.pointerDown}
+		onpointermove={slider.pointerMove}
+		onpointerup={slider.pointerUp}
+		onpointercancel={slider.pointerUp}
 		onfocusin={slider.enter}
 		onfocusout={slider.leave}
 		onkeydown={slider.keydown}

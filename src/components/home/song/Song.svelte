@@ -1,22 +1,30 @@
 <script lang="ts">
 	import type { SearchResult } from '$states/search.svelte';
-	import { Icon, Plus } from 'svelte-hero-icons';
+	import { Check, Icon, Plus } from 'svelte-hero-icons';
 	const { song }: { song: SearchResult } = $props();
 	import queue from '$states/queue.svelte';
 	import ArtistLink from '$components/ArtistLink.svelte';
 
 	let inLibrary = $derived(song.id.startsWith('audio://'));
 
+	// The queue is a dock away and the badge that counts it is at the foot of the
+	// screen — on a phone the thumb needs to hear it here, where it tapped.
+	let added = $state(false);
+	let settle: ReturnType<typeof setTimeout>;
+
 	const onClick = () => {
 		queue.add(song);
+		added = true;
+		clearTimeout(settle);
+		settle = setTimeout(() => (added = false), 1100);
 	};
 </script>
 
-<div class="relative flex flex-col gap-2 min-w-48 group">
+<div class="group relative flex min-w-36 flex-col gap-2 sm:min-w-48">
 	<img
 		src={song.thumbnailUrl ?? '/empty.png'}
 		alt=""
-		class="size-48 rounded-art object-cover relative"
+		class="relative size-36 rounded-art object-cover sm:size-48"
 		onerror={(e: Event) => {
 			const img = e.currentTarget as HTMLImageElement;
 			if (img.src.endsWith('/empty.png')) return;
@@ -38,11 +46,36 @@
 
 	<button
 		onclick={onClick}
+		aria-label={added ? 'Added to queue' : `Add ${song.name} to queue`}
 		class="absolute flex justify-center items-center size-8
 	rounded-full cursor-pointer
 	right-0 bottom-0 duration-150
-	bg-primary-600 opacity-0 focus-visible:opacity-100 outline-0 group-hover:opacity-100"
+	outline-0 opacity-100 sm:opacity-0 focus-visible:opacity-100 group-hover:opacity-100
+	{added ? 'added bg-primary-0' : 'bg-primary-600'}"
 	>
-		<Icon src={Plus} mini size="20" color="white" />
+		<Icon src={added ? Check : Plus} mini size="20" color="white" />
 	</button>
 </div>
+
+<style>
+	/* The app's one motion idea is water. A track does not pop into the queue, it
+	   lands in it — the ring is the ripple the drop leaves behind. */
+	@keyframes ripple {
+		from {
+			box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-primary-200) 70%, transparent);
+		}
+		to {
+			box-shadow: 0 0 0 12px transparent;
+		}
+	}
+
+	.added {
+		animation: ripple 700ms ease-out;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.added {
+			animation: none;
+		}
+	}
+</style>
