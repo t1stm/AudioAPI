@@ -43,6 +43,10 @@ const maximumChatLines = 200;
 // window in which a client can sit audibly behind the room.
 const syncIntervalMs = 1_000;
 const driftToleranceSeconds = 0.5;
+// The loading barrier holds the whole room, so a client that cannot buffer has
+// to answer late rather than never. Long enough for a slow connection to reach
+// `canplaythrough`, short enough that one bad client is not everyone's problem.
+const loadTimeoutMs = 15_000;
 
 function toSearchResult(item: RoomQueueItem): SearchResult {
 	return {
@@ -78,17 +82,28 @@ class Session {
 	private pending: string[] = [];
 	private attempts = 0;
 	private frames = 0;
-	private loadedFor: number | null = null;
+	/** The track we owe the room a `loaded` for, once we can really play it. */
+	private pendingFor: number | null = $state(null);
 	private endedFor: number | null = null;
 	private currentTrackId = '';
+	/** The index this client has actually positioned playback on. Survives a
+	 *  reconnect on purpose — it is what tells a replayed `current` frame apart
+	 *  from a real one. `currentTrackId` cannot: `setQueue` writes that too. */
+	private positionedAt: number | null = null;
 	private awaitingBarrier = false;
 	private closing = false;
 	private syncTimer: ReturnType<typeof setInterval> | null = null;
 	private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 	private driftTimer: ReturnType<typeof setTimeout> | null = null;
+	private loadTimer: ReturnType<typeof setTimeout> | null = null;
 
 	get inRoom() {
 		return this.roomId !== null;
+	}
+
+	/** True while this client owes the room a `loaded` for the current track. */
+	get awaitingLoad() {
+		return this.pendingFor !== null;
 	}
 
 	/** Commands to run as soon as the next connection opens — how a freshly
@@ -110,6 +125,7 @@ class Session {
 		this.roster = [];
 		this.unread = 0;
 		this.currentTrackId = '';
+		this.positionedAt = null;
 		queue.items = [];
 		queue.currentIndex = 0;
 		current.clear();
@@ -129,13 +145,35 @@ class Session {
 		this.joinedAs = '';
 		this.status = 'offline';
 		this.awaitingBarrier = false;
+		this.pendingFor = null;
+		this.positionedAt = null;
 		queue.remote = null;
 		queue.clear();
 	}
 
 	send(command: string) {
-		if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(command);
-		else this.pending.push(command);
+		if (this.socket?.readyState === WebSocket.OPEN) return this.socket.send(command);
+
+		// Before the room's first connection there is nothing to be out of step
+		// with, so a click in that window is worth holding — that is what `prime`
+		// and the pre-open `queue.remote` rely on. After a drop it is the opposite:
+		// the command describes a moment that has passed by the time the socket
+		// comes back, and flushing a stranded `next`, `playpause` or barrier answer
+		// on reconnect moves the room for everybody. That is the desync one
+		// dropped client hands to the rest, so those are dropped instead.
+		if (this.attempts > 0) return;
+		this.pending.push(command);
+	}
+
+	/** Answers the loading barrier, once the player can really play the track.
+	 *  Both barriers count messages, not distinct users, so a second `loaded`
+	 *  releases the barrier early for everybody — hence the pending guard, which
+	 *  also makes this a no-op to call when nothing is waiting on it. */
+	reportLoaded() {
+		if (this.pendingFor === null) return;
+		this.pendingFor = null;
+		this.clearTimer('loadTimer');
+		this.send('loaded');
 	}
 
 	/** Sent exactly once per track. Both barriers count messages, not distinct
@@ -155,8 +193,11 @@ class Session {
 	private open() {
 		this.status = this.attempts === 0 ? 'connecting' : 'reconnecting';
 		this.frames = 0;
-		this.loadedFor = null;
-		this.endedFor = null;
+		// `endedFor` and the barrier state deliberately survive a reconnect: the
+		// server arms each barrier once per track change and counts raw messages,
+		// so answering again after a rejoin is an extra vote, not a replacement.
+		this.pendingFor = null;
+		this.clearTimer('loadTimer');
 
 		let query = `room=${this.roomId}`;
 		if (this.joinedAs) query += `&username=${encodeURIComponent(this.joinedAs)}`;
@@ -245,39 +286,63 @@ class Session {
 		}
 		queue.items = proxyThumbnails(items.map(toSearchResult));
 
-		// `remove` shifts `current` implicitly and broadcasts only a queue, so the
-		// playing item has to be re-derived after every list
-		const now = queue.items[queue.currentIndex];
-		if (now && now.id !== this.currentTrackId) {
-			this.currentTrackId = now.id;
-			current.set(now);
-		}
+		// `remove` shifts `current` implicitly and broadcasts only a queue, and the
+		// first `add` to an idle room lands the same way — so which track is
+		// current has to be re-derived after every list, down the same path a
+		// `current` frame takes, loading barrier and all. Deriving it here instead
+		// would claim the track and leave the `current` that follows looking like a
+		// replay, which is a barrier nobody ever answers.
+		this.setCurrent(queue.currentIndex);
 	}
 
 	private setCurrent(index: number) {
 		if (!Number.isFinite(index)) return;
-		queue.currentIndex = index;
-		audio.paused = true;
-		audio.currentSeconds = 0;
-		this.awaitingBarrier = true;
-		this.status = 'holding';
 
 		// `next` can move current one past the end, which means nothing is playing
 		const now = queue.items[index];
-		if (now) {
-			this.currentTrackId = now.id;
-			current.set(now);
-		} else {
-			this.currentTrackId = '';
-			current.clear();
+		// Rejoining replays the room's whole state, `current` included. Only a real
+		// change may touch playback: treating the replay as one restarts the track
+		// from zero and holds it there, which is a client desyncing itself the
+		// moment it recovers. `Joined` sends a `seek` right after, which puts a
+		// rejoining client back on the room's clock.
+		const changed = index !== this.positionedAt || (now?.id ?? '') !== this.currentTrackId;
+
+		if (changed) {
+			this.positionedAt = index;
+			queue.currentIndex = index;
+			audio.paused = true;
+			audio.currentSeconds = 0;
+			this.awaitingBarrier = true;
+			this.status = 'holding';
+			this.endedFor = null;
+
+			if (now) {
+				this.currentTrackId = now.id;
+				current.set(now);
+			} else {
+				this.currentTrackId = '';
+				current.clear();
+			}
 		}
 
-		// exactly once per track, and even with nothing to load — the server counts
-		// this against every member before it starts the clock again
-		if (this.loadedFor === index) return;
-		this.loadedFor = index;
-		this.endedFor = null;
-		this.send('loaded');
+		// Only a real change arms the barrier, because that is the only thing that
+		// arms it server-side too — `UpdateStart` runs in next/previous/skipto and
+		// nowhere else, and `Joined` replays the room's state without expecting an
+		// answer. `LoadedCount` is a raw tally against the live user count, so an
+		// answer to a replayed `current` is an extra vote that releases the next
+		// barrier early for everybody.
+		if (!changed) return;
+		this.pendingFor = index;
+
+		// nothing to buffer, but the server still counts this client against every
+		// member before it starts the clock again
+		if (!now) return this.reportLoaded();
+
+		// the player answers this once it can really play the track — a `current`
+		// frame only means the URL changed. The timer is the floor under a client
+		// that never gets there, so one stalled buffer cannot hold the room shut.
+		this.clearTimer('loadTimer');
+		this.loadTimer = setTimeout(() => this.reportLoaded(), loadTimeoutMs);
 	}
 
 	private correctDrift(reported: number) {
@@ -338,7 +403,7 @@ class Session {
 		else if (field === 'description') this.description = value;
 	}
 
-	private clearTimer(which: 'syncTimer' | 'reconnectTimer' | 'driftTimer') {
+	private clearTimer(which: 'syncTimer' | 'reconnectTimer' | 'driftTimer' | 'loadTimer') {
 		const timer = this[which];
 		if (timer === null) return;
 		clearTimeout(timer as ReturnType<typeof setTimeout>);
@@ -351,6 +416,7 @@ class Session {
 		this.clearTimer('syncTimer');
 		this.clearTimer('reconnectTimer');
 		this.clearTimer('driftTimer');
+		this.clearTimer('loadTimer');
 		if (!this.socket) return;
 		this.socket.onclose = null;
 		this.socket.close();
