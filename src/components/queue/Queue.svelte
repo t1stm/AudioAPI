@@ -146,7 +146,7 @@
 		</button>
 		{#if !session.inRoom}
 			<!-- the protocol has no clear -->
-			<button type="button" class="rounded-[5px] border border-haze px-2 py-1 text-xs font-semibold text-fog hover:bg-surface-200 hover:text-chalk" onclick={() => queue.clear()}>
+			<button type="button" class="rounded-[5px] border border-haze px-2 py-1 text-xs font-semibold text-fog hover:bg-surface-200 hover:text-chalk" onclick={() => queue.clearOthers()}>
 				Clear
 			</button>
 		{/if}

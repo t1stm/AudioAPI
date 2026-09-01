@@ -5,6 +5,7 @@
 	import type { PageData } from './$types';
 	import type { SearchResult } from '$states/search.svelte';
 	import queue from '$states/queue.svelte';
+	import session from '$states/session.svelte';
 	import { getRecentlyPlayed } from '$lib/recentlyPlayed';
 	import { AudioApiError, findQueryType, getArtistLocal, getRandomSongs } from '$requests/songs';
 	import { convertTimeSpanStringToSeconds, getTimeString } from '$lib';
@@ -38,6 +39,12 @@
 	const artistUrl = (name: string) => `${resolve('/artist')}?term=${encodeURIComponent(name)}`;
 	let heroDuration = $derived(hero ? getTimeString(convertTimeSpanStringToSeconds(hero.duration)) : '');
 	let heroInLibrary = $derived(hero?.id.startsWith('audio://') ?? false);
+	// ponytail: the result contract carries no format field. For library tracks the
+	// raw file's extension is the only signal there is; YouTube results have none
+	// to give, so they get no tag. Drop this once the API returns a real format.
+	let heroFormat = $derived(
+		(heroInLibrary && hero?.contentUrl?.split('?')[0].match(/\.(\w{2,4})$/)?.[1].toUpperCase()) || ''
+	);
 
 	onMount(() => {
 		recentlyPlayed = getRecentlyPlayed();
@@ -134,14 +141,19 @@
 					</h1>
 					<ArtistLink artist={hero.artist} class="mt-1 w-fit text-fog" />
 					<div class="mt-4 flex flex-wrap gap-2">
+						<!-- in a room nobody plays anything directly, so queueing is the only verb and it takes the accent -->
+						{#if !session.inRoom}
+							<button
+								type="button"
+								class="inline-flex items-center gap-2 rounded-row bg-primary-600 px-3 py-2 text-sm font-semibold text-white"
+								onclick={playHero}><Icon src={Play} mini size="16" /> Play</button
+							>
+						{/if}
 						<button
 							type="button"
-							class="inline-flex items-center gap-2 rounded-row bg-primary-600 px-3 py-2 text-sm font-semibold text-white"
-							onclick={playHero}><Icon src={Play} mini size="16" /> Play</button
-						>
-						<button
-							type="button"
-							class="rounded-row border border-haze px-3 py-2 text-sm font-semibold text-chalk hover:bg-surface-200"
+							class="rounded-row px-3 py-2 text-sm font-semibold {session.inRoom
+								? 'bg-primary-600 text-white'
+								: 'border border-haze text-chalk hover:bg-surface-200'}"
 							onclick={queueHero}>Add to queue</button
 						>
 						<button
@@ -153,7 +165,9 @@
 						>
 					</div>
 					<p class="mt-4 font-mono text-[0.68rem] uppercase tracking-[0.13em] text-fog">
-						{heroDuration}{heroInLibrary ? ' · Library · FLAC available' : ''}
+						{heroDuration}{heroInLibrary ? ' · Library' : ''}{heroFormat
+							? ` · ${heroFormat === 'FLAC' ? 'FLAC available' : heroFormat}`
+							: ''}
 					</p>
 				</div>
 			</div>

@@ -115,6 +115,13 @@ class Queue {
 		this.items = [...this.items.slice(0, firstUpcoming), ...shuffled];
 	}
 
+	/** The Clear button: keep what is playing, drop everything around it. */
+	clearOthers() {
+		const now = this.items[this.currentIndex];
+		this.items = now ? [now] : [];
+		this.currentIndex = 0;
+	}
+
 	clear() {
 		this.items = [];
 		this.currentIndex = 0;

@@ -73,3 +73,19 @@ describe('playNow', () => {
 		expect(current.name).toBe('now');
 	});
 });
+
+describe('clearOthers', () => {
+	it('keeps the playing track and drops both sides of it', () => {
+		queue.clearOthers();
+		expect(queue.items.map((i) => i.id)).toEqual(['b']);
+		expect(queue.currentIndex).toBe(0);
+		expect(audio.paused).toBe(false);
+	});
+
+	it('empties an already-empty queue without inventing an item', () => {
+		queue.items = [];
+		queue.currentIndex = 0;
+		queue.clearOthers();
+		expect(queue.items).toEqual([]);
+	});
+});
