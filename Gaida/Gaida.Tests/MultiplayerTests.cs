@@ -279,6 +279,28 @@ public class VirtualPlayerTests
     }
 
     [Fact]
+    public async Task SeekingPastAQuarterOfAnHourStaysOnTheClock()
+    {
+        var (player, store) = TestObjects.Player();
+        var socket = new RecordingWebSocket();
+        await store.GetOrAddUser("listener", socket);
+
+        // 922 seconds is where `Ticks * Stopwatch.Frequency` used to overflow a
+        // long, and the library has half-hour mixes in it, so this is an ordinary
+        // position in an ordinary track rather than an edge case
+        await player.SeekTo(1800);
+
+        Assert.InRange(double.Parse(Assert.Single(socket.Messages)["seek ".Length..]), 1800, 1801);
+        Assert.InRange(await player.GetCurrentTime(), 1800, 1801);
+
+        // the same arithmetic carries the position out of a pause and back in
+        await player.TogglePlaying();
+        await player.TogglePlaying();
+
+        Assert.InRange(await player.GetCurrentTime(), 1800, 1802);
+    }
+
+    [Fact]
     public async Task SeekPauseResumeAndStopBroadcastPlaybackState()
     {
         var (player, store) = TestObjects.Player();

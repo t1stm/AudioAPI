@@ -261,6 +261,13 @@ public class VirtualPlayer(MessageQueue messageQueue)
 
     private static long TimeSpanToTimestamp(TimeSpan timeSpan)
     {
-        return timeSpan.Ticks * Stopwatch.Frequency / 10000000;
+        // Multiplying first overflowed: `Ticks * Frequency` is seconds * 10^16
+        // wherever the stopwatch counts nanoseconds, which it does on Linux, and
+        // that passes long.MaxValue at 922 seconds. Every position past a quarter
+        // of an hour came back negative — a seek into a long mix, a pause taken
+        // there, and worst of all `GetCurrentTime`, which rebases `StartTime`
+        // through here on every `sync` a paused room is asked for.
+        // The double carries it exactly: 10^9 * 3600 is well inside 53 bits.
+        return (long) (timeSpan.TotalSeconds * Stopwatch.Frequency);
     }
 }
