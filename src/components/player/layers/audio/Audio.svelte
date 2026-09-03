@@ -3,6 +3,8 @@
 	import audio from '$states/audio.svelte';
 	import queue from '$states/queue.svelte';
 	import session from '$states/session.svelte';
+	import quality from '$states/quality.svelte';
+	import { dropPrefetch, prefetchSong } from '$requests/songs';
 	import { interpolate } from '$lib/playbackClock';
 	let url = $derived(current.url);
 	let element: HTMLAudioElement | undefined = $state();
@@ -114,6 +116,25 @@
 	$effect(() => {
 		if (current.lengthSeconds < 1) return;
 		if (current.lengthSeconds - audio.currentSeconds < 20) queue.preloadNext();
+	});
+
+	// The next track's body, pulled down while this one plays, so the switch is a
+	// local resource swap instead of a request — see `prefetchSong`.
+	//
+	// ponytail: no timer, no trigger of its own. It rides `bufferedSeconds`, which
+	// `oncanplaythrough` pins to the track length: that is the moment this track
+	// owes the network nothing, so the download competes with no playback. It runs
+	// again on its own whenever the next id or the quality it would be encoded at
+	// changes, and `prefetchSong` makes the unchanged case a key comparison.
+	$effect(() => {
+		const next = queue.items[queue.currentIndex + 1]?.id;
+		void quality.codec;
+		void quality.bitrate;
+
+		if (!next) return dropPrefetch();
+		if (current.lengthSeconds < 1 || audio.bufferedSeconds < current.lengthSeconds) return;
+
+		prefetchSong(next);
 	});
 
 	// The room's clock steers the rate to hold everyone together. `preservesPitch`
