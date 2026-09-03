@@ -24,26 +24,8 @@ public class MusicGetter(ILogger logger) : ContentGetter(logger)
             return Task.FromResult<StreamSpreader?>(null);
         }
 
-        var streamSpreader = new StreamSpreader();
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                Logger.Debug("MusicGetter: Opening file: {Path}", localResult.Path);
-                await using var stream = File.Open(localResult.Path, FileMode.Open, FileAccess.Read);
-                await stream.CopyToAsync(streamSpreader, cancellationToken);
-                Logger.Debug("MusicGetter: Finished streaming file: {Path}", localResult.Path);
-            }
-            catch (Exception e)
-            {
-                Logger.Error(e, "MusicGetter: Error while streaming file {Path}", localResult.Path);
-            }
-            finally
-            {
-                await streamSpreader.CloseAsync();
-            }
-        }, cancellationToken);
-
-        return Task.FromResult<StreamSpreader?>(streamSpreader);
+        // The library file is the body. Adopting it copies nothing and allocates nothing: the spreader
+        // reads straight out of it, and never writes to or deletes it.
+        return Task.FromResult<StreamSpreader?>(StreamSpreader.FromExistingFile(localResult.Path));
     }
 }

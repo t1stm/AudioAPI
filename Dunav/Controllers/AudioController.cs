@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-using Gaida.Core.Streams;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Dunav.Controllers;
@@ -22,7 +20,7 @@ public class AudioController(ILogger<AudioController> logger, CacheService cache
         var entry = await GetOrFetch(key, $"/Audio/DownloadRaw?id={Uri.EscapeDataString(id)}", out _);
         if (entry is null) return StatusCode(502);
 
-        return await Respond(entry);
+        return await Respond(key, entry);
     }
 
     [HttpGet]
@@ -36,7 +34,7 @@ public class AudioController(ILogger<AudioController> logger, CacheService cache
         var entry = await GetOrFetch(key, UpstreamDownloadPath(codec, bitrate, id), out _);
         if (entry is null) return StatusCode(502);
 
-        return await Respond(entry);
+        return await Respond(key, entry);
     }
 
     /// <summary>
@@ -76,7 +74,7 @@ public class AudioController(ILogger<AudioController> logger, CacheService cache
             out started);
     }
 
-    private async Task<IActionResult> Respond(CacheEntry entry)
+    private async Task<IActionResult> Respond(string key, CacheEntry entry)
     {
         Response.ContentType = entry.ContentType;
         if (entry.ContentDisposition is not null)
@@ -85,93 +83,34 @@ public class AudioController(ILogger<AudioController> logger, CacheService cache
         Response.Headers.Append("Cache-Control", "public, max-age=31536000, immutable");
 
         // Only claim range support for a finished body: promising it mid-fetch makes players seek into a 200.
-        Response.Headers.AcceptRanges = entry.Spreader.Closed ? "bytes" : "none";
+        Response.Headers.AcceptRanges = entry.Body.Closed ? "bytes" : "none";
 
-        if (entry.Spreader.Closed && Request.Headers.Range.Count > 0)
-            return await BufferedRangeResponse(entry.Spreader, entry.ContentType);
-
-        await StreamToResponse(entry.Spreader);
-        return new EmptyResult();
-    }
-
-    /// <summary>
-    ///     Returns a proper 206 response from completed cached data when a browser seeks. Callers must check
-    ///     <see cref="StreamSpreader.Closed" /> first: a range served off a still-growing buffer would report a
-    ///     total length that is already wrong by the time the client reads it.
-    /// </summary>
-    private async Task<IActionResult> BufferedRangeResponse(StreamSpreader streamSpreader, string contentType)
-    {
         try
         {
-            var bytes = await streamSpreader.GetBufferedBytesAsync(HttpContext.RequestAborted);
-            return File(bytes, contentType, true);
+            // A finished body is just a file. Handing the stream to FileStreamResult gets range parsing, the
+            // 206, Content-Range, the 416 case and a real Content-Length for free, and lets the kernel do the
+            // copy -- where the old path materialised the whole body on the heap twice over to answer a seek.
+            if (entry.Body.Closed)
+                return File(entry.Body.OpenRead(), entry.ContentType, true);
+
+            await using var reader = entry.Body.OpenRead();
+            await reader.CopyToAsync(Response.Body, HttpContext.RequestAborted);
+            return new EmptyResult();
+        }
+        catch (FileNotFoundException)
+        {
+            // Eviction unlinked the body between the lookup that refreshed its expiry and our open. Narrow,
+            // but reachable -- EvictOverCeiling can fire in that window. The entry has outlived its file, so
+            // drop it and let the client retry into a fresh fetch.
+            logger.LogInformation("Cache entry {Key} was evicted before it could be served", key);
+            cache.Forget(key);
+            return StatusCode(503);
         }
         catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
         {
+            // The client left mid-stream. Nothing to clean up: the handle closes with the request and no
+            // other reader is affected.
             return new EmptyResult();
-        }
-    }
-
-    /// <summary>Pumps a stream spreader into the response body until the source closes or the client leaves.</summary>
-    private async Task StreamToResponse(StreamSpreader streamSpreader)
-    {
-        // Captured once: these callbacks outlive the request, and touching HttpContext after it is
-        // disposed throws inside the spreader instead of just unsubscribing us.
-        var cancellationToken = HttpContext.RequestAborted;
-        var body = Response.Body;
-
-        var buffered = new ConcurrentQueue<(byte[], int, int)>();
-        var finished = new SemaphoreSlim(0, 1);
-        var syncSemaphore = new SemaphoreSlim(1, 1);
-
-        var streamSubscriber = new StreamSubscriber
-        {
-            WriteCall = (bytes, offset, length) =>
-            {
-                buffered.Enqueue((bytes, offset, length));
-                return Task.FromResult(cancellationToken.IsCancellationRequested
-                    ? StreamStatus.Closed
-                    : StreamStatus.Open);
-            },
-            SyncCall = SyncCall,
-            CloseCall = async () =>
-            {
-                await SyncCall();
-                finished.Release();
-            }
-        };
-
-        await streamSpreader.SubscribeAsync(streamSubscriber);
-
-        try
-        {
-            await finished.WaitAsync(cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            return;
-        }
-
-        await body.FlushAsync(cancellationToken);
-        return;
-
-        async Task SyncCall()
-        {
-            if (cancellationToken.IsCancellationRequested) return;
-            await syncSemaphore.WaitAsync(CancellationToken.None);
-
-            try
-            {
-                while (buffered.TryDequeue(out var entry))
-                {
-                    var (bytes, offset, length) = entry;
-                    await body.WriteAsync(bytes.AsMemory(offset, length), cancellationToken);
-                }
-            }
-            finally
-            {
-                syncSemaphore.Release();
-            }
         }
     }
 }

@@ -11,7 +11,7 @@ Log.Logger = new LoggerConfiguration()
         theme: TemplateTheme.Code))
     .CreateLogger();
 
-if (args.Contains("--self-check")) return await SelfCheck.CoalescingAsync() ? 0 : 1;
+if (args.Contains("--self-check")) return await SelfCheck.RunAsync() ? 0 : 1;
 
 var builder = WebApplication.CreateBuilder(args);
 

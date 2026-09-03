@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- StreamSpreader/StreamSubscriber/StreamStatus only. Dunav never sees a Platform. -->
+    <!-- StreamSpreader only. Dunav never sees a Platform. -->
     <ProjectReference Include="..\Gaida\Gaida.Core\Gaida.Core.csproj"/>
   </ItemGroup>
 

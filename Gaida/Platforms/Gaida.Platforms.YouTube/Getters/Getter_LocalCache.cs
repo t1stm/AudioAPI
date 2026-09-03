@@ -38,24 +38,7 @@ public class GetterLocalCache(ILogger logger) : ContentGetter(logger)
             return Task.FromResult<StreamSpreader?>(null);
         }
 
-        var streamSpreader = new StreamSpreader();
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.None);
-                await stream.CopyToAsync(streamSpreader, cancellationToken);
-            }
-            catch (Exception e)
-            {
-                Logger.Fatal(e, "Error while copying local cache to StreamSpreader");
-            }
-            finally
-            {
-                await streamSpreader.CloseAsync();
-            }
-        }, cancellationToken);
-
-        return Task.FromResult<StreamSpreader?>(streamSpreader);
+        // Already on disk -- adopt the cached file rather than reading 90G of webm through the heap.
+        return Task.FromResult<StreamSpreader?>(StreamSpreader.FromExistingFile(path));
     }
 }

@@ -110,63 +110,13 @@ static async Task<List<ResultDto>> Collect(IAsyncEnumerable<PlatformResult> sour
 }
 
 /// <summary>
-///     Pumps a stream spreader into the response body until the source closes or the client leaves. Lifted from
-///     Gaida.API/Controllers/Content.cs:300 (StreamToResponse) -- every platform pod needs its own copy of this
-///     per SERVICE_SPLIT_PLAN.md ("StreamSpreader survives ... inside each platform pod").
+///     Pumps a stream spreader into the response body until the source closes or the client leaves. The
+///     download may still be writing while this drains it, so the reader follows the body as it grows
+///     rather than stopping at whatever had arrived when it opened.
 /// </summary>
 static async Task PumpToResponse(StreamSpreader streamSpreader, HttpResponse response,
     CancellationToken cancellationToken)
 {
-    var body = response.Body;
-    var cache = new ConcurrentQueue<(byte[], int, int)>();
-    var finished = new SemaphoreSlim(0, 1);
-    var syncGate = new SemaphoreSlim(1, 1);
-
-    var subscriber = new StreamSubscriber
-    {
-        WriteCall = (bytes, offset, length) =>
-        {
-            cache.Enqueue((bytes, offset, length));
-            return Task.FromResult(cancellationToken.IsCancellationRequested ? StreamStatus.Closed : StreamStatus.Open);
-        },
-        SyncCall = SyncCall,
-        CloseCall = async () =>
-        {
-            await SyncCall();
-            finished.Release();
-        }
-    };
-
-    await streamSpreader.SubscribeAsync(subscriber);
-
-    try
-    {
-        await finished.WaitAsync(cancellationToken);
-    }
-    catch (OperationCanceledException)
-    {
-        return;
-    }
-
-    await body.FlushAsync(cancellationToken);
-    return;
-
-    async Task SyncCall()
-    {
-        if (cancellationToken.IsCancellationRequested) return;
-        await syncGate.WaitAsync(CancellationToken.None);
-
-        try
-        {
-            while (cache.TryDequeue(out var entry))
-            {
-                var (bytes, offset, length) = entry;
-                await body.WriteAsync(bytes.AsMemory(offset, length), cancellationToken);
-            }
-        }
-        finally
-        {
-            syncGate.Release();
-        }
-    }
+    await using var reader = streamSpreader.OpenRead();
+    await reader.CopyToAsync(response.Body, cancellationToken);
 }

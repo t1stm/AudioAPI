@@ -231,58 +231,13 @@ static string FileId(string id)
 
 /// <summary>
 ///     Pumps a stream spreader into the response body until the source closes or the client leaves.
-///     Mirrors Gaida.API/Controllers/Content.cs's StreamToResponse: the source (MusicGetter) is still
-///     writing into the spreader while this drains it, so this has to subscribe rather than read once.
+///     The source (MusicGetter, a download) may still be writing while this drains it -- the reader follows
+///     the body as it grows rather than stopping at whatever had arrived when it opened.
 /// </summary>
 static async Task PumpToResponse(StreamSpreader spreader, HttpResponse response, CancellationToken ct)
 {
-    var cache = new ConcurrentQueue<(byte[] Bytes, int Offset, int Length)>();
-    var finished = new SemaphoreSlim(0, 1);
-    var syncSemaphore = new SemaphoreSlim(1, 1);
-
-    var subscriber = new StreamSubscriber
-    {
-        WriteCall = (bytes, offset, length) =>
-        {
-            cache.Enqueue((bytes, offset, length));
-            return Task.FromResult(ct.IsCancellationRequested ? StreamStatus.Closed : StreamStatus.Open);
-        },
-        SyncCall = SyncCall,
-        CloseCall = async () =>
-        {
-            await SyncCall();
-            finished.Release();
-        }
-    };
-
-    await spreader.SubscribeAsync(subscriber);
-
-    try
-    {
-        await finished.WaitAsync(ct);
-    }
-    catch (OperationCanceledException)
-    {
-        return;
-    }
-
-    await response.Body.FlushAsync(ct);
-    return;
-
-    async Task SyncCall()
-    {
-        if (ct.IsCancellationRequested) return;
-        await syncSemaphore.WaitAsync(CancellationToken.None);
-        try
-        {
-            while (cache.TryDequeue(out var entry))
-                await response.Body.WriteAsync(entry.Bytes.AsMemory(entry.Offset, entry.Length), ct);
-        }
-        finally
-        {
-            syncSemaphore.Release();
-        }
-    }
+    await using var reader = spreader.OpenRead();
+    await reader.CopyToAsync(response.Body, ct);
 }
 
 // ── The one runnable check: `dotnet run --project Gaida.Platform.Local -- selftest`. ──

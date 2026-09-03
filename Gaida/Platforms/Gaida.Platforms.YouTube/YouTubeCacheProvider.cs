@@ -5,72 +5,29 @@ namespace Gaida.Platforms.YouTube;
 
 public static class YouTubeCacheProvider
 {
-    public static readonly SemaphoreSlim CacheLock = new(1, 1);
-    public static readonly Dictionary<string, StreamSpreader> CurrentCache = new();
-
-    public static async Task UpdateCache(PlatformResult result, StreamSpreader streamSpreader)
+    /// <summary>
+    ///     Tells a freshly started download to land in the webm cache instead of scratch space.
+    /// </summary>
+    /// <remarks>
+    ///     This used to subscribe to the spreader and write every chunk out a second time, into a second
+    ///     file, behind its own queue and semaphore. Now that a spreader is already a file, keeping it is a
+    ///     move at close -- the bytes are only ever written once. Readers streaming the download while it
+    ///     happens are unaffected: they hold their own handles.
+    /// </remarks>
+    public static Task UpdateCache(PlatformResult result, StreamSpreader streamSpreader)
     {
-        var alternativeLookup = CurrentCache.GetAlternateLookup<ReadOnlySpan<char>>();
+        if (result is not YouTubeResult youtubeResult) return Task.CompletedTask;
 
-        if (result is not YouTubeResult youtubeResult) return;
-        var exportDirectory =
-            Environment.GetEnvironmentVariable("YOUTUBE_CACHE", EnvironmentVariableTarget.Process);
+        var exportDirectory = Environment.GetEnvironmentVariable("YOUTUBE_CACHE", EnvironmentVariableTarget.Process);
+        if (exportDirectory is null) return Task.CompletedTask;
 
-        if (exportDirectory is null) return;
-
-        Directory.CreateDirectory(exportDirectory);
         var filePath = Path.Combine(exportDirectory, $"{youtubeResult.GetPureID()}.webm");
 
-        if (File.Exists(filePath)) return;
+        // Already cached, or already being served straight out of the cache by GetterLocalCache -- in which
+        // case the spreader's file IS filePath and moving it onto itself would be nonsense.
+        if (File.Exists(filePath)) return Task.CompletedTask;
 
-        await CacheLock.WaitAsync();
-        if (!alternativeLookup.TryAdd(filePath, streamSpreader))
-        {
-            CacheLock.Release();
-            return;
-        }
-
-        CacheLock.Release();
-
-        var newFile = File.Create(filePath);
-
-        var queue = new Queue<(byte[], int, int)>();
-        var syncSemaphore = new SemaphoreSlim(1, 1);
-
-        var streamSubscriber = new StreamSubscriber
-        {
-            WriteCall = (bytes, offset, length) =>
-            {
-                queue.Enqueue((bytes, offset, length));
-                return Task.FromResult(StreamStatus.Open);
-            },
-            SyncCall = SyncCall,
-            CloseCall = async () =>
-            {
-                await SyncCall();
-                await newFile.FlushAsync();
-                await newFile.DisposeAsync();
-
-                await CacheLock.WaitAsync();
-                alternativeLookup.Remove(filePath);
-                CacheLock.Release();
-            }
-        };
-
-        await streamSpreader.SubscribeAsync(streamSubscriber);
-        return;
-
-        async Task SyncCall()
-        {
-            await syncSemaphore.WaitAsync();
-
-            while (queue.TryDequeue(out var entry))
-            {
-                var (bytes, offset, length) = entry;
-                await newFile.WriteAsync(bytes.AsMemory(offset, length));
-            }
-
-            syncSemaphore.Release();
-        }
+        streamSpreader.KeepAs(filePath);
+        return Task.CompletedTask;
     }
 }

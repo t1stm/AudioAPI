@@ -33,31 +33,8 @@ if (streamSpreader is null)
     return;
 }
 
-var stream = File.Open("test", FileMode.Create);
+await using var stream = File.Open("test", FileMode.Create);
+await using var reader = streamSpreader.OpenRead();
+await reader.CopyToAsync(stream);
 
-var waitingSemaphore = new SemaphoreSlim(0, 1);
-var total = 0;
-var streamSubscriber = new StreamSubscriber
-{
-    WriteCall = async (bytes, offset, length) =>
-    {
-        total += length;
-
-        await stream.WriteAsync(bytes.AsMemory(offset, length));
-        return StreamStatus.Open;
-    },
-    SyncCall = () => Task.CompletedTask,
-    CloseCall = () =>
-    {
-        waitingSemaphore.Release();
-        return Task.CompletedTask;
-    }
-};
-
-await streamSpreader.SubscribeAsync(streamSubscriber);
-await waitingSemaphore.WaitAsync();
-
-await stream.FlushAsync();
-await stream.DisposeAsync();
-
-logger.Information("Total: {Total}", total);
+logger.Information("Total: {Total}", stream.Length);
