@@ -3,15 +3,15 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-COPY Gaida.Platform.Local/Gaida.Platform.Local.csproj Gaida.Platform.Local/
+COPY Gaida.Pods.MusicDatabase/Gaida.Pods.MusicDatabase.csproj Gaida.Pods.MusicDatabase/
 COPY Gaida/Gaida.Core/Gaida.Core.csproj Gaida/Gaida.Core/
 COPY Gaida/Platforms/Gaida.Platforms.MusicDatabase/Gaida.Platforms.MusicDatabase.csproj Gaida/Platforms/Gaida.Platforms.MusicDatabase/
-RUN dotnet restore Gaida.Platform.Local/Gaida.Platform.Local.csproj
+RUN dotnet restore Gaida.Pods.MusicDatabase/Gaida.Pods.MusicDatabase.csproj
 
-COPY Gaida.Platform.Local/ Gaida.Platform.Local/
+COPY Gaida.Pods.MusicDatabase/ Gaida.Pods.MusicDatabase/
 COPY Gaida/Gaida.Core/ Gaida/Gaida.Core/
 COPY Gaida/Platforms/Gaida.Platforms.MusicDatabase/ Gaida/Platforms/Gaida.Platforms.MusicDatabase/
-RUN dotnet publish Gaida.Platform.Local/Gaida.Platform.Local.csproj -c Release -o /app
+RUN dotnet publish Gaida.Pods.MusicDatabase/Gaida.Pods.MusicDatabase.csproj -c Release -o /app
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
@@ -24,4 +24,4 @@ COPY --from=build /app .
 
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
-ENTRYPOINT ["dotnet", "Gaida.Platform.Local.dll"]
+ENTRYPOINT ["dotnet", "Gaida.Pods.MusicDatabase.dll"]

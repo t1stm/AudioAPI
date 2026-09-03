@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using Gaida.Core.Platforms;
 using Gaida.Core.Streams;
 using Gaida.Core.Utils;
-using Gaida.Platform.YouTube;
+using Gaida.Pods.YouTube;
 using Serilog;
 using YouTubePlatform = Gaida.Platforms.YouTube.YouTube;
 

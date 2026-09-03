@@ -6,7 +6,7 @@ using Serilog.Templates;
 using Serilog.Templates.Themes;
 
 // `dotnet run -- selftest` runs the pure-logic check below without needing a listening host —
-// mirrors Gaida.Platform.Local/Program.cs's RunSelfCheck.
+// mirrors Gaida.Pods.MusicDatabase/Program.cs's RunSelfCheck.
 if (args.Contains("--self-check"))
 {
     RunSelfCheck();

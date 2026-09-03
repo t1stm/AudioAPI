@@ -3,15 +3,15 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-COPY Gaida.Platform.YouTube/Gaida.Platform.YouTube.csproj Gaida.Platform.YouTube/
+COPY Gaida.Pods.YouTube/Gaida.Pods.YouTube.csproj Gaida.Pods.YouTube/
 COPY Gaida/Platforms/Gaida.Platforms.YouTube/Gaida.Platforms.YouTube.csproj Gaida/Platforms/Gaida.Platforms.YouTube/
 COPY Gaida/Gaida.Core/Gaida.Core.csproj Gaida/Gaida.Core/
-RUN dotnet restore Gaida.Platform.YouTube/Gaida.Platform.YouTube.csproj
+RUN dotnet restore Gaida.Pods.YouTube/Gaida.Pods.YouTube.csproj
 
-COPY Gaida.Platform.YouTube/ Gaida.Platform.YouTube/
+COPY Gaida.Pods.YouTube/ Gaida.Pods.YouTube/
 COPY Gaida/Platforms/Gaida.Platforms.YouTube/ Gaida/Platforms/Gaida.Platforms.YouTube/
 COPY Gaida/Gaida.Core/ Gaida/Gaida.Core/
-RUN dotnet publish Gaida.Platform.YouTube/Gaida.Platform.YouTube.csproj -c Release -o /app
+RUN dotnet publish Gaida.Pods.YouTube/Gaida.Pods.YouTube.csproj -c Release -o /app
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
@@ -27,4 +27,4 @@ COPY --from=build /app .
 
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
-ENTRYPOINT ["dotnet", "Gaida.Platform.YouTube.dll"]
+ENTRYPOINT ["dotnet", "Gaida.Pods.YouTube.dll"]

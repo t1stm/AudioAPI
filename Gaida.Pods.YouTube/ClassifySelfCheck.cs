@@ -1,4 +1,4 @@
-namespace Gaida.Platform.YouTube;
+namespace Gaida.Pods.YouTube;
 
 /// <summary>
 ///     ponytail: the one runnable check for Classify's parsing -- no test project, just asserts that fail loudly.

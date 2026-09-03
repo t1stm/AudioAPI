@@ -1,7 +1,7 @@
 using System.Globalization;
 using Gaida.Core.Platforms;
 
-namespace Gaida.Platform.YouTube;
+namespace Gaida.Pods.YouTube;
 
 /// <summary>
 ///     The pod result shape -- no <c>contentUrl</c>, this platform doesn't know the public host. Gaida.API adds it

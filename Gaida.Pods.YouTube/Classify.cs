@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace Gaida.Platform.YouTube;
+namespace Gaida.Pods.YouTube;
 
 /// <summary>
 ///     Outcome of classifying one raw query. <see cref="Status" /> is the HTTP status <c>/classify</c> answers with:

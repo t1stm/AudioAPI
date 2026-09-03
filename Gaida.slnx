@@ -28,8 +28,8 @@
   <Folder Name="/Services/">
     <Project Path="Dunav/Dunav.csproj"/>
     <Project Path="Selo/Selo.csproj"/>
-    <Project Path="Gaida.Platform.Local/Gaida.Platform.Local.csproj"/>
-    <Project Path="Gaida.Platform.YouTube/Gaida.Platform.YouTube.csproj"/>
+    <Project Path="Gaida.Pods.MusicDatabase/Gaida.Pods.MusicDatabase.csproj"/>
+    <Project Path="Gaida.Pods.YouTube/Gaida.Pods.YouTube.csproj"/>
   </Folder>
   <Project Path="Gaida.API/Gaida.API.csproj"/>
   <Project Path="Gaida.Bot/Gaida.Bot.csproj"/>

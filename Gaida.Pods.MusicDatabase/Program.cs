@@ -240,7 +240,7 @@ static async Task PumpToResponse(StreamSpreader spreader, HttpResponse response,
     await reader.CopyToAsync(response.Body, ct);
 }
 
-// ── The one runnable check: `dotnet run --project Gaida.Platform.Local -- selftest`. ──
+// ── The one runnable check: `dotnet run --project Gaida.Pods.MusicDatabase -- selftest`. ──
 // Exercises the pure /classify and /variant logic above without needing a library on disk or a
 // listening host. Throws (nonzero exit) the moment any assertion fails.
 static void RunSelfCheck()
