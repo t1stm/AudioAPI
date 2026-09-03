@@ -1,6 +1,7 @@
 import type { SearchResult } from '$states/search.svelte';
 import current from './current.svelte';
 import audio from './audio.svelte';
+import { preloadSong } from '$requests/songs';
 
 class Queue {
 	items: SearchResult[] = $state([]);
@@ -122,15 +123,6 @@ class Queue {
 		this.currentIndex = 0;
 	}
 
-	clear() {
-		this.items = [];
-		this.currentIndex = 0;
-		audio.currentSeconds = 0;
-		audio.bufferedSeconds = 0;
-		audio.paused = true;
-		current.clear();
-	}
-
 	previousTrack() {
 		if (this.remote) return this.remote('previous');
 		if (this.items.length < 1) return;
@@ -144,6 +136,12 @@ class Queue {
 
 		this.currentIndex -= 1;
 		this.setCurrent();
+	}
+
+	/** Warms the encode for whatever plays next, so the switch does not wait on ffmpeg. */
+	preloadNext() {
+		const next = this.items[this.currentIndex + 1];
+		if (next) preloadSong(next.id);
 	}
 
 	nextTrack() {

@@ -60,6 +60,12 @@
 	}
 }
 
+/* The app is dark everywhere, but native widgets — number spinners, scrollbars,
+   focus rings — don't know that and render light-on-dark until told. */
+:root {
+	color-scheme: dark;
+}
+
 /* Touch has no hover, so the press is the entire feedback channel — and the
    browser's own grey rectangle is not it. One rule covers every control in the
    app rather than a press state per component. Anything wider than a thumb (a

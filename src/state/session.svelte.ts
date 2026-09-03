@@ -3,11 +3,9 @@ import { audioWsUrl, proxyThumbnails } from '$lib/discord';
 import queue from './queue.svelte';
 import current from './current.svelte';
 import audio from './audio.svelte';
-import {
-	SyncClock,
-	minSyncSpacingMs,
-	settledSyncSpacingMs,
-} from '$lib/syncClock';
+import rooms from './rooms.svelte';
+import { isUnnamed, roomLabel } from '$requests/rooms';
+import { SyncClock, minSyncSpacingMs, settledSyncSpacingMs } from '$lib/syncClock';
 
 /** What the room's `queue` frame actually carries: the raw platform result, not
  *  the search shape. No `contentUrl`, and most fields are nullable. */
@@ -60,7 +58,7 @@ function toSearchResult(item: RoomQueueItem): SearchResult {
 		artist: item.originalArtist ?? item.artist ?? 'Unknown artist',
 		album: item.album ?? undefined,
 		duration: item.duration,
-		thumbnailUrl: item.thumbnailUrl,
+		thumbnailUrl: item.thumbnailUrl
 	};
 }
 
@@ -80,7 +78,9 @@ let nextLineId = 0;
 class Session {
 	roomId: string | null = $state(null);
 	joinedAs: string = $state('');
-	name: string = $state('');
+	/** What a `room name` frame said. The server confirms a rename to its sender
+	 *  only, so for everybody else this stays empty — see `name`. */
+	private named: string = $state('');
 	description: string = $state('');
 	status: SessionStatus = $state('offline');
 	chat: ChatLine[] = $state([]);
@@ -130,6 +130,16 @@ class Session {
 	private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 	private loadTimer: ReturnType<typeof setTimeout> | null = null;
 
+	/** The room's title. A rename reaches non-senders only through the lobby feed,
+	 *  which the layout keeps open for the whole session, so that is the source of
+	 *  truth; the frame is this client's own echo, which is all there is until the
+	 *  feed lands. Empty for a room nobody has named — its name is its GUID. */
+	get name() {
+		const listed = rooms.list.find((room) => room.roomID === this.roomId);
+		if (listed && !isUnnamed(listed)) return roomLabel(listed);
+		return this.named;
+	}
+
 	get inRoom() {
 		return this.roomId !== null;
 	}
@@ -138,8 +148,6 @@ class Session {
 	get awaitingLoad() {
 		return this.pendingFor !== null;
 	}
-
-
 
 	/** Commands to run as soon as the next connection opens — how a freshly
 	 *  created room gets its name, since `CreateRoom` takes no body. */
@@ -154,7 +162,7 @@ class Session {
 		this.roomId = roomId;
 		this.joinedAs = username;
 		this.gone = false;
-		this.name = '';
+		this.named = '';
 		this.description = '';
 		this.chat = [];
 		this.roster = [];
@@ -169,7 +177,7 @@ class Session {
 		this.rewind();
 		// set before the socket opens so a click in the meantime queues a command
 		// instead of quietly mutating a queue the server owns
-		queue.remote = command => this.send(command);
+		queue.remote = (command) => this.send(command);
 		this.open();
 	}
 
@@ -185,7 +193,9 @@ class Session {
 		this.positionedAt = null;
 		this.rewind();
 		queue.remote = null;
-		queue.clear();
+		// The queue and what is playing stay: leaving the room hands the list back
+		// to this client rather than throwing it away. The server owned it while
+		// `remote` was set; with that null every verb is local again.
 	}
 
 	send(command: string) {
@@ -221,6 +231,15 @@ class Session {
 		this.send('end');
 	}
 
+	/** The strip's resync button. Drops the position window so the next reading
+	 *  is allowed its opening snap — the same path a track change goes down —
+	 *  and asks for one now instead of waiting out the settled spacing. */
+	resync() {
+		if (!this.inRoom) return;
+		this.rewind();
+		this.requestSync();
+	}
+
 	rename(name: string) {
 		const trimmed = name.trim();
 		if (!trimmed) return;
@@ -247,7 +266,7 @@ class Session {
 			for (const command of this.pending.splice(0)) socket.send(command);
 			this.syncTimer = setInterval(() => this.requestSync(), minSyncSpacingMs);
 		};
-		socket.onmessage = event => {
+		socket.onmessage = (event) => {
 			this.frames++;
 			this.receive(String(event.data));
 		};
@@ -270,10 +289,7 @@ class Session {
 
 		this.status = 'reconnecting';
 		this.attempts++;
-		this.reconnectTimer = setTimeout(
-			() => this.open(),
-			Math.min(1000 * 2 ** (this.attempts - 1), 30_000),
-		);
+		this.reconnectTimer = setTimeout(() => this.open(), Math.min(1000 * 2 ** (this.attempts - 1), 30_000));
 	}
 
 	private receive(raw: string) {
@@ -412,13 +428,7 @@ class Session {
 		this.syncInFlight = false;
 		if (!Number.isFinite(reported)) return;
 
-		const error = this.clock.sample(
-			this.syncSentAt,
-			performance.now(),
-			reported,
-			audio.positionNow(),
-			serverUtcMs,
-		);
+		const error = this.clock.sample(this.syncSentAt, performance.now(), reported, audio.positionNow(), serverUtcMs);
 
 		if (this.clock.shouldSeek(error)) {
 			// too far out for the rate budget to close, or the track's opening
@@ -509,8 +519,8 @@ class Session {
 			system,
 			at: new Date().toLocaleTimeString([], {
 				hour: '2-digit',
-				minute: '2-digit',
-			}),
+				minute: '2-digit'
+			})
 		};
 		this.chat = [...this.chat, line].slice(-maximumChatLines);
 		if (!this.chatOpen) this.unread++;
@@ -525,7 +535,7 @@ class Session {
 			if (!this.roster.includes(who)) this.roster = [...this.roster, who];
 			return;
 		}
-		this.roster = this.roster.filter(name => name !== who);
+		this.roster = this.roster.filter((name) => name !== who);
 	}
 
 	private setRoomField(argument: string) {
@@ -534,7 +544,7 @@ class Session {
 		const field = argument.slice(0, space);
 		const value = argument.slice(space + 1).trim();
 
-		if (field === 'name') this.name = value;
+		if (field === 'name') this.named = value;
 		else if (field === 'description') this.description = value;
 	}
 

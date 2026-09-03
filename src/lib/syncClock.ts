@@ -45,14 +45,14 @@ export const proportionalGain = 0.15;
  * LAN server that was an error parked at 20–28 ms against a 25 ms line, and a
  * rate change every few samples for it, forever.
  */
-export const syncDeadbandSeconds = 0.05;
+export const syncDeadbandSeconds = 0.035;
 /**
  * Where the loop lets go once it has engaged, and what it aims at while steering.
  *
  * Small enough that landing here is genuinely together, far enough under
  * `syncDeadbandSeconds` that ordinary jitter cannot span the gap: with drift of
- * tens of ppm, walking the 40 ms between the two takes a quarter of an hour, so
- * that is roughly how often the rate moves at all once a track has settled.
+ * tens of ppm, walking the 25 ms between the two takes several minutes, so that
+ * is roughly how often the rate moves at all once a track has settled.
  *
  * Steering aims past it, at zero, on purpose. A correction that faded out as it
  * approached the target would approach it and never cross — the same never-
@@ -131,8 +131,7 @@ export type SyncSample = {
  *  stood relative to this client's `performance.now()`. */
 export type LinkSample = { at: number; rtt: number; skew: number | null };
 
-const clamp = (value: number, low: number, high: number) =>
-	Math.min(high, Math.max(low, value));
+const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
 
 /** Every action the loop takes, in the browser only — the room simulator and the
  *  tests import this same module and would drown in it.
@@ -194,13 +193,7 @@ export class SyncClock {
 	 * @returns how far behind the room this client is, seconds. Positive means
 	 *          the room is ahead and the player has to catch up.
 	 */
-	sample(
-		sentAt: number,
-		receivedAt: number,
-		reported: number,
-		position: number,
-		serverUtcMs?: number,
-	) {
+	sample(sentAt: number, receivedAt: number, reported: number, position: number, serverUtcMs?: number) {
 		if (!Number.isFinite(reported)) {
 			log('sample dropped', `server reported ${reported}`);
 			return this.error;
@@ -225,11 +218,9 @@ export class SyncClock {
 		// steps when the OS corrects it, and a step in the middle of a track would
 		// be indistinguishable from the room having moved.
 		const skew =
-			serverUtcMs === undefined || !Number.isFinite(serverUtcMs)
-				? null
-				: serverUtcMs - (sentAt + receivedAt) / 2;
+			serverUtcMs === undefined || !Number.isFinite(serverUtcMs) ? null : serverUtcMs - (sentAt + receivedAt) / 2;
 		this.links.push({ at, rtt, skew });
-		this.links = this.links.filter(link => at - link.at <= linkWindowSeconds);
+		this.links = this.links.filter((link) => at - link.at <= linkWindowSeconds);
 
 		// the sample's own offset plus the correction spent to date is the offset
 		// this device would have had with no steering at all, so its slope is the
@@ -241,7 +232,7 @@ export class SyncClock {
 			'sample',
 			`raw=${ms(err)} filtered=${ms(this.error)} rtt=${ms(rtt)} ` +
 				`skew=${skew === null ? 'unstamped' : `${skew.toFixed(0)}ms`} ` +
-				`spent=${ms(this.corrected)} samples=${this.samples.length}`,
+				`spent=${ms(this.corrected)} samples=${this.samples.length}`
 		);
 		return this.error;
 	}
@@ -267,7 +258,7 @@ export class SyncClock {
 	 *  stale by, and the fallback for a stamped one before any reply has landed. */
 	get halfRtt() {
 		if (this.links.length === 0) return 0;
-		return Math.min(...this.links.map(link => link.rtt)) / 2;
+		return Math.min(...this.links.map((link) => link.rtt)) / 2;
 	}
 
 	/**
@@ -280,7 +271,7 @@ export class SyncClock {
 	 * against a server that does not stamp.
 	 */
 	get skew(): number | null {
-		const stamped = this.links.filter(link => link.skew !== null);
+		const stamped = this.links.filter((link) => link.skew !== null);
 		if (stamped.length === 0) return null;
 		return stamped.reduce((previous, link) => (link.rtt < previous.rtt ? link : previous)).skew;
 	}
@@ -358,7 +349,7 @@ export class SyncClock {
 	 */
 	get deadband() {
 		if (this.links.length < 4) return syncDeadbandSeconds;
-		const trips = this.links.map(link => link.rtt).sort((a, b) => a - b);
+		const trips = this.links.map((link) => link.rtt).sort((a, b) => a - b);
 		return clamp(trips[trips.length >> 1] - trips[0], syncDeadbandSeconds, maxDeadbandSeconds);
 	}
 
@@ -371,11 +362,7 @@ export class SyncClock {
 		const threshold = this.settled ? hardSeekSeconds : firstReadingSnapSeconds;
 		const seek = Math.abs(error) > threshold;
 		if (seek)
-			log(
-				'seek',
-				`err=${ms(error)} past ${this.settled ? 'hard' : 'first reading'} ` +
-					`threshold=${ms(threshold)}`,
-			);
+			log('seek', `err=${ms(error)} past ${this.settled ? 'hard' : 'first reading'} ` + `threshold=${ms(threshold)}`);
 		return seek;
 	}
 
@@ -402,16 +389,14 @@ export class SyncClock {
 		else if (Math.abs(error) > this.deadband) this.steering = true;
 		else if (Math.abs(error) <= syncTargetSeconds) this.steering = false;
 
-		this.rate = this.steering
-			? clamp(1 + proportionalGain * error, 1 - maxRateDeviation, 1 + maxRateDeviation)
-			: 1;
+		this.rate = this.steering ? clamp(1 + proportionalGain * error, 1 - maxRateDeviation, 1 + maxRateDeviation) : 1;
 		if (this.rate !== previous)
 			log(
 				'rate',
 				`${previous.toFixed(4)} -> ${this.rate.toFixed(4)} err=${ms(error)} ` +
 					`${this.steering ? 'steering to' : 'released at'} ${ms(syncTargetSeconds)}, ` +
 					`engages past ${ms(this.deadband)}` +
-					(unfiltered ? ` (held at 1: ${this.samples.length} samples)` : ''),
+					(unfiltered ? ` (held at 1: ${this.samples.length} samples)` : '')
 			);
 		return this.rate;
 	}

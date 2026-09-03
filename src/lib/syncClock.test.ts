@@ -8,7 +8,9 @@ import {
 	maxRateDeviation,
 	proportionalGain,
 	syncDeadbandSeconds,
-	syncTargetSeconds,
+	settledSyncSpacingMs,
+	minSyncSpacingMs,
+	syncTargetSeconds
 } from './syncClock';
 
 /** Any constant offset between the server's UTC clock and this client's
@@ -18,14 +20,8 @@ const serverEpoch = 1_700_000_000_000;
 
 /** A round trip whose reply carries the moment the server read it, `upMs` into a
  *  trip that takes `rttMs` in all. */
-const stamped = (
-	clock: SyncClock,
-	at: number,
-	rttMs: number,
-	upMs: number,
-	reported: number,
-	position: number,
-) => clock.sample(at, at + rttMs, reported, position, serverEpoch + at + upMs);
+const stamped = (clock: SyncClock, at: number, rttMs: number, upMs: number, reported: number, position: number) =>
+	clock.sample(at, at + rttMs, reported, position, serverEpoch + at + upMs);
 
 /** One round trip: request out at `at`, reply back `rtt` later. */
 const trip = (clock: SyncClock, at: number, rtt: number, reported: number, position: number) =>
@@ -148,7 +144,7 @@ describe('SyncClock', () => {
 		expect(clock.halfRtt).toBeCloseTo(0.06);
 	});
 
-	it('works out where the server\'s clock stands from a stamped reply', () => {
+	it("works out where the server's clock stands from a stamped reply", () => {
 		const clock = new SyncClock();
 		stamped(clock, 0, 200, 100, 10, 10);
 		expect(clock.skew).toBeCloseTo(serverEpoch);
@@ -262,5 +258,96 @@ describe('SyncClock', () => {
 		expect(clock.rate).toBe(1);
 		// the seek lead is needed in the very next frame the server sends
 		expect(clock.halfRtt).toBeCloseTo(0.1);
+	});
+
+	/**
+	 * Two links of the same shape, one of which queues in bursts: 14 s at ~3 ms,
+	 * then 4 s of 20-120 ms. The queue sits on the way back, which is the part that
+	 * could hurt — `rtt / 2` credits half of a burst to an uplink that never spent
+	 * it, so a burst reading on its own claims this client is tens of milliseconds
+	 * ahead of a room it is sitting level with.
+	 *
+	 * Deterministic: a sinusoid whose period shares no factor with the cycle, so
+	 * the trips wander without ever lining up against it.
+	 */
+	const quiet = (at: number) => {
+		const rtt = 3 + 0.4 * Math.sin(at / 137);
+		return { rtt, up: rtt / 2 };
+	};
+	const bursty = (at: number) => {
+		if (at % 18_000 < 14_000) return quiet(at);
+		const rtt = 70 + 50 * Math.sin(at / 137);
+		return { rtt, up: 1.5 }; // the uplink is the same quiet trip; only the way back queues
+	};
+
+	/**
+	 * The whole loop against one of those links, driven the way `session` drives
+	 * it: poll, act on the reading, poll again at whichever spacing the loop's own
+	 * state asks for. `at0` phases the link so a run can join mid-burst, and `ppm`
+	 * is the device's own clock error — without one the loop has nothing to do and
+	 * the link is never asked a hard question.
+	 */
+	const listen = (link: (at: number) => { rtt: number; up: number }, at0: number, ppm = 150) => {
+		const clock = new SyncClock();
+		let now = 0; // the client's `performance.now()`, ms
+		let client = 100; // audible position, seconds
+		let room = 100; // where the room actually is
+		let seeks = 0;
+		let worst = 0;
+		let engagements = 0;
+		let steering = false;
+
+		const advance = (ms: number) => {
+			now += ms;
+			room += ms / 1000;
+			client += (ms / 1000) * clock.rate * (1 + ppm * 1e-6);
+		};
+
+		while (now < 900_000) {
+			const sentAt = now;
+			const { rtt, up } = link(at0 + now);
+			advance(up);
+			const reported = room; // the server reads its stopwatch when the request lands
+			advance(rtt - up);
+
+			const error = clock.sample(sentAt, now, reported, client, serverEpoch + sentAt + up);
+			if (clock.shouldSeek(error)) {
+				client += error;
+				clock.seeked();
+				seeks++;
+			} else {
+				clock.rateFor(error);
+			}
+			if (clock.steering && !steering) engagements++;
+			steering = clock.steering;
+			worst = Math.max(worst, Math.abs(room - client));
+
+			// `session.syncSpacing`: hard while it thinks it is chasing, idle once it is not.
+			// ponytail: measured from the reply rather than the request as the real timer
+			// does — 3 ms apart on the trips that decide anything here.
+			const converging = clock.steering || Math.abs(error) > clock.deadband;
+			advance(clock.settled && !converging ? settledSyncSpacingMs : minSyncSpacingMs);
+		}
+		return { seeks, engagements, worst };
+	};
+
+	it('rides out a link that queues in bursts as if it were a quiet one', () => {
+		// A quarter of an hour on a 150 ppm device, which is the only thing in here
+		// with real work for the loop: it walks the offset out to the band every few
+		// minutes and the loop walks it back. The burst must not add to that.
+		const still = listen(quiet, 0);
+		expect(still.seeks).toBe(0);
+
+		// including joining mid-burst, where the window opens on nothing but queued
+		// trips and the first reading of a track is allowed to jump on 50 ms
+		for (const at0 of [0, 14_500, 16_000]) {
+			const run = listen(bursty, at0);
+			expect({ at0, seeks: run.seeks }).toEqual({ at0, seeks: 0 });
+			// the burst may not buy the loop extra work, nor cost accuracy for the
+			// stillness: both of those are what a wider sample window trades away
+			expect(run.engagements).toBeLessThanOrEqual(still.engagements + 1);
+			expect(run.worst).toBeLessThan(still.worst + 0.005);
+			expect(run.worst).toBeLessThan(maxDeadbandSeconds);
+		}
 	});
 });

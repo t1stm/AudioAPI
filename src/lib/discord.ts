@@ -7,8 +7,7 @@ import type { SearchResult } from '$states/search.svelte';
  */
 export const isDiscordActivity =
 	typeof location !== 'undefined' &&
-	(location.hostname.endsWith('.discordsays.com') ||
-		new URLSearchParams(location.search).has('frame_id'));
+	(location.hostname.endsWith('.discordsays.com') || new URLSearchParams(location.search).has('frame_id'));
 
 /**
  * Inside the activity iframe every external host is blocked by Discord's CSP —
@@ -27,34 +26,22 @@ export function audioWsUrl(path: string) {
 	return new URL(audioApi + path, location.origin).href.replace(/^http/, 'ws');
 }
 
-const YTIMG = '.ytimg.com';
-// ponytail: temporary — the API hands out absolute cover URLs on a host the
-// activity cannot reach. Drop this once it returns paths relative to the API.
-const ALBUM_COVERS = '/Album_Covers/';
-
-/** Rewrites an absolute URL the API handed us onto the Discord proxy. */
-function proxied(url: string | null): string | null {
-	if (!url || !isDiscordActivity) return url;
-	let parsed: URL;
-	try {
-		parsed = new URL(url, location.origin);
-	} catch {
-		return url;
-	}
-	const { hostname, pathname, search } = parsed;
-	if (hostname === 'api.gergov.bg') return `/.proxy/api${pathname}${search}`;
-	if (hostname === 'gergov.bg' && pathname.startsWith(ALBUM_COVERS))
-		return `/.proxy/covers/${pathname.slice(ALBUM_COVERS.length)}${search}`;
-	if (hostname.endsWith(YTIMG))
-		return `/.proxy/ytimg/${hostname.slice(0, -YTIMG.length)}${pathname}${search}`;
-	// ponytail: unmapped host stays as-is — the iframe blocks it and the <img>
-	// onerror handlers already fall back to /empty.png. Add a mapping if one shows up.
-	return url;
-}
-
+/**
+ * Inside the activity every artwork host is blocked, so the thumbnail is taken
+ * from the one origin that is mapped: the API's own `/Audio/Cover?id=`, which
+ * fetches and caches it server-side. Outside the activity the original absolute
+ * URL is already the fastest route, so it is left alone.
+ */
 export function proxyThumbnails<T extends SearchResult>(results: T[]): T[] {
 	if (!isDiscordActivity) return results;
-	return results.map((r) => ({ ...r, thumbnailUrl: proxied(r.thumbnailUrl) }));
+	return results.map((r) =>
+		r.thumbnailUrl
+			? {
+					...r,
+					thumbnailUrl: `${audioApi}/Cover?id=${encodeURIComponent(r.id)}`
+				}
+			: r
+	);
 }
 
 export let sdk: DiscordSDK | null = null;
@@ -88,9 +75,7 @@ export async function initDiscord() {
 		discordUser = {
 			name: user.username,
 			// ponytail: no avatar means no URL — the header falls back to its icon.
-			avatarUrl: user.avatar
-				? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=64`
-				: null
+			avatarUrl: user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=64` : null
 		};
 	});
 	await sdk.ready();
@@ -104,5 +89,9 @@ export async function initDiscord() {
  */
 export function discordIds() {
 	if (!sdk) return null;
-	return { instanceId: sdk.instanceId, channelId: sdk.channelId, guildId: sdk.guildId };
+	return {
+		instanceId: sdk.instanceId,
+		channelId: sdk.channelId,
+		guildId: sdk.guildId
+	};
 }

@@ -29,16 +29,35 @@
 		const built = new AudioContext({ latencyHint: 'playback' });
 		built.createMediaElementSource(element).connect(built.destination);
 		context = built;
+		// Suspended at construction is the autoplay policy answering: this device
+		// makes no sound at all until a gesture resumes the graph. Everything
+		// routed through it is silence until then — see `audio.blocked`.
+		audio.blocked = built.state === 'suspended';
+		audio.unblock = async () => {
+			await built.resume();
+			audio.blocked = built.state !== 'running';
+		};
 		return () => {
 			context = undefined;
 			void built.close();
 		};
 	});
 
-	// what the graph has not played out yet: everything the element reports is
-	// this far ahead of the sound, and everything the room says is a position in
-	// the sound. Every crossing between the two domains pays it.
-	const latency = () => context?.outputLatency || 0;
+	// The whole distance between the element's clock and the ear: `baseLatency` is
+	// what the graph itself holds, `outputLatency` is destination to device, and
+	// the knob is the rest — a Bluetooth link, or a Safari that reports no
+	// `outputLatency` at all. Everything the element reports is this far ahead of
+	// the sound, everything the room says is a position in the sound, and every
+	// crossing between the two domains pays it.
+	const latency = () => {
+		const measured = context ? context.baseLatency + (context.outputLatency || 0) : 0;
+		// Mirrored out for the strip, which shows the whole latency rather than the
+		// knob alone. Guarded because this runs per position read: the number is a
+		// property of the output path and only moves when the device does.
+		const rounded = Math.round(measured * 1000);
+		if (rounded !== audio.measuredMs) audio.measuredMs = rounded;
+		return measured + audio.latencyMs / 1000;
+	};
 
 	function anchor() {
 		if (!element) return;
@@ -89,6 +108,14 @@
 		return () => clearInterval(timer);
 	});
 
+	// ponytail: no timer of its own — this rides the 10 Hz sampling above, and
+	// `preloadSong` dedupes, so re-running through the whole window costs a Set
+	// lookup. 20 s is the head start; widen it if a cold encode ever outlasts it.
+	$effect(() => {
+		if (current.lengthSeconds < 1) return;
+		if (current.lengthSeconds - audio.currentSeconds < 20) queue.preloadNext();
+	});
+
 	// The room's clock steers the rate to hold everyone together. `preservesPitch`
 	// off is deliberate: on, the browser time-stretches, and a phase vocoder is
 	// audibly grainy on transients. Off, it resamples — and the loop settles
@@ -132,6 +159,65 @@
 	// a src change needs no dependency here: the element pauses itself on load and
 	// `oncanplay` re-applies the intent to the new resource.
 	$effect(apply);
+
+	// A connection dropped mid-download (NS_BINDING_ERROR, a request that timed
+	// out) lands here as MEDIA_ERR_NETWORK, and the element then gives up for
+	// good: nothing re-requests a resource it has already failed. So re-request
+	// it, from where the sound stopped, and back off so a link that is genuinely
+	// dead stops trying instead of hammering.
+	let retries = 0;
+	let retryTimer: ReturnType<typeof setTimeout> | undefined;
+
+	$effect(() => {
+		void url; // every track gets its own budget
+		retries = 0;
+		return () => clearTimeout(retryTimer);
+	});
+
+	function recover() {
+		// A truncated download surfaces as MEDIA_ERR_NETWORK, or as MEDIA_ERR_DECODE
+		// when the bytes ran out mid-frame — so both are worth another go. The other
+		// two never are: ABORTED is us, SRC_NOT_SUPPORTED is a codec this browser
+		// will refuse just as flatly the second time. Out of retries, or not ours to
+		// fix: answer the barrier and sit the track out, as before.
+		const failure = element?.error;
+		const code = failure?.code;
+		const retryable = code === MediaError.MEDIA_ERR_NETWORK || code === MediaError.MEDIA_ERR_DECODE;
+		const retrying = !!element && retryable && retries < 4;
+
+		// `message` is where the useful half lives — it is what carries Firefox's
+		// NS_BINDING_ERROR and the rest of the platform's own wording; the code
+		// alone only says which of four buckets it fell into.
+		console.error(`audio ${retrying ? 'download failed, retrying' : 'gave up'}: ${current.name}`, {
+			code,
+			kind: ['', 'ABORTED', 'NETWORK', 'DECODE', 'SRC_NOT_SUPPORTED'][code ?? 0],
+			message: failure?.message,
+			src: element?.currentSrc || url,
+			networkState: element?.networkState,
+			readyState: element?.readyState,
+			seconds: element?.currentTime,
+			buffered: audio.bufferedSeconds,
+			of: current.lengthSeconds,
+			attempt: retries + 1
+		});
+
+		if (!retrying || !element) {
+			session.reportLoaded();
+			return;
+		}
+
+		const resumeAt = element.currentTime;
+		// ponytail: `load()` re-requests the whole resource and the HTTP cache is
+		// what makes the part already downloaded cheap. Swap in an explicit Range
+		// request if the server ever serves this uncacheable.
+		retryTimer = setTimeout(() => {
+			if (!element) return;
+			element.load();
+			// before metadata there is nothing to seek: this sets the default playback
+			// start position instead, and the element lands there once it loads.
+			element.currentTime = resumeAt;
+		}, 250 * 2 ** retries++);
+	}
 </script>
 
 <audio
@@ -167,11 +253,7 @@
 		audio.bufferedSeconds = current.lengthSeconds;
 		session.reportLoaded();
 	}}
-	onerror={() => {
-		// a track this client can never play must not hold the barrier shut for
-		// everybody else; answer it and sit the track out.
-		session.reportLoaded();
-	}}
+	onerror={recover}
 	onended={() => {
 		hold();
 		// in a room the server owns the advance: report once and wait for the

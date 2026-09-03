@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { Icon, PencilSquare } from 'svelte-hero-icons';
+	import { ArrowPath, Icon, PencilSquare } from 'svelte-hero-icons';
 	import session from '$states/session.svelte';
 	import audio from '$states/audio.svelte';
 
@@ -101,6 +101,39 @@
 			<span class="hidden font-mono text-[0.68rem] text-fog md:block" title={legend}
 				>[{stats}]</span
 			>
+			<span
+				class="hidden font-mono text-[0.68rem] text-fog md:block"
+				title="How far behind the clock this device's sound is, as the browser reports it. Output it cannot measure — a Bluetooth link, an AV receiver — is not in this number yet."
+			>
+				{audio.measuredMs + audio.latencyMs} ms out
+			</span>
+			<!-- The calibration knob, for when the reported number turns out not to
+			     cover the output path. `audio.latencyMs` is already in the sum above
+			     and in `latency()`; only a way to set it is missing.
+			<label class="hidden items-center gap-1 font-mono text-[0.68rem] text-fog md:flex">
+				<input
+					type="number"
+					step="10"
+					min="-1000"
+					max="1000"
+					value={audio.measuredMs + audio.latencyMs}
+					onchange={event => (audio.latencyMs = event.currentTarget.valueAsNumber - audio.measuredMs)}
+					aria-label="Output latency, milliseconds"
+					class="min-h-6 w-14 rounded-art border border-haze bg-dark-0 px-1 py-0.5 text-right text-chalk"
+				/>
+				<span aria-hidden="true">ms out</span>
+			</label>
+			-->
+
+			<button
+				type="button"
+				aria-label="Sync to the room now"
+				title="Sync to the room now"
+				class="rounded-art p-1 text-fog hover:text-chalk focus-visible:outline-2 focus-visible:outline-primary-200"
+				onclick={() => session.resync()}
+			>
+				<Icon src={ArrowPath} mini size="14" />
+			</button>
 		{/if}
 		<button
 			type="button"

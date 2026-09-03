@@ -22,7 +22,10 @@
 		},
 		{
 			icon: Forward,
-			onClick: () => queue.nextTrack()
+			onClick: () => queue.nextTrack(),
+			// the gap between reaching for skip and pressing it is enough to start
+			// the next encode in
+			onHover: () => queue.preloadNext()
 		}
 	])
 
@@ -48,6 +51,8 @@
 		<button
 			class="flex size-11 cursor-pointer items-center justify-center rounded-lg outline-surface-300 ring-0 duration-75 focus-visible:bg-surface-300 focus-visible:outline-5 sm:size-8"
 			onclick={button.onClick}
+			onmouseenter={button.onHover}
+			onfocus={button.onHover}
 		>
 			<Icon src={button.icon} color="white" mini size="24" />
 		</button>

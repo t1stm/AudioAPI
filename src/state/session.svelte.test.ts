@@ -1,13 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-	minSteeringSamples,
-	minSyncSpacingMs,
-	proportionalGain,
-	settledSyncSpacingMs,
-} from '$lib/syncClock';
+import { minSteeringSamples, minSyncSpacingMs, proportionalGain, settledSyncSpacingMs } from '$lib/syncClock';
 import type Session from './session.svelte';
 import type Queue from './queue.svelte';
 import type Audio from './audio.svelte';
+import type Current from './current.svelte';
 
 class FakeSocket {
 	static last: FakeSocket;
@@ -35,6 +31,7 @@ class FakeSocket {
 let session: typeof Session;
 let queue: typeof Queue;
 let audio: typeof Audio;
+let current: typeof Current;
 
 /** Any constant offset between the server's UTC clock and this client's
  *  `performance.now()`; the estimator has to derive it either way. */
@@ -54,7 +51,7 @@ const item = (over: Record<string, unknown> = {}) => ({
 	thumbnailUrl: null,
 	originalTitle: null,
 	originalArtist: null,
-	...over,
+	...over
 });
 
 beforeEach(async () => {
@@ -65,6 +62,7 @@ beforeEach(async () => {
 	session = (await import('./session.svelte')).default;
 	queue = (await import('./queue.svelte')).default;
 	audio = (await import('./audio.svelte')).default;
+	current = (await import('./current.svelte')).default;
 
 	session.connect('0f0f4e0c', 'Kris G');
 	FakeSocket.last.onopen?.();
@@ -78,9 +76,7 @@ afterEach(() => {
 
 describe('joining', () => {
 	it('names you in the query string, encoded', () => {
-		expect(FakeSocket.last.url).toBe(
-			'wss://api.gergov.bg/Audio/Multiplayer/Join?room=0f0f4e0c&username=Kris%20G',
-		);
+		expect(FakeSocket.last.url).toBe('wss://api.gergov.bg/Audio/Multiplayer/Join?room=0f0f4e0c&username=Kris%20G');
 	});
 
 	it('treats a close with zero frames as a room that does not exist', () => {
@@ -193,7 +189,7 @@ describe('the loading barrier', () => {
 		session.reportLoaded();
 		session.reportLoaded();
 
-		expect(FakeSocket.last.sent.filter(command => command === 'loaded')).toHaveLength(1);
+		expect(FakeSocket.last.sent.filter((command) => command === 'loaded')).toHaveLength(1);
 		expect(queue.currentIndex).toBe(1);
 		expect(audio.paused).toBe(true);
 		expect(session.status).toBe('holding');
@@ -207,7 +203,7 @@ describe('the loading barrier', () => {
 			expect(FakeSocket.last.sent).not.toContain('loaded');
 
 			vi.advanceTimersByTime(15_000);
-			expect(FakeSocket.last.sent.filter(command => command === 'loaded')).toHaveLength(1);
+			expect(FakeSocket.last.sent.filter((command) => command === 'loaded')).toHaveLength(1);
 		} finally {
 			vi.useRealTimers();
 		}
@@ -271,9 +267,9 @@ describe('queue frames', () => {
 				item({
 					id: 'audio://b',
 					originalTitle: 'Бизнесмен',
-					originalArtist: 'Тоника',
-				}),
-			])}`,
+					originalArtist: 'Тоника'
+				})
+			])}`
 		);
 
 		expect(queue.items[0].name).toBe('Unknown title');
@@ -289,7 +285,7 @@ describe('parsing', () => {
 
 		expect(session.chat.at(-1)).toMatchObject({
 			username: 'Alice',
-			text: 'hi %% there',
+			text: 'hi %% there'
 		});
 	});
 
@@ -299,6 +295,17 @@ describe('parsing', () => {
 
 		expect(session.name).toBe('Friday mix');
 		expect(session.description).toBe('late night');
+	});
+
+	it('takes the room title from the lobby feed, which is where a rename by somebody else lands', async () => {
+		const rooms = (await import('./rooms.svelte')).default;
+		rooms.list = [{ roomID: '0f0f4e0c', name: ' Kitchen', description: '' }];
+		expect(session.name).toBe('Kitchen');
+
+		// a never-renamed room carries its own GUID as its name — not a title
+		rooms.list = [{ roomID: '0f0f4e0c', name: '0f0f4e0c', description: '' }];
+		receive('room name  Friday mix');
+		expect(session.name).toBe('Friday mix');
 	});
 
 	it('builds the roster from system notices', () => {
@@ -322,13 +329,13 @@ describe('the shared clock', () => {
 		receive(stamped ? `sync ${reported} ${serverEpoch + sentAt + rttMs / 2}` : `sync ${reported}`);
 	}
 
-	const syncs = () => FakeSocket.last.sent.filter(command => command === 'sync').length;
+	const syncs = () => FakeSocket.last.sent.filter((command) => command === 'sync').length;
 
 	beforeEach(() => {
 		// the loop is timed off `performance.now()`, so that has to move with the
 		// timers or every trip reads as one enormous round trip
 		vi.useFakeTimers({
-			toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'],
+			toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance']
 		});
 		session.connect('0f0f4e0c', 'Kris G');
 		FakeSocket.last.onopen?.();
@@ -345,20 +352,20 @@ describe('the shared clock', () => {
 
 	it('keeps one sync in flight, since the replies carry no id', () => {
 		vi.advanceTimersByTime(minSyncSpacingMs * 4);
-		expect(FakeSocket.last.sent.filter(command => command === 'sync')).toHaveLength(1);
+		expect(FakeSocket.last.sent.filter((command) => command === 'sync')).toHaveLength(1);
 
 		receive('sync 0');
 		vi.advanceTimersByTime(minSyncSpacingMs);
-		expect(FakeSocket.last.sent.filter(command => command === 'sync')).toHaveLength(2);
+		expect(FakeSocket.last.sent.filter((command) => command === 'sync')).toHaveLength(2);
 	});
 
 	it('does not wedge shut when a reply never comes', () => {
 		vi.advanceTimersByTime(minSyncSpacingMs);
-		expect(FakeSocket.last.sent.filter(command => command === 'sync')).toHaveLength(1);
+		expect(FakeSocket.last.sent.filter((command) => command === 'sync')).toHaveLength(1);
 
 		// nothing answers it: the loop has to give up on that trip and ask again
 		vi.advanceTimersByTime(6_000);
-		expect(FakeSocket.last.sent.filter(command => command === 'sync').length).toBeGreaterThan(1);
+		expect(FakeSocket.last.sent.filter((command) => command === 'sync').length).toBeGreaterThan(1);
 	});
 
 	it('measures against the player now, not the last displayed sample', () => {
@@ -498,6 +505,25 @@ describe('the shared clock', () => {
 		expect(syncs()).toBeGreaterThan(before);
 	});
 
+	it('snaps back to the room when the strip asks for a resync', () => {
+		audio.currentSeconds = 10;
+		roundTrip(10.3);
+		// settled: a 200 ms gap is now steered off, not jumped
+		const settled = audio.currentSeconds;
+		for (let i = 0; i < minSteeringSamples; i++) roundTrip(settled + 0.1, 100);
+		expect(audio.currentSeconds).toBeCloseTo(settled);
+
+		// the button: the next reading is allowed its opening snap again
+		session.resync();
+		expect(audio.rate).toBe(1);
+		const before = audio.positionNow();
+		roundTrip(before + 0.2, 100);
+
+		// jumped the 200 ms plus the 50 ms the reply spent in flight
+		expect(audio.currentSeconds).toBeCloseTo(before + 0.25);
+		expect(audio.rate).toBe(1);
+	});
+
 	it('withholds a drift reading until the history can support one', () => {
 		roundTrip(0);
 		expect(session.driftPpm).toBeNull();
@@ -527,5 +553,20 @@ describe('queue verbs while connected', () => {
 
 		expect(FakeSocket.last.sent).toEqual(['remove 0', 'skipto 1', 'next', 'shuffle']);
 		expect(queue.items).toEqual(before);
+	});
+
+	it('hand the list back to this client on leaving, list intact', () => {
+		receive(`queue ${JSON.stringify([item(), item({ id: 'audio://b' })])}`);
+		receive('current 1');
+
+		session.disconnect();
+
+		expect(queue.items).toHaveLength(2);
+		expect(queue.currentIndex).toBe(1);
+		expect(current.name).toBe('Stone Cold Crazy');
+
+		// and the verbs are local again rather than commands to a room that is gone
+		queue.previousTrack();
+		expect(queue.currentIndex).toBe(0);
 	});
 });

@@ -3,7 +3,7 @@
 	import SearchRow from '$components/search/SearchRow.svelte';
 
 	const { data }: { data: PageData } = $props();
-	let activeTab = $state<'library' | 'youtube'>('library');
+	let activeTab = $state<'library' | 'youtube'>(data.localResults.length === 0 ? 'youtube' : 'library');
 	let activeResults = $derived(activeTab === 'library' ? data.localResults : data.youtubeResults);
 </script>
 

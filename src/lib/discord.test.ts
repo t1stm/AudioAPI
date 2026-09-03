@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SearchResult } from '$states/search.svelte';
 
-const thumb = (thumbnailUrl: string | null): SearchResult => ({
-	id: 'x',
+const thumb = (thumbnailUrl: string | null, id = 'x'): SearchResult => ({
+	id,
 	name: 'x',
 	artist: 'x',
 	contentUrl: '',
@@ -36,23 +36,19 @@ describe('discord activity detection', () => {
 		expect((await loadAt('https://music.gergov.bg/?frame_id=abc')).isDiscordActivity).toBe(true);
 	});
 
-	it('rewrites mapped hosts onto /.proxy and passes unmapped ones through', async () => {
+	it('routes every thumbnail through the API cover endpoint', async () => {
 		const { audioApi, proxyThumbnails } = await loadAt('https://1234.discordsays.com/');
 
 		expect(audioApi).toBe('/.proxy/api/Audio');
 
-		const [yt, api, cover, other, none] = proxyThumbnails([
-			thumb('https://i9.ytimg.com/vi/abc/hq.jpg?sqp=1'),
-			thumb('https://api.gergov.bg/Audio/Art?id=1'),
-			thumb('https://gergov.bg/Album_Covers/asdf.png'),
-			thumb('https://example.com/a.png'),
-			thumb(null)
+		const [yt, cover, none] = proxyThumbnails([
+			thumb('https://i9.ytimg.com/vi/abc/hq.jpg?sqp=1', 'yt://abc'),
+			thumb('https://gergov.bg/Album_Covers/asdf.png', 'audio://asdf'),
+			thumb(null, 'audio://bare')
 		]);
 
-		expect(yt.thumbnailUrl).toBe('/.proxy/ytimg/i9/vi/abc/hq.jpg?sqp=1');
-		expect(api.thumbnailUrl).toBe('/.proxy/api/Audio/Art?id=1');
-		expect(cover.thumbnailUrl).toBe('/.proxy/covers/asdf.png');
-		expect(other.thumbnailUrl).toBe('https://example.com/a.png');
+		expect(yt.thumbnailUrl).toBe('/.proxy/api/Audio/Cover?id=yt%3A%2F%2Fabc');
+		expect(cover.thumbnailUrl).toBe('/.proxy/api/Audio/Cover?id=audio%3A%2F%2Fasdf');
 		expect(none.thumbnailUrl).toBe(null);
 	});
 });
