@@ -4,7 +4,7 @@ Everything a frontend needs to drive `Gaida.API/Controllers/Multiplayer.cs` and 
 (`Multiplayer/MultiplayerManager.cs`, `Multiplayer/Room.cs`, `Multiplayer/User.cs`,
 `Multiplayer/Handlers/{UserStore,MessageQueue,VirtualPlayer}.cs`, `Controllers/Helpers/WebSocketTextReader.cs`).
 
-Base URL: same host as the rest of the API (production `https://api.gergov.bg`; websockets `wss://api.gergov.bg`).
+Base URL: same host as the rest of the API (for example, `https://api.example.com`; websockets `wss://api.example.com`).
 For the non-multiplayer endpoints (search, resolve, audio download) see `API.md` — this document does not repeat them.
 
 There is **no authentication** anywhere in this feature. Rooms live in process memory, are never deleted, and
@@ -291,7 +291,7 @@ The stamp is a plain integer. Parse defensively.
 7. **`current` can point past the end.** Guard `queue[current]` against `undefined`.
 8. **Keepalive is 5s** server-side; browsers answer ping frames automatically. Still implement reconnect-with-backoff
    on both sockets — reconnecting the Join socket produces a new identity and a fresh join notice.
-9. **CORS** allows `gergov.bg` and its subdomains plus `localhost`/`127.0.0.1`/`::1` on any port. Websocket
+9. **CORS** allows `example.com` and its subdomains plus `localhost`/`127.0.0.1`/`::1` on any port. Websocket
    upgrades are not subject to CORS, but `CreateRoom` is.
 
 ---
@@ -300,14 +300,14 @@ The stamp is a plain integer. Parse defensively.
 
 ```js
 // 1. lobby
-const lobby = new WebSocket("wss://api.gergov.bg/Audio/Multiplayer/Rooms");
+const lobby = new WebSocket("wss://api.example.com/Audio/Multiplayer/Rooms");
 lobby.onmessage = e => renderRooms(JSON.parse(e.data));   // full list, every time
 
 // 2. create
-const room = await (await fetch("https://api.gergov.bg/Audio/Multiplayer/CreateRoom", { method: "POST" })).json();
+const room = await (await fetch("https://api.example.com/Audio/Multiplayer/CreateRoom", { method: "POST" })).json();
 
 // 3. join
-const ws = new WebSocket(`wss://api.gergov.bg/Audio/Multiplayer/Join?room=${room.roomID}&username=${encodeURIComponent(name)}`);
+const ws = new WebSocket(`wss://api.example.com/Audio/Multiplayer/Join?room=${room.roomID}&username=${encodeURIComponent(name)}`);
 ws.onmessage = e => {
   const raw = e.data, sp = raw.indexOf(" ");
   const cmd = sp === -1 ? raw : raw.slice(0, sp), arg = sp === -1 ? "" : raw.slice(sp + 1);
