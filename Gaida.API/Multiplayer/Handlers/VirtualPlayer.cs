@@ -12,7 +12,7 @@ public class VirtualPlayer(MessageQueue messageQueue)
     ///     across the broadcast so state changes and the frames announcing them leave in the same order. Each
     ///     socket runs its own read loop, so without this the clock is mutated by as many threads as there are
     ///     listeners: <c>StartTime</c> could go null between a <c>HasValue</c> check and the <c>.Value</c> that
-    ///     followed it, and <c>LoadedCount++</c> could lose an increment and strand the loading barrier.
+    ///     followed it, and <c>Loaded</c> could lose a vote and strand the loading barrier.
     /// </summary>
     /// <remarks>
     ///     ponytail: one lock for the whole room. Public methods take it, <c>*Core</c> helpers assume it is
@@ -24,11 +24,19 @@ public class VirtualPlayer(MessageQueue messageQueue)
 
     protected int CurrentIndex;
 
-    /// <summary>How many users reported the current item as played out.</summary>
-    protected int FinishedCount;
+    /// <summary>Who reported the current item as played out.</summary>
+    protected readonly HashSet<string> Finished = [];
 
-    /// <summary>How many users reported the current item as buffered.</summary>
-    protected int LoadedCount;
+    /// <summary>Who reported the current item as buffered.</summary>
+    protected readonly HashSet<string> Loaded = [];
+
+    /// <summary>
+    ///     Whether the room is still waiting on everyone to buffer the current track. Only an armed
+    ///     barrier may release the clock: a client answers the <c>current</c> frame it gets on the way
+    ///     in, and the room does not arm a barrier for a join. That vote used to stand, and the next
+    ///     departure made the tally add up — rewinding a mid-track room to zero for everyone left.
+    /// </summary>
+    protected bool Loading = true;
 
     protected TimeSpan? PauseTime;
     protected bool Playing = true;
@@ -131,13 +139,13 @@ public class VirtualPlayer(MessageQueue messageQueue)
         }
     }
 
-    public async Task SetFinished()
+    public async Task SetFinished(string id)
     {
         await Sync.WaitAsync();
 
         try
         {
-            FinishedCount++;
+            Finished.Add(id);
             await HandleFinishedCore();
         }
         finally
@@ -146,19 +154,6 @@ public class VirtualPlayer(MessageQueue messageQueue)
         }
     }
 
-    public async Task HandleFinished()
-    {
-        await Sync.WaitAsync();
-
-        try
-        {
-            await HandleFinishedCore();
-        }
-        finally
-        {
-            Sync.Release();
-        }
-    }
 
     public async Task Shuffle()
     {
@@ -306,13 +301,13 @@ public class VirtualPlayer(MessageQueue messageQueue)
         }
     }
 
-    public async Task SetLoaded()
+    public async Task SetLoaded(string id)
     {
         await Sync.WaitAsync();
 
         try
         {
-            LoadedCount++;
+            Loaded.Add(id);
             await HandleLoadedCore();
         }
         finally
@@ -321,13 +316,23 @@ public class VirtualPlayer(MessageQueue messageQueue)
         }
     }
 
-    public async Task HandleLoaded()
+    /// <summary>
+    ///     A member is gone. Both barriers count against the live member list, so a departure moves
+    ///     the target and has to be re-checked or the room never advances past this track again. Their
+    ///     own votes go with them: a tally that keeps counting someone who has left is a barrier that
+    ///     releases for a room that never all agreed.
+    /// </summary>
+    public async Task UserLeft(string id)
     {
         await Sync.WaitAsync();
 
         try
         {
+            Loaded.Remove(id);
+            Finished.Remove(id);
+
             await HandleLoadedCore();
+            await HandleFinishedCore();
         }
         finally
         {
@@ -390,9 +395,9 @@ public class VirtualPlayer(MessageQueue messageQueue)
         // An empty room has nobody to wait for and nobody to tell. Without the
         // count check `0 < 0` reads as "everybody reported", so the last user
         // leaving advances the room a track on their way out.
-        if (count == 0 || FinishedCount < count) return;
+        if (count == 0 || Finished.Count < count) return;
 
-        FinishedCount = 0;
+        Finished.Clear();
         await NextCore();
     }
 
@@ -404,9 +409,10 @@ public class VirtualPlayer(MessageQueue messageQueue)
         // that the next person to join then walks into mid-track. An empty queue
         // is the same mistake in the other direction: starting the clock with
         // nothing to play leaves it running until something is added.
-        if (count == 0 || Items.Count == 0 || LoadedCount < count) return;
+        if (!Loading || count == 0 || Items.Count == 0 || Loaded.Count < count) return;
 
-        LoadedCount = 0;
+        Loading = false;
+        Loaded.Clear();
         StartTime = Stopwatch.GetTimestamp();
 
         await Broadcast($"seek {0d} {Stamp()}");
@@ -426,7 +432,9 @@ public class VirtualPlayer(MessageQueue messageQueue)
 
     protected void UpdateStart()
     {
-        LoadedCount = 0;
+        Loading = true;
+        Loaded.Clear();
+        Finished.Clear();
         StartTime = null;
         PauseTime = null;
     }

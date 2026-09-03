@@ -44,23 +44,33 @@ public class ManagerService
     ///     await the winner's task instead of spawning a second ffmpeg into the same stream spreader.
     /// </summary>
     /// <param name="start">Feeds the encoder its source. Returns <c>false</c> when the encode could not be started.</param>
-    public Task<FFmpegEncoder?> GetOrStartEncoderAsync(string key, Func<FFmpegEncoder, Task<bool>> start)
+    /// <param name="started">
+    ///     <c>true</c> for the single caller whose call actually started the encode; every racer that found the key
+    ///     already there gets <c>false</c>. Preload answers 202 or 200 off this.
+    /// </param>
+    public Task<FFmpegEncoder?> GetOrStartEncoderAsync(string key, Func<FFmpegEncoder, Task<bool>> start,
+        out bool started)
     {
-        // The factory only builds the Lazy, so a losing racer's copy is discarded before it ever runs ffmpeg.
-        var lazy = CachedEncoders.GetOrAdd(key, cacheKey => new Lazy<Task<FFmpegEncoder?>>(async () =>
+        // Built before the add so that the add is the only race: GetOrAdd's factory overload may run for more
+        // than one caller, and then two of them would each believe they started the encode. A Lazy that loses
+        // is discarded before it ever runs ffmpeg.
+        var lazy = new Lazy<Task<FFmpegEncoder?>>(async () =>
         {
             var encoder = new FFmpegEncoder();
             if (await start(encoder)) return encoder;
 
             // A failed start must not stay cached, or every later request inherits the failure.
-            CachedEncoders.TryRemove(cacheKey, out _);
-            ExpireTimes.TryRemove(cacheKey, out _);
+            CachedEncoders.TryRemove(key, out _);
+            ExpireTimes.TryRemove(key, out _);
             encoder.Cleanup();
             return null;
-        }, LazyThreadSafetyMode.ExecutionAndPublication));
+        }, LazyThreadSafetyMode.ExecutionAndPublication);
+
+        var cached = CachedEncoders.GetOrAdd(key, lazy);
+        started = ReferenceEquals(cached, lazy);
 
         ExpireIn(key, EncoderLifetime);
-        return lazy.Value;
+        return cached.Value;
     }
 
     /// <summary>The encode already running or finished for <paramref name="key" />, refreshing its expiry.</summary>

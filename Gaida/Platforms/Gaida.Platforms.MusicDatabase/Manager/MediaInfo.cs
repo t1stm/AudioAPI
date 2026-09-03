@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Text.Json;
-using Gaida.Core.Utils;
 
 namespace Gaida.Platforms.MusicDatabase.Manager;
 
@@ -22,8 +21,9 @@ public static class MediaInfo
         });
 
         if (process == null) return musicInfo;
-        await process.WaitForExitAsync();
 
+        // Drain the pipe before waiting on the process, never after: a 64KB buffer against ffprobe's 80KB
+        // of output (one .mp3 here carries a 65KB TRAKTOR4 tag) deadlocks the child on write and this on exit.
         JsonDocument json;
         try
         {
@@ -32,6 +32,10 @@ public static class MediaInfo
         catch (JsonException)
         {
             return musicInfo;
+        }
+        finally
+        {
+            await process.WaitForExitAsync();
         }
 
         if (!json.RootElement.TryGetProperty("format", out var format)) return musicInfo;
@@ -42,17 +46,24 @@ public static class MediaInfo
 
         if (!format.TryGetProperty("tags", out var tags)) return musicInfo;
 
-        if (tags.TryGetProperty("title", out var title))
-        {
-            musicInfo.OriginalTitle = title.GetString();
-            musicInfo.RomanizedTitle = Romanize.FromCyrillic(musicInfo.OriginalTitle);
-        }
-
-        if (!tags.TryGetProperty("artist", out var artist)) return musicInfo;
-
-        musicInfo.OriginalAuthor = artist.GetString();
-        musicInfo.RomanizedAuthor = Romanize.FromCyrillic(musicInfo.OriginalAuthor ?? "");
+        musicInfo.Titles = MusicInfo.Variants(Tag(tags, "TITLE"));
+        musicInfo.Artists = MusicInfo.Variants(Tag(tags, "ARTISTS"), Tag(tags, "ARTIST"));
 
         return musicInfo;
+    }
+
+    /// <summary>
+    ///     ffprobe lowercases ID3v2 keys and passes Vorbis comments and APEv2 through verbatim, so the same
+    ///     tag arrives as <c>artist</c> from an .mp3 and <c>ARTIST</c> from a .wv. Matching case-sensitively
+    ///     read the tags of one file in six.
+    /// </summary>
+    private static string? Tag(JsonElement tags, params string[] names)
+    {
+        foreach (var name in names)
+        foreach (var tag in tags.EnumerateObject())
+            if (string.Equals(tag.Name, name, StringComparison.OrdinalIgnoreCase))
+                return tag.Value.GetString();
+
+        return null;
     }
 }

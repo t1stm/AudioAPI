@@ -1,4 +1,7 @@
+using System.Globalization;
 using Gaida.API.Contracts;
+using Gaida.Platforms.MusicDatabase;
+using Gaida.Platforms.MusicDatabase.Manager;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Gaida.API.Controllers;
@@ -43,6 +46,48 @@ public class Query(ILogger<Query> logger, IConfiguration configuration, IHostEnv
         }
     }
 
+    /// <summary>
+    ///     Searches the local library only: the client sends the title rather than an ID, so this touches
+    ///     nothing but the in-memory song list and can run after every roll.
+    /// </summary>
+    [HttpGet]
+    [Route("/Audio/Local/Variant")]
+    [Produces("application/json")]
+    [ProducesResponseType<LocalVariantDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ApiErrorBody>(StatusCodes.Status400BadRequest)]
+    public ActionResult<LocalVariantDto> LocalVariant(string? name, string? artist, string? duration,
+        [FromServices] ManagerService managerService)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return BadRequest(Error("invalid_query", "A track name is required."));
+
+        var length = TimeSpan.Zero;
+        if (!string.IsNullOrWhiteSpace(duration) &&
+            !TimeSpan.TryParse(duration, CultureInfo.InvariantCulture, out length))
+            return BadRequest(Error("invalid_query", "The duration must look like 00:04:32."));
+
+        var found = managerService.Manager.GetPlatform<MusicDatabase>().FindLocalVariant(name, artist, length);
+        if (found is null) return NoContent();
+
+        var (match, result) = found.Value;
+        var mapped = DiscoveryResultMapper.Map(result, Request, configuration, environment);
+        if (mapped is null) return NoContent();
+
+        return Ok(new LocalVariantDto(
+            match.Kind switch
+            {
+                LocalMatchKind.Same => "same",
+                LocalMatchKind.Variant => "variant",
+                _ => "weak"
+            },
+            Math.Round(match.Score, 3),
+            (int)Math.Round(match.DurationDelta.TotalSeconds),
+            match.YouTubeTags,
+            match.LibraryTags,
+            mapped));
+    }
+
     private async Task<ActionResult<QueryResolutionDto>> ResolveOne(string kind, string id, ManagerService managerService)
     {
         var result = await managerService.Manager.SearchID(id, HttpContext.RequestAborted);
@@ -57,8 +102,7 @@ public class Query(ILogger<Query> logger, IConfiguration configuration, IHostEnv
     private async Task<ActionResult<QueryResolutionDto>> ResolvePlaylist(ParsedQuery parsed, ManagerService managerService)
     {
         var results = new List<SearchResultDto>();
-        await foreach (var result in managerService.Manager.SearchPlaylist(parsed.Query, HttpContext.RequestAborted)
-                           .WithCancellation(HttpContext.RequestAborted))
+        await foreach (var result in managerService.Manager.SearchPlaylist(parsed.Query, HttpContext.RequestAborted))
         {
             var mapped = DiscoveryResultMapper.Map(result, Request, configuration, environment);
             if (mapped is not null) results.Add(mapped);

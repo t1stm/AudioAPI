@@ -37,6 +37,18 @@ public class Room
 
     [JsonIgnore] public Action? OnInfoModified { get; init; }
 
+    /// <summary>
+    ///     Raised once the last member is gone, so an abandoned room does not sit in the list — and
+    ///     hold its queue and its clock — for the life of the process.
+    /// </summary>
+    /// <remarks>
+    ///     ponytail: fires the moment the room empties, so a solo member whose connection blips
+    ///     loses the room rather than reconnecting into it. Give the room a retain window and this
+    ///     becomes "empty since when": stamp the time here and let the manager sweep the rooms that
+    ///     have been empty longer than they are allowed to be.
+    /// </remarks>
+    [JsonIgnore] public Action? OnEmptied { get; init; }
+
     public ValueTask<User> GetOrAddUser(string id, WebSocket webSocket, string? initialUsername)
     {
         // the join callback closes over the username, so building it on every message — which
@@ -59,8 +71,10 @@ public class Room
 
         await Store.RemoveUser(id);
         await Queue.Send($"chat System %% User '{user.ChatUsername}' left from the session.");
-        await Player.HandleLoaded();
-        await Player.HandleFinished();
+        await Player.UserLeft(id);
+
+        // last one out: announced to the room first, because after this the room is gone
+        if (Store.Count == 0) OnEmptied?.Invoke();
     }
 
     public Task HandleUserMessage(User user, string message)
@@ -156,7 +170,7 @@ public class Room
         switch (name.Span)
         {
             case "end":
-                return Player.SetFinished();
+                return Player.SetFinished(user.ID);
 
             case "next":
                 return Player.Next();
@@ -174,7 +188,7 @@ public class Room
                 return Player.Shuffle();
 
             case "loaded":
-                return Player.SetLoaded();
+                return Player.SetLoaded(user.ID);
 
             case "sync":
                 return SyncTo(user);

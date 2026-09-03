@@ -20,4 +20,8 @@
     <ProjectReference Include="..\Gaida\Platforms\Gaida.Platforms.MusicDatabase\Gaida.Platforms.MusicDatabase.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <_ContentIncludedByDefault Remove="cache\YouTube.json" />
+  </ItemGroup>
+
 </Project>

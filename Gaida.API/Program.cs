@@ -15,7 +15,7 @@ Log.Logger = new LoggerConfiguration()
 var builder = WebApplication.CreateBuilder(args);
 
 // The platform layer reads these as process environment variables; configuration supplies the defaults.
-foreach (var key in (string[]) ["DOMAIN", "STORAGE", "ALBUM_COVERS"])
+foreach (var key in (string[]) ["DOMAIN", "STORAGE", "ALBUM_COVERS", "YOUTUBE_CACHE_DB"])
     Environment.SetEnvironmentVariable(key, builder.Configuration[key]);
 
 builder.Services.AddControllers();

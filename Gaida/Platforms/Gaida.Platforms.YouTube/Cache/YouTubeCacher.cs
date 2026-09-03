@@ -10,10 +10,10 @@ public class YouTubeCacher(ILogger logger)
     
     private const string CacheFolder = "./cache";
     private const string FileName = "YouTube.json";
-    private const string CachePath = $"{CacheFolder}/{FileName}";
+    private static readonly string CachePath =
+        Environment.GetEnvironmentVariable("YOUTUBE_CACHE_DB", EnvironmentVariableTarget.Process) ??
+        $"{CacheFolder}/{FileName}";
     protected readonly Dictionary<string, YouTubeResult> Cache = new();
-    private readonly byte[] _commaBytes = ","u8.ToArray();
-    private readonly byte[] _endBytes = "]"u8.ToArray();
 
     protected readonly JsonSerializerOptions JsonSerializerOptions = new()
     {
@@ -21,35 +21,23 @@ public class YouTubeCacher(ILogger logger)
         WriteIndented = true
     };
 
-    private readonly byte[] _startBytes = "["u8.ToArray();
     protected readonly SemaphoreSlim Sync = new(1, 1);
 
-    protected async Task SaveAsync(IEnumerable<YouTubeResult>? delta = null)
+    // ponytail: writes a full snapshot to a temp file and renames it into place, so a crash mid-write
+    // never leaves a half-written cache. The old in-place truncate+append trick was faster but could
+    // corrupt the file if the process died between the truncate and the write (root cause of a real incident).
+    protected async Task SaveAsync()
     {
         await Sync.WaitAsync();
         Logger.Debug("Saving YouTube cache to: {CachePath}", CachePath);
-        Directory.CreateDirectory(CacheFolder);
+        Directory.CreateDirectory(Path.GetDirectoryName(CachePath)!);
 
         try
         {
-            var fileInfo = new FileInfo(CachePath);
-            if (delta is not null && fileInfo is { Exists: true, Length: > 32 })
-            {
-                await using var file = File.Open(CachePath, FileMode.Open);
-                file.SetLength(file.Length - _endBytes.Length);
-                file.Seek(0, SeekOrigin.End);
-                await file.WriteAsync(_commaBytes);
-
-                var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(delta, JsonSerializerOptions);
-                await file.WriteAsync(jsonBytes.AsMemory()[_startBytes.Length..]);
-                await file.FlushAsync();
-            }
-            else
-            {
-                await using var file = File.Open(CachePath, FileMode.Create);
+            var tempPath = $"{CachePath}.tmp";
+            await using (var file = File.Create(tempPath))
                 await JsonSerializer.SerializeAsync(file, Cache.Values, JsonSerializerOptions);
-                await file.FlushAsync();
-            }
+            File.Move(tempPath, CachePath, true);
         }
         catch (Exception e)
         {
@@ -111,7 +99,21 @@ public class YouTubeCacher(ILogger logger)
         Sync.Release();
 
         if (youtubeResults.Length > 0)
-            await SaveAsync(youtubeResults);
+            await SaveAsync();
+    }
+
+    /// <returns>Up to <paramref name="count" /> distinct cached results, fewer when the cache holds fewer.</returns>
+    public async Task<YouTubeResult[]> GetRandomAsync(int count)
+    {
+        if (count < 1) return [];
+
+        await Sync.WaitAsync();
+        // ponytail: copies the whole cache per call; fine for a few thousand entries, reservoir sample if it grows.
+        var results = Cache.Values.ToArray();
+        Sync.Release();
+
+        Random.Shared.Shuffle(results);
+        return results.Length <= count ? results : results[..count];
     }
 
     /// <returns>The cached result, or <c>null</c> when the ID isn't cached.</returns>

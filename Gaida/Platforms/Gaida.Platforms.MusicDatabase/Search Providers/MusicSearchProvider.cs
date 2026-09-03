@@ -36,6 +36,12 @@ public class MusicSearchProvider(ILogger logger) : SearchProvider(logger),
         return ToResults(MusicManager.GetArtistSongs(artist));
     }
 
+    public (LocalMatch Match, PlatformResult Result)? FindLocalVariant(string name, string? artist, TimeSpan duration)
+    {
+        var match = MusicManager.FindLocalVariant(name, artist, duration);
+        return match is null ? null : (match, match.Song.ToMusicResult(ContentDownloaders));
+    }
+
     protected override void Initialize()
     {
         Logger.Debug("Initializing MusicSearchProvider");

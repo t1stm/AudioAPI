@@ -24,10 +24,8 @@ public class MusicManagerTests
         var song = new MusicInfo
         {
             ID = "romanized",
-            OriginalTitle = "Притури се планината",
-            RomanizedTitle = "Prituri se planinata",
-            OriginalAuthor = "Стефка Съботинова",
-            RomanizedAuthor = "Stefka Sabotinova"
+            Titles = ["Притури се планината", "Prituri se planinata"],
+            Artists = ["Стефка Съботинова", "Stefka Sabotinova"]
         };
         var manager = new TestMusicManager(song);
 
@@ -36,15 +34,37 @@ public class MusicManagerTests
         Assert.Equal([song], results);
     }
 
+    [Theory]
+    [InlineData("Sayuki")]
+    [InlineData("Maki")]
+    [InlineData("Maki & Sayuki")]
+    public void SearchByTermFindsEitherHalfOfACompoundArtist(string term)
+    {
+        var song = Song("wings", "Wings of Fire", "Maki & Sayuki");
+        var manager = new TestMusicManager(song, Song("other", "One More Time", "Daft Punk"));
+
+        Assert.Equal([song], manager.SearchByTerm(term).ToList());
+    }
+
+    [Fact]
+    public void SearchByTermReachesEveryVariantOfTheName()
+    {
+        // The tag said "Mako", the folder said "Maki". Both are in the array, both are searchable, and
+        // nothing had to decide which one was the typo.
+        var song = new MusicInfo { ID = "wings", Titles = ["Wings of Fire"], Artists = ["Mako & Sayuki", "Maki & Sayuki"] };
+        var manager = new TestMusicManager(song);
+
+        Assert.Equal([song], manager.SearchByTerm("Maki").ToList());
+        Assert.Equal([song], manager.SearchByTerm("Mako").ToList());
+    }
+
     private static MusicInfo Song(string id, string title, string artist)
     {
         return new MusicInfo
         {
             ID = id,
-            OriginalTitle = title,
-            RomanizedTitle = title,
-            OriginalAuthor = artist,
-            RomanizedAuthor = artist
+            Titles = [title],
+            Artists = [artist]
         };
     }
 

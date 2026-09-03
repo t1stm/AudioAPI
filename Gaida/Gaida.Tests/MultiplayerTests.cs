@@ -39,6 +39,50 @@ public class MultiplayerManagerTests
     }
 
     [Fact]
+    public async Task TheLastMemberLeavingTakesTheRoomWithThem()
+    {
+        var manager = new MultiplayerManager(TestObjects.ManagerService());
+        var roomId = await manager.CreateNewRoom();
+        var room = Assert.IsType<Room>(manager.GetRoom(roomId));
+        var changeCount = 0;
+        manager.RoomsChanged += () =>
+        {
+            changeCount++;
+            return Task.CompletedTask;
+        };
+
+        await room.GetOrAddUser("one", new RecordingWebSocket(), "One");
+        await room.GetOrAddUser("two", new RecordingWebSocket(), "Two");
+
+        await room.RemoveUser("one");
+        Assert.Same(room, manager.GetRoom(roomId));
+        Assert.Equal(0, changeCount);
+
+        await room.RemoveUser("two");
+        Assert.Null(manager.GetRoom(roomId));
+        Assert.Empty(manager.GetRooms());
+        Assert.Equal(1, changeCount);
+
+        // the room is already gone; a second departure must not announce it again
+        await room.RemoveUser("two");
+        Assert.Equal(1, changeCount);
+    }
+
+    [Fact]
+    public async Task ARoomNobodyEverJoinedStays()
+    {
+        var manager = new MultiplayerManager(TestObjects.ManagerService());
+        var roomId = await manager.CreateNewRoom();
+        var room = Assert.IsType<Room>(manager.GetRoom(roomId));
+
+        // a socket can close before it ever joins: there is no member to lose, so
+        // this must not read as the room emptying out
+        await room.RemoveUser("never here");
+
+        Assert.Same(room, manager.GetRoom(roomId));
+    }
+
+    [Fact]
     public async Task UpdatingRoomInfoRaisesManagerChangeEvent()
     {
         var manager = new MultiplayerManager(TestObjects.ManagerService());
@@ -201,7 +245,7 @@ public class VirtualPlayerTests
         await store.GetOrAddUser("only", socket);
 
         // joining an empty room answers a `current` frame with nothing to load
-        await player.SetLoaded();
+        await player.SetLoaded("only");
 
         Assert.Equal(0, await player.GetCurrentTime());
         Assert.DoesNotContain("playing True", socket.Messages);
@@ -213,7 +257,7 @@ public class VirtualPlayerTests
         var (player, store) = TestObjects.Player();
         var socket = new RecordingWebSocket();
         await store.GetOrAddUser("only", socket);
-        await player.SetLoaded();
+        await player.SetLoaded("only");
         socket.ClearMessages();
 
         await player.Enqueue(TestObjects.Result("audio://one"));
@@ -224,7 +268,7 @@ public class VirtualPlayerTests
         Assert.Contains("current 0", socket.Messages);
         Assert.Contains("playing False", socket.Messages);
 
-        await player.SetLoaded();
+        await player.SetLoaded("only");
         Assert.Contains("seek 0", TestObjects.Unstamped(socket.Messages));
         Assert.Contains("playing True", socket.Messages);
     }
@@ -236,7 +280,7 @@ public class VirtualPlayerTests
         var socket = new RecordingWebSocket();
         await store.GetOrAddUser("only", socket);
         await player.Enqueue(TestObjects.Result("audio://one"));
-        await player.SetLoaded();
+        await player.SetLoaded("only");
         socket.ClearMessages();
 
         await player.Enqueue(TestObjects.Result("audio://two"));
@@ -258,8 +302,7 @@ public class VirtualPlayerTests
         // count of zero, `0 < 0` used to read as "everybody reported", so the
         // room rewound itself, force-played, and advanced a track on the way out
         await store.RemoveUser("only");
-        await player.HandleLoaded();
-        await player.HandleFinished();
+        await player.UserLeft("only");
 
         var joiner = new RecordingWebSocket();
         await store.GetOrAddUser("next", joiner, player.Joined);
@@ -268,6 +311,50 @@ public class VirtualPlayerTests
         Assert.DoesNotContain("current 2", joiner.Messages);
         Assert.Contains("playing False", joiner.Messages);
         Assert.DoesNotContain("playing True", joiner.Messages);
+    }
+
+    [Fact]
+    public async Task ADepartureNeverRewindsARoomThatIsAlreadyPlaying()
+    {
+        var (player, store) = TestObjects.Player();
+        var staying = new RecordingWebSocket();
+        await store.GetOrAddUser("staying", staying);
+        await player.Enqueue(TestObjects.Result("audio://one"));
+        await player.SetLoaded("staying");
+
+        // Somebody joins mid-track and answers the `current` frame `Joined` replayed at
+        // them. No barrier is armed for a join, so that vote must not be kept.
+        await store.GetOrAddUser("leaving", new RecordingWebSocket());
+        await player.SetLoaded("leaving");
+        staying.ClearMessages();
+
+        // ...because when they drop, one vote against one remaining member used to add
+        // up, and the room rewound to zero and force-played under everybody left in it.
+        await store.RemoveUser("leaving");
+        await player.UserLeft("leaving");
+
+        Assert.Empty(staying.Messages);
+        Assert.True(await player.GetCurrentTime() > 0);
+    }
+
+    [Fact]
+    public async Task ADepartedUsersVoteLeavesWithThem()
+    {
+        var (player, store) = TestObjects.Player();
+        var staying = new RecordingWebSocket();
+        await store.GetOrAddUser("staying", staying);
+        await store.GetOrAddUser("leaving", new RecordingWebSocket());
+        player.Items.AddRange([TestObjects.Result("audio://one"), TestObjects.Result("audio://two")]);
+        await player.Next();
+        staying.ClearMessages();
+
+        // one of the two played the track out; the other is still on it
+        await player.SetFinished("leaving");
+        await store.RemoveUser("leaving");
+        await player.UserLeft("leaving");
+
+        // their `end` used to stay on the tally and skip the track under the one left
+        Assert.DoesNotContain("current 2", staying.Messages);
     }
 
     [Fact]
@@ -280,19 +367,23 @@ public class VirtualPlayerTests
         await store.GetOrAddUser("two", secondSocket);
         player.Items.AddRange([TestObjects.Result("audio://one"), TestObjects.Result("audio://two")]);
 
-        await player.SetLoaded();
+        await player.SetLoaded("one");
         Assert.Empty(firstSocket.Messages);
         Assert.Empty(secondSocket.Messages);
 
-        await player.SetLoaded();
+        // the same member reporting twice is not a quorum
+        await player.SetLoaded("one");
+        Assert.Empty(firstSocket.Messages);
+
+        await player.SetLoaded("two");
         Assert.Equal(["seek 0", "playing True"], TestObjects.Unstamped(firstSocket.Messages));
         Assert.Equal(["seek 0", "playing True"], TestObjects.Unstamped(secondSocket.Messages));
         firstSocket.ClearMessages();
         secondSocket.ClearMessages();
 
-        await player.SetFinished();
+        await player.SetFinished("one");
         Assert.Empty(firstSocket.Messages);
-        await player.SetFinished();
+        await player.SetFinished("two");
 
         Assert.Equal(["playing False", "current 1"], firstSocket.Messages);
         Assert.Equal(firstSocket.Messages, secondSocket.Messages);
@@ -371,7 +462,8 @@ public class VirtualPlayerTests
         player.Items.Add(TestObjects.Result("audio://one"));
 
         // Everybody reports `loaded` at once: lose one increment and the barrier never releases.
-        await Task.WhenAll(Enumerable.Range(0, users).Select(_ => Task.Run(() => player.SetLoaded())));
+        await Task.WhenAll(Enumerable.Range(0, users)
+            .Select(index => Task.Run(() => player.SetLoaded($"listener:{index}"))));
         Assert.Contains("seek 0", TestObjects.Unstamped(sockets[0].Messages));
 
         // The clock is running now, so the readers race every path that nulls StartTime.
@@ -385,7 +477,7 @@ public class VirtualPlayerTests
             hammer.Add(Task.Run(() => player.TogglePlaying()));
             hammer.Add(Task.Run(() => player.SyncTo(first)));
             hammer.Add(Task.Run(() => player.GetCurrentTime()));
-            hammer.Add(Task.Run(() => player.SetLoaded()));
+            hammer.Add(Task.Run(() => player.SetLoaded("listener:0")));
         }
 
         await Task.WhenAll(hammer).WaitAsync(TimeSpan.FromSeconds(30));

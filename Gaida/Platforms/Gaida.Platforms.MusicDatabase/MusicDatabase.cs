@@ -1,6 +1,7 @@
 using Gaida.Core.Platforms;
 using Gaida.Core.Platforms.Optional.Supports;
 using Gaida.Platforms.MusicDatabase.Getters;
+using Gaida.Platforms.MusicDatabase.Manager;
 using Gaida.Platforms.MusicDatabase.Search_Providers;
 using Serilog;
 
@@ -39,5 +40,11 @@ public class MusicDatabase : Platform, ISupportsSearch, ISupportsRandomResults
     public IAsyncEnumerable<PlatformResult> GetArtistSongs(string artist)
     {
         return _provider.GetArtistSongs(artist);
+    }
+
+    /// <returns>The library's answer to a YouTube title, or <c>null</c> when it has none worth offering.</returns>
+    public (LocalMatch Match, PlatformResult Result)? FindLocalVariant(string name, string? artist, TimeSpan duration)
+    {
+        return _provider.FindLocalVariant(name, artist, duration);
     }
 }

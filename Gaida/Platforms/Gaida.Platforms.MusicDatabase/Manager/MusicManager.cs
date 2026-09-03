@@ -93,8 +93,15 @@ public partial class MusicManager(ILogger logger)
                                             !IsAudioBasedOnFileExtension(m.RelativeLocation));
         if (stale > 0) Logger.Information("Dropped {Count} non-audio entries for '{Artist}'", stale, artist);
 
+        // The four-field format took its names from the path, because the tags were read case-sensitively
+        // and only .mp3 arrives lowercased. NewFiles never revisits an indexed song, so the re-read has to
+        // happen here or those names stay path-derived forever.
+        var legacy = existing.Where(entry => entry.WasLegacy).ToList();
+        foreach (var entry in legacy) await RereadTags(entry);
+        if (legacy.Count > 0) Logger.Information("Re-read tags for {Count} entries of '{Artist}'", legacy.Count, artist);
+
         var newFiles = NewFiles(existing, songs).ToList();
-        if (stale == 0 && newFiles.Count == 0) return existing;
+        if (stale == 0 && newFiles.Count == 0 && legacy.Count == 0) return existing;
 
         foreach (var file in newFiles)
             existing.Add(await ParseFile(file));
@@ -104,6 +111,20 @@ public partial class MusicManager(ILogger logger)
         await JsonSerializer.SerializeAsync(fileStream, existing, MusicInfo.SerializerOptions);
 
         return existing;
+    }
+
+    private static async Task RereadTags(MusicInfo entry)
+    {
+        var path = StorageDirectory + "/" + entry.RelativeLocation;
+        if (!File.Exists(path)) return;
+
+        var tagged = await MediaInfo.GetInformation(path);
+        entry.PreferTags(tagged);
+        entry.ID = entry.UpdateRandomId();
+
+        // The pipe deadlock in MediaInfo left a couple of entries with no duration at all, and the weak
+        // match gates on it. The re-read is the one place that can repair them.
+        if (entry.Duration == TimeSpan.Zero) entry.Duration = tagged.Duration;
     }
 
     private static IEnumerable<string> NewFiles(List<MusicInfo> existing, List<string> files)
@@ -121,18 +142,17 @@ public partial class MusicManager(ILogger logger)
     {
         var split = location.Split('/');
         var filename = split[^1];
-        var romanizedAuthor = split[^2];
+        var folder = split[^2];
 
         var filenameSplit = filename.Split(" - ");
         var author = filenameSplit[0];
         var title = string.Join('.',
             string.Join('-', filenameSplit[1..]).Split('.')[..^1]);
 
+        // Tags first, then the filename, then the folder: the path spellings are kept as alternates rather
+        // than discarded, so a folder typo costs a variant instead of the whole name.
         var entry = await MediaInfo.GetInformation(location);
-        entry.OriginalTitle ??= title.Trim();
-        entry.OriginalAuthor ??= author.Trim();
-        entry.RomanizedTitle ??= Romanize.FromCyrillic(title).Trim();
-        entry.RomanizedAuthor ??= romanizedAuthor.Trim();
+        entry.AddNames(title, author, folder);
         entry.RelativeLocation ??= RelativeLocation(location);
         entry.ID = entry.UpdateRandomId();
 
@@ -173,41 +193,16 @@ public partial class MusicManager(ILogger logger)
         return songs.Take(count);
     }
 
+    /// <summary>Every title against every artist, in both orders — the arrays are what the entry can be found by.</summary>
     private static bool ScoreSingleTerm(string termClean, MusicInfo r)
     {
-        var romanizedTitleClean = r.RomanizedTitle is null
-            ? null
-            : LevenshteinDistance.RemoveFormatting(ParentesisRegex().Replace(r.RomanizedTitle, string.Empty));
+        var (titles, artists, _) = r.Search;
 
-        var originalTitleClean = r.OriginalTitle is null
-            ? null
-            : LevenshteinDistance.RemoveFormatting(ParentesisRegex().Replace(r.OriginalTitle, string.Empty));
-
-        var romanizedArtistClean =
-            r.RomanizedAuthor is null ? null : LevenshteinDistance.RemoveFormatting(r.RomanizedAuthor);
-
-        var originalArtistClean =
-            r.OriginalAuthor is null ? null : LevenshteinDistance.RemoveFormatting(r.OriginalAuthor);
-
-        var eval =
-            (romanizedArtistClean != null &&
-             LevenshteinDistance.ComputeStrict(romanizedArtistClean, termClean) < 2)
-            ||
-            (originalArtistClean != null &&
-             LevenshteinDistance.ComputeStrict(originalArtistClean, termClean) < 2)
-            ||
-            (romanizedTitleClean != null &&
-             (LevenshteinDistance.ComputeStrict(romanizedTitleClean, termClean) < 2 ||
-              LevenshteinDistance.ComputeStrict($"{romanizedTitleClean}{romanizedArtistClean}", termClean) < 3 ||
-              LevenshteinDistance.ComputeStrict($"{romanizedArtistClean}{romanizedTitleClean}", termClean) < 3 ||
-              LevenshteinDistance.ComputeStrict($"{romanizedTitleClean}{originalArtistClean}", termClean) < 3))
-            ||
-            (originalTitleClean != null &&
-             (LevenshteinDistance.ComputeStrict(originalTitleClean, termClean) < 2 ||
-              LevenshteinDistance.ComputeStrict($"{originalTitleClean}{originalArtistClean}", termClean) < 3 ||
-              LevenshteinDistance.ComputeStrict($"{originalArtistClean}{originalTitleClean}", termClean) < 3 ||
-              LevenshteinDistance.ComputeStrict($"{originalTitleClean}{romanizedArtistClean}", termClean) < 3));
-        return eval;
+        return artists.Any(artist => LevenshteinDistance.ComputeStrict(artist, termClean) < 2)
+               || titles.Any(title => LevenshteinDistance.ComputeStrict(title, termClean) < 2)
+               || titles.Any(title => artists.Any(artist =>
+                   LevenshteinDistance.ComputeStrict(title + artist, termClean) < 3 ||
+                   LevenshteinDistance.ComputeStrict(artist + title, termClean) < 3));
     }
 
     /// <returns>The song, or <c>null</c> when the ID isn't known.</returns>
@@ -226,7 +221,7 @@ public partial class MusicManager(ILogger logger)
             return null;
         }
 
-        Logger.Debug("MusicManager: Found song for ID {Id}: {Title}", id, search.OriginalTitle);
+        Logger.Debug("MusicManager: Found song for ID {Id}: {Title}", id, search.Title);
         return search;
     }
 
@@ -235,15 +230,7 @@ public partial class MusicManager(ILogger logger)
 
     private static bool IsArtistPartOfSong(string artist, MusicInfo song)
     {
-        var songArtistFormatted = LevenshteinDistance.RemoveFormatting(song.OriginalAuthor) ?? "";
-        var songArtistRomanized = LevenshteinDistance.RemoveFormatting(song.RomanizedAuthor) ?? "";
-
-        ReadOnlySpan<char> artistSpan = artist;
-        ReadOnlySpan<char> formattedSpan = songArtistFormatted;
-        ReadOnlySpan<char> romanizedSpan = songArtistRomanized;
-
-        return (formattedSpan.Length != 0 || romanizedSpan.Length != 0) &&
-               (formattedSpan.IndexOf(artistSpan) != -1 || romanizedSpan.IndexOf(artistSpan) != -1);
+        return song.Search.Artists.Any(name => name.Contains(artist, StringComparison.Ordinal));
     }
 
     /// <returns>The artist's songs, empty when the name is unusable or nothing matches.</returns>

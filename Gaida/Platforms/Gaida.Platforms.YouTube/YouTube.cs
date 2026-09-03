@@ -11,7 +11,7 @@ using Serilog;
 
 namespace Gaida.Platforms.YouTube;
 
-public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlaylist
+public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlaylist, ISupportsRandomResults
 {
     private readonly YouTubeCacher _cacher;
 
@@ -38,6 +38,18 @@ public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlayli
 
     protected override List<SearchProvider> SearchProviders { get; set; }
     protected override List<ContentGetter> ContentDownloaders { get; set; }
+
+    /// <summary>Random picks come from what earlier searches already cached, so discovery costs no YouTube call.</summary>
+    public async IAsyncEnumerable<PlatformResult> GetRandomResults(int count,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        foreach (var result in await _cacher.GetRandomAsync(count))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            result.Downloaders = ContentDownloaders;
+            yield return result;
+        }
+    }
 
     public async IAsyncEnumerable<PlatformResult> SearchPlaylist(string playlist,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)

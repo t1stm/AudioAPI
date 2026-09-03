@@ -17,7 +17,8 @@ public class MultiplayerManager(ManagerService managerService)
 
         Rooms.TryAdd(guid, new Room(guid, managerService)
         {
-            OnInfoModified = () => RoomsChanged?.Invoke()
+            OnInfoModified = () => RoomsChanged?.Invoke(),
+            OnEmptied = () => RemoveRoom(guid)
         });
 
         RoomsChanged?.Invoke();
@@ -32,5 +33,16 @@ public class MultiplayerManager(ManagerService managerService)
     public ICollection<Room> GetRooms()
     {
         return Rooms.Values;
+    }
+
+    /// <summary>
+    ///     Drops a room and tells the room-list sockets. Idempotent: two members dropping at once
+    ///     both see an empty store, and only the one that wins <c>TryRemove</c> announces it.
+    /// </summary>
+    public void RemoveRoom(Guid roomID)
+    {
+        if (!Rooms.TryRemove(roomID, out _)) return;
+
+        RoomsChanged?.Invoke();
     }
 }

@@ -1,9 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Serialization;
 using Gaida.Core.Platforms;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Hosting;
 
 namespace Gaida.API.Contracts;
 
@@ -17,6 +14,17 @@ public sealed record SearchResultDto(
     string Duration,
     string? ThumbnailUrl);
 
+/// <summary>What the local library has to say about a YouTube result the roll landed on.</summary>
+/// <param name="Match"><c>same</c>, <c>variant</c> (a tagged upload, a plain library copy) or <c>weak</c>.</param>
+/// <param name="DurationDeltaSeconds">Library minus upload. Reported, never a reason to reject a strong match.</param>
+public sealed record LocalVariantDto(
+    string Match,
+    double Score,
+    int DurationDeltaSeconds,
+    IReadOnlyList<string> YouTubeTags,
+    IReadOnlyList<string> LibraryTags,
+    SearchResultDto Result);
+
 public sealed record ApiErrorBody(ApiError Error);
 
 public sealed record ApiError(string Code, string Message);
@@ -25,10 +33,13 @@ public sealed record QueryResolutionDto
 {
     public required string Kind { get; init; }
     public required string Query { get; init; }
+
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? PlaylistId { get; init; }
+
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public SearchResultDto? Result { get; init; }
+
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<SearchResultDto>? Results { get; init; }
 }
@@ -50,8 +61,9 @@ public static class DiscoveryResultMapper
             string.IsNullOrWhiteSpace(result.Artist) ? "Unknown artist" : result.Artist,
             result.Album,
             contentUrl,
-            result.Duration < TimeSpan.Zero ? TimeSpan.Zero.ToString("c", CultureInfo.InvariantCulture) :
-            result.Duration.ToString("c", CultureInfo.InvariantCulture),
+            result.Duration < TimeSpan.Zero
+                ? TimeSpan.Zero.ToString("c", CultureInfo.InvariantCulture)
+                : result.Duration.ToString("c", CultureInfo.InvariantCulture),
             result.ThumbnailUrl);
     }
 
@@ -59,9 +71,8 @@ public static class DiscoveryResultMapper
         IHostEnvironment environment)
     {
         var configuredUrl = environment.IsDevelopment() ? null : configuration["PublicApiBaseUrl"];
-        if (Uri.TryCreate(configuredUrl, UriKind.Absolute, out var publicUri))
-            return publicUri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
-
-        return $"{request.Scheme}://{request.Host.Value}".TrimEnd('/');
+        return Uri.TryCreate(configuredUrl, UriKind.Absolute, out var publicUri)
+            ? publicUri.GetLeftPart(UriPartial.Authority).TrimEnd('/')
+            : $"{request.Scheme}://{request.Host.Value}".TrimEnd('/');
     }
 }
