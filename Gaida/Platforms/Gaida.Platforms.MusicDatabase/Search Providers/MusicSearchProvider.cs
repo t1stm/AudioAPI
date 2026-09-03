@@ -36,6 +36,13 @@ public class MusicSearchProvider(ILogger logger) : SearchProvider(logger),
         return ToResults(MusicManager.GetArtistSongs(artist));
     }
 
+    /// <returns>One level of the library's folder tree: subfolders with their song counts, and the songs in the folder.</returns>
+    public (IReadOnlyList<(string Name, int Songs)> Folders, IReadOnlyList<PlatformResult> Files) Browse(string? path)
+    {
+        var (folders, files) = MusicManager.Browse(path);
+        return (folders, [.. files.Select(PlatformResult (song) => song.ToMusicResult(ContentDownloaders))]);
+    }
+
     public (LocalMatch Match, PlatformResult Result)? FindLocalVariant(string name, string? artist, TimeSpan duration)
     {
         var match = MusicManager.FindLocalVariant(name, artist, duration);
@@ -51,6 +58,6 @@ public class MusicSearchProvider(ILogger logger) : SearchProvider(logger),
 
     private IAsyncEnumerable<PlatformResult> ToResults(IEnumerable<MusicInfo> songs)
     {
-        return songs.Select(song => (PlatformResult)song.ToMusicResult(ContentDownloaders)).AsAsync();
+        return songs.Select(PlatformResult (song) => song.ToMusicResult(ContentDownloaders)).AsAsync();
     }
 }

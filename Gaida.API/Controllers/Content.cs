@@ -1,23 +1,17 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using Gaida.API.Contracts;
 using Gaida.Core;
 using Gaida.Core.FFmpeg;
 using Gaida.Core.Platforms;
-using Gaida.Core.Streams;
-using Gaida.Platforms.MusicDatabase;
-using Gaida.Platforms.YouTube;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Gaida.API.Controllers;
 
 [ApiController]
 [Route("[controller]")]
-public class Content(ILogger<Content> logger, IConfiguration configuration, IHostEnvironment environment) : ControllerBase
+public class Content(ILogger<Content> logger, IConfiguration configuration, IHostEnvironment environment)
+    : ControllerBase
 {
-    /// <summary>Default share of a random request served from YouTube; the rest comes from the local library.</summary>
-    private const double YouTubeShare = 0.4;
-
     [HttpGet]
     [Route("/Audio/Search")]
     [Produces("application/json")]
@@ -33,22 +27,32 @@ public class Content(ILogger<Content> logger, IConfiguration configuration, IHos
 
         try
         {
-            switch (manager.FindQueryType(query))
+            var claim = await manager.ClassifyAsync(query, cancellationToken);
+            if (claim.Error is not null)
+            {
+                // A pod recognised the query as its own but rejected it (e.g. a malformed yt:// id). Discovery
+                // stays a valid empty result rather than surfacing the resolver's 400 here — that belongs to
+                // /Audio/FindQueryType, which callers use before they commit to a search.
+                logger.LogWarning("Classify rejected {Query}: {Error}", query, claim.Error);
+                return Ok(results);
+            }
+
+            switch (claim.Kind)
             {
                 case QueryType.ID:
                 {
-                    var found = await manager.SearchID(query, cancellationToken);
+                    var found = await manager.SearchID(claim.Query, cancellationToken);
                     AddMappedResult(results, found);
                     break;
                 }
 
                 case QueryType.Playlist:
-                    await AddMappedResults(results, manager.SearchPlaylist(query, cancellationToken));
+                    await AddMappedResults(results, manager.SearchPlaylist(claim.Query, cancellationToken));
                     break;
 
                 case QueryType.Keywords:
                 default:
-                    await AddMappedResults(results, manager.SearchKeywords(query, cancellationToken));
+                    await AddMappedResults(results, manager.SearchKeywords(claim.Query, cancellationToken));
                     break;
             }
         }
@@ -69,31 +73,32 @@ public class Content(ILogger<Content> logger, IConfiguration configuration, IHos
     [Route("/Audio/RandomResults")]
     [Produces("application/json")]
     public async Task<ActionResult<IReadOnlyList<SearchResultDto>>> RandomResults(
-        [FromServices] ManagerService managerService, int count = 10, double youTubeShare = YouTubeShare)
+        [FromServices] ManagerService managerService, int count = 10, double? youTubeShare = null)
     {
         if (count is < 1 or > 200)
             return BadRequest(new ApiErrorBody(new ApiError("invalid_count", "count must be between 1 and 200.")));
 
-        if (youTubeShare is < 0 or > 1 or double.NaN)
+        var share = youTubeShare ?? configuration.GetValue("Random:Shares:youtube", 0.4);
+        if (share is < 0 or > 1 or double.NaN)
             return BadRequest(new ApiErrorBody(new ApiError("invalid_share", "youTubeShare must be between 0 and 1.")));
 
-        logger.LogInformation("Returning {Count} random results with a {Share} YouTube share", count, youTubeShare);
+        logger.LogInformation("Returning {Count} random results with a {Share} YouTube share", count, share);
         var manager = managerService.Manager;
         var results = new List<SearchResultDto>();
 
         // Randomized rounding preserves the requested share over time while allowing either source
         // to be selected for small requests (for example, count=1 chooses YouTube 40% of the time).
-        var exactYouTubeCount = count * youTubeShare;
+        var exactYouTubeCount = count * share;
         var youTubeCount = (int)Math.Floor(exactYouTubeCount);
         if (Random.Shared.NextDouble() < exactYouTubeCount - youTubeCount)
             youTubeCount++;
 
-        await AddMappedResults(results, manager.GetPlatform<YouTube>()
-            .GetRandomResults(youTubeCount, HttpContext.RequestAborted));
+        if (manager.PlatformFor("yt://") is HttpPlatform youTube)
+            await AddMappedResults(results, youTube.GetRandomResults(youTubeCount, HttpContext.RequestAborted));
 
         // Local backfills whatever the YouTube cache was short of, so the caller always gets `count` results.
-        await AddMappedResults(results, manager.GetPlatform<MusicDatabase>()
-            .GetRandomResults(count - results.Count, HttpContext.RequestAborted));
+        if (manager.PlatformFor("audio://") is HttpPlatform local)
+            await AddMappedResults(results, local.GetRandomResults(count - results.Count, HttpContext.RequestAborted));
 
         var shuffled = results.ToArray();
         Random.Shared.Shuffle(shuffled);
@@ -109,20 +114,16 @@ public class Content(ILogger<Content> logger, IConfiguration configuration, IHos
         logger.LogInformation("Downloading Raw '{Id}'", id);
 
         var start = Stopwatch.GetTimestamp();
-        var result = await managerService.Manager.SearchID(id, HttpContext.RequestAborted);
-        if (result is null) return NotFound();
+        var platform = PlatformFor(managerService.Manager, id);
+        if (platform is null) return NotFound();
 
-        var streamSpreader = await managerService.Manager.GetContentDataAsync(result, HttpContext.RequestAborted);
-        if (streamSpreader is null) return StatusCode(500);
+        using var upstream = await platform.GetContentResponseAsync(id, HttpContext.RequestAborted);
+        if (upstream is null) return NotFound();
 
-        var fileId = FileId(id);
-        var extension = result is MusicResult localResult ? Path.GetExtension(localResult.Path) : ".audio";
-        SetDownloadHeaders(fileId + extension, $"raw-{fileId}", streamSpreader.Closed);
+        RelayContentHeaders(upstream);
+        SetCacheHeaders($"raw-{FileId(id)}");
 
-        if (streamSpreader.Closed && Request.Headers.Range.Count > 0)
-            return await BufferedRangeResponse(streamSpreader, "application/octet-stream");
-
-        await StreamToResponse(streamSpreader);
+        await upstream.Content.CopyToAsync(Response.Body, HttpContext.RequestAborted);
 
         logger.LogInformation("Finishing '{Id}' took '{Duration}'", id, Stopwatch.GetElapsedTime(start));
         return new EmptyResult();
@@ -140,62 +141,21 @@ public class Content(ILogger<Content> logger, IConfiguration configuration, IHos
 
         var (contentType, ffmpegCodec, ffmpegOutputFormat) = Encoding(codec);
 
-        var key = ManagerService.EncoderKey(codec, bitrate, id);
-        if (!managerService.TryGetEncoder(key, out var encoderTask))
-        {
-            var result = await managerService.Manager.SearchID(id, HttpContext.RequestAborted);
-            if (result is null) return NotFound("Search resulted in error");
+        var platform = PlatformFor(managerService.Manager, id);
+        if (platform is null) return NotFound("Search resulted in error");
 
-            encoderTask = StartEncode(managerService, key, result, bitrate, ffmpegCodec, ffmpegOutputFormat, out _);
-        }
+        using var upstream = await platform.GetContentResponseAsync(id, HttpContext.RequestAborted);
+        if (upstream is null) return NotFound("Search resulted in error");
 
-        var startedEncoder = await encoderTask;
-        if (startedEncoder is null) return StatusCode(500);
-
-        var encodedStream = startedEncoder.GetStreamSpreader();
         var fileId = FileId(id);
-        var outputFileName = $"{fileId}.{ffmpegOutputFormat[3..]}";
-        SetStreamHeaders(contentType, outputFileName, $"{contentType}-{bitrate}-{fileId}", encodedStream.Closed);
+        Response.ContentType = contentType;
+        Response.Headers.Append("Content-Disposition", $"inline; filename={fileId}.{ffmpegOutputFormat[3..]}");
+        SetCacheHeaders($"{contentType}-{bitrate}-{fileId}");
 
-        if (encodedStream.Closed && Request.Headers.Range.Count > 0)
-            return await BufferedRangeResponse(encodedStream, contentType);
-
-        await StreamToResponse(encodedStream);
+        await using var source = await upstream.Content.ReadAsStreamAsync(HttpContext.RequestAborted);
+        var ffmpegArguments = $"{ffmpegCodec} -b:a {bitrate}k -vn -d copy {ffmpegOutputFormat}";
+        await FFmpegEncoder.EncodeAsync(source, Response.Body, ffmpegArguments, HttpContext.RequestAborted);
         return new EmptyResult();
-    }
-
-    /// <summary>
-    ///     Runs the same encode <see cref="Download" /> would, without a body: the next Download for the same
-    ///     codec/bitrate/id then finds it already running and streams what has been produced so far.
-    /// </summary>
-    [HttpGet]
-    [Route("/Audio/Preload/{codec:required}/{bitrate:int:required}")]
-    public async Task<IActionResult> Preload(string codec, int bitrate, string id,
-        [FromServices] ManagerService managerService)
-    {
-        if (bitrate < 8) return BadRequest("Bitrate must be greater than 8");
-        if (string.IsNullOrWhiteSpace(id)) return NotFound("No ID provided");
-
-        // 200 for every caller after the first: the encode is already running or finished, and the lookup
-        // has just pushed its expiry back, which is the whole of what a repeat preload can usefully do.
-        var key = ManagerService.EncoderKey(codec, bitrate, id);
-        if (managerService.TryGetEncoder(key, out _)) return Ok();
-
-        logger.LogInformation("Preloading '{Id}' {Codec} {Bitrate}", id, codec, bitrate);
-        var result = await managerService.Manager.SearchID(id, HttpContext.RequestAborted);
-        if (result is null) return NotFound("Search resulted in error");
-
-        var (_, ffmpegCodec, ffmpegOutputFormat) = Encoding(codec);
-        // Awaited, not fired and forgotten: the start only runs as far as spawning ffmpeg and subscribing it to
-        // the source, so this returns long before any audio is encoded, and a failure is still a 500 here
-        // rather than an unobserved task exception. Cancelling the preload never cancels the encode.
-        var encoder = await StartEncode(managerService, key, result, bitrate, ffmpegCodec, ffmpegOutputFormat,
-            out var started);
-        if (encoder is null) return StatusCode(500);
-
-        // Two callers can reach this together and both find TryGetEncoder empty; only one of them added the
-        // entry, and only that one gets the 202.
-        return started ? Accepted() : Ok();
     }
 
     /// <summary>The ffmpeg arguments and response content type for a codec name, defaulting to Opus in Matroska.</summary>
@@ -212,21 +172,12 @@ public class Content(ILogger<Content> logger, IConfiguration configuration, IHos
         };
     }
 
-    /// <summary>Starts the shared encode for a key, or hands back the one a racing request already started.</summary>
-    private static Task<FFmpegEncoder?> StartEncode(ManagerService managerService, string key, PlatformResult result,
-        int bitrate, string ffmpegCodec, string ffmpegOutputFormat, out bool started)
+    /// <summary>The platform pod that owns <paramref name="id" />'s protocol prefix, or <c>null</c> when none does.</summary>
+    private static HttpPlatform? PlatformFor(AudioManager manager, string id)
     {
-        return managerService.GetOrStartEncoderAsync(key, async encoder =>
-        {
-            var sourceStreamSpreader = await managerService.Manager.GetContentDataAsync(result, CancellationToken.None);
-            if (sourceStreamSpreader is null) return false;
-
-            var sourceStreamSubscriber = encoder.Convert(bitrate, ffmpegCodec, ffmpegOutputFormat);
-            if (sourceStreamSubscriber is null) return false;
-
-            await sourceStreamSpreader.SubscribeAsync(sourceStreamSubscriber);
-            return true;
-        }, out started);
+        var separator = id.IndexOf("://", StringComparison.Ordinal);
+        if (separator < 1) return null;
+        return manager.PlatformFor(id[..(separator + 3)]) as HttpPlatform;
     }
 
     /// <summary>The ID without its platform protocol, safe to put in a header.</summary>
@@ -237,49 +188,17 @@ public class Content(ILogger<Content> logger, IConfiguration configuration, IHos
         return Uri.EscapeDataString(value);
     }
 
-    private void SetDownloadHeaders(string fileName, string etag, bool seekable)
+    private void RelayContentHeaders(HttpResponseMessage upstream)
     {
-        Response.Headers.Append("Content-Disposition", $"attachment; filename={fileName}");
-        SetRangeSupport(seekable);
-        SetCacheHeaders(etag);
-    }
-
-    private void SetStreamHeaders(string contentType, string fileName, string etag, bool seekable)
-    {
-        Response.ContentType = contentType;
-        Response.Headers.Append("Content-Disposition", $"inline; filename={fileName}");
-        SetRangeSupport(seekable);
-        SetCacheHeaders(etag);
-    }
-
-    /// <summary>Only claim range support for a finished body: promising it mid-encode makes players seek into a 200.</summary>
-    private void SetRangeSupport(bool seekable)
-    {
-        Response.Headers.AcceptRanges = seekable ? "bytes" : "none";
+        Response.ContentType = upstream.Content.Headers.ContentType?.ToString() ?? "application/octet-stream";
+        if (upstream.Content.Headers.ContentDisposition is { } disposition)
+            Response.Headers.ContentDisposition = disposition.ToString();
     }
 
     private void SetCacheHeaders(string etag)
     {
         Response.Headers.Append("Cache-Control", "public, max-age=31536000, immutable");
         Response.Headers.ETag = $"\"{etag}\"";
-    }
-
-    /// <summary>
-    ///     Returns a proper 206 response from completed cached data when a browser seeks. Callers must check
-    ///     <see cref="StreamSpreader.Closed" /> first: a range served off a still-growing buffer would report a
-    ///     total length that is already wrong by the time the client reads it.
-    /// </summary>
-    private async Task<IActionResult> BufferedRangeResponse(StreamSpreader streamSpreader, string contentType)
-    {
-        try
-        {
-            var bytes = await streamSpreader.GetBufferedBytesAsync(HttpContext.RequestAborted);
-            return File(bytes, contentType, enableRangeProcessing: true);
-        }
-        catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
-        {
-            return new EmptyResult();
-        }
     }
 
     private void AddMappedResult(ICollection<SearchResultDto> destination, PlatformResult? result)
@@ -294,68 +213,5 @@ public class Content(ILogger<Content> logger, IConfiguration configuration, IHos
     {
         await foreach (var result in source.WithCancellation(HttpContext.RequestAborted))
             AddMappedResult(destination, result);
-    }
-
-    /// <summary>Pumps a stream spreader into the response body until the source closes or the client leaves.</summary>
-    private async Task StreamToResponse(StreamSpreader streamSpreader)
-    {
-        // Captured once: these callbacks outlive the request, and touching HttpContext after it is
-        // disposed throws inside the spreader instead of just unsubscribing us.
-        var cancellationToken = HttpContext.RequestAborted;
-        var body = Response.Body;
-
-        var cache = new ConcurrentQueue<(byte[], int, int)>();
-        var finished = new SemaphoreSlim(0, 1);
-        var syncSemaphore = new SemaphoreSlim(1, 1);
-
-        var streamSubscriber = new StreamSubscriber
-        {
-            WriteCall = (bytes, offset, length) =>
-            {
-                cache.Enqueue((bytes, offset, length));
-                return Task.FromResult(cancellationToken.IsCancellationRequested
-                    ? StreamStatus.Closed
-                    : StreamStatus.Open);
-            },
-            SyncCall = SyncCall,
-            CloseCall = async () =>
-            {
-                await SyncCall();
-                finished.Release();
-            }
-        };
-
-        await streamSpreader.SubscribeAsync(streamSubscriber);
-
-        try
-        {
-            await finished.WaitAsync(cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            return;
-        }
-
-        await body.FlushAsync(cancellationToken);
-        return;
-
-        async Task SyncCall()
-        {
-            if (cancellationToken.IsCancellationRequested) return;
-            await syncSemaphore.WaitAsync(CancellationToken.None);
-
-            try
-            {
-                while (cache.TryDequeue(out var entry))
-                {
-                    var (bytes, offset, length) = entry;
-                    await body.WriteAsync(bytes.AsMemory(offset, length), cancellationToken);
-                }
-            }
-            finally
-            {
-                syncSemaphore.Release();
-            }
-        }
     }
 }

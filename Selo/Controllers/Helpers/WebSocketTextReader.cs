@@ -2,18 +2,18 @@ using System.Buffers;
 using System.Net.WebSockets;
 using System.Text;
 
-namespace Gaida.API.Controllers.Helpers;
+namespace Selo.Controllers.Helpers;
 
 /// <summary>
-/// Reads whole text frames off one connection. Both buffers are rented once for the life of the
-/// connection rather than per message, and the payload is decoded straight into chars — the
-/// StringBuilder path allocated a string per frame plus one for the finished message.
+///     Reads whole text frames off one connection. Both buffers are rented once for the life of the
+///     connection rather than per message, and the payload is decoded straight into chars — the
+///     StringBuilder path allocated a string per frame plus one for the finished message.
 /// </summary>
 public sealed class WebSocketTextReader : IDisposable
 {
     private readonly Decoder decoder = Encoding.UTF8.GetDecoder();
-    private byte[] receive = ArrayPool<byte>.Shared.Rent(4096);
     private char[] chars = ArrayPool<char>.Shared.Rent(4096);
+    private byte[] receive = ArrayPool<byte>.Shared.Rent(4096);
 
     public void Dispose()
     {
@@ -25,8 +25,8 @@ public sealed class WebSocketTextReader : IDisposable
     }
 
     /// <returns>
-    /// The whole text message — valid only until the next read — or <c>null</c> when the socket
-    /// closed or faulted.
+    ///     The whole text message — valid only until the next read — or <c>null</c> when the socket
+    ///     closed or faulted.
     /// </returns>
     public async Task<ReadOnlyMemory<char>?> ReadWholeMessageAsync(WebSocket webSocket,
         CancellationToken cancellationToken = default)
@@ -61,10 +61,12 @@ public sealed class WebSocketTextReader : IDisposable
         // other exception is our own bug and has to stay visible — swallowing
         // everything turned a crash into a session that quietly stopped, with
         // the client left to guess from a socket that never says why.
-        catch (Exception exception) when (exception is OperationCanceledException
-                                              or WebSocketException
-                                              or ObjectDisposedException
-                                              or IOException)
+        catch (Exception exception)
+            when (exception
+                      is OperationCanceledException
+                      or WebSocketException
+                      or ObjectDisposedException
+                      or IOException)
         {
             return null;
         }

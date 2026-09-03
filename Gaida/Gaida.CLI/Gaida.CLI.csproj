@@ -8,13 +8,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Gaida.Core\Gaida.Core.csproj" />
-    <ProjectReference Include="..\Platforms\Gaida.Platforms.YouTube\Gaida.Platforms.YouTube.csproj" />
-    <ProjectReference Include="..\Platforms\Gaida.Platforms.MusicDatabase\Gaida.Platforms.MusicDatabase.csproj" />
+    <ProjectReference Include="..\Gaida.Core\Gaida.Core.csproj"/>
+    <ProjectReference Include="..\Platforms\Gaida.Platforms.YouTube\Gaida.Platforms.YouTube.csproj"/>
+    <ProjectReference Include="..\Platforms\Gaida.Platforms.MusicDatabase\Gaida.Platforms.MusicDatabase.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1"/>
   </ItemGroup>
 
 </Project>

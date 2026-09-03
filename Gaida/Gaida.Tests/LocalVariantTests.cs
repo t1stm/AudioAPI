@@ -94,7 +94,7 @@ public class LocalVariantTests
     {
         public TestMusicManager(params MusicInfo[] songs) : base(Serilog.Core.Logger.None)
         {
-            Songs = [..songs];
+            Songs = [.. songs];
         }
     }
 }

@@ -1,6 +1,6 @@
 using System.Net.WebSockets;
 
-namespace Gaida.API.Multiplayer;
+namespace Selo.Multiplayer;
 
 public class User
 {
@@ -10,8 +10,10 @@ public class User
 
     public string ChatUsername => Username ??= $"Anonymous {GetId(ID)}";
 
-    /// <summary>ValueTask so a send that completes inline — the usual case for a small text
-    /// frame — costs no Task.</summary>
+    /// <summary>
+    ///     ValueTask so a send that completes inline — the usual case for a small text
+    ///     frame — costs no Task.
+    /// </summary>
     public ValueTask SendMessageAsync(ReadOnlyMemory<byte> bytes)
     {
         return WebSocket.State != WebSocketState.Open

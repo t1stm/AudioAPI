@@ -1,10 +1,10 @@
 using System.Net.WebSockets;
 using System.Text.Json;
-using Gaida.API.Controllers.Helpers;
-using Gaida.API.Multiplayer;
 using Microsoft.AspNetCore.Mvc;
+using Selo.Controllers.Helpers;
+using Selo.Multiplayer;
 
-namespace Gaida.API.Controllers;
+namespace Selo.Controllers;
 
 public class Multiplayer(ILogger<Multiplayer> logger, MultiplayerManager manager) : ControllerBase
 {
@@ -80,7 +80,9 @@ public class Multiplayer(ILogger<Multiplayer> logger, MultiplayerManager manager
             // Keep a pending receive so control frames (including keepalive pongs) are drained
             // and this socket gets the same dead-client detection as room sockets.
             using var reader = new WebSocketTextReader();
-            while (await reader.ReadWholeMessageAsync(webSocket, cancellationToken) is not null) { }
+            while (await reader.ReadWholeMessageAsync(webSocket, cancellationToken) is not null)
+            {
+            }
         }
         finally
         {

@@ -42,7 +42,10 @@ public class MusicInfo : IJsonOnDeserialized
         }
     }
 
-    /// <summary>As <see cref="Titles" />. Compound names stay joined here; <see cref="TitleNormalizer.SplitArtists" /> splits at match time.</summary>
+    /// <summary>
+    ///     As <see cref="Titles" />. Compound names stay joined here; <see cref="TitleNormalizer.SplitArtists" /> splits
+    ///     at match time.
+    /// </summary>
     public List<string> Artists
     {
         get => _artists;
@@ -84,17 +87,20 @@ public class MusicInfo : IJsonOnDeserialized
     }
 
     /// <summary>Set when the entry was read in the four-field format, so the loader knows to re-read its tags.</summary>
-    [JsonIgnore] public bool WasLegacy { get; private set; }
+    [JsonIgnore]
+    public bool WasLegacy { get; private set; }
 
     [JsonIgnore] public TimeSpan Duration { get; set; }
 
     /// <summary>The name as tagged: the original.</summary>
-    [JsonIgnore] public string? Title => Titles.FirstOrDefault();
+    [JsonIgnore]
+    public string? Title => Titles.FirstOrDefault();
 
     [JsonIgnore] public string? Artist => Artists.FirstOrDefault();
 
     /// <summary>What to show someone who cannot read the original script.</summary>
-    [JsonIgnore] public string? DisplayTitle => Titles.FirstOrDefault(IsLatin) ?? Title;
+    [JsonIgnore]
+    public string? DisplayTitle => Titles.FirstOrDefault(IsLatin) ?? Title;
 
     [JsonIgnore] public string? DisplayArtist => Artists.FirstOrDefault(IsLatin) ?? Artist;
 

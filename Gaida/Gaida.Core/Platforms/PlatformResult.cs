@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Gaida.Core.Platforms.Optional.Supports;
 using Gaida.Core.Streams;
 
 namespace Gaida.Core.Platforms;
@@ -14,10 +15,12 @@ public abstract class PlatformResult
     [JsonInclude] public string? ThumbnailUrl { get; set; }
 
     /// <summary>Untransliterated title, when the platform has one.</summary>
-    [JsonInclude] public string? OriginalTitle { get; set; }
+    [JsonInclude]
+    public string? OriginalTitle { get; set; }
 
     /// <summary>Untransliterated artist, when the platform has one.</summary>
-    [JsonInclude] public string? OriginalArtist { get; set; }
+    [JsonInclude]
+    public string? OriginalArtist { get; set; }
 
     public abstract string GetDownloadUrl();
 
@@ -36,7 +39,9 @@ public abstract class PlatformResult
         foreach (var downloader in Downloaders)
         {
             var result = await downloader.GetContentDataAsync(this, token);
-            if (result is not null) return result;
+            if (result is null) continue;
+            if (this is ISupportsCaching caching) await caching.RunCacheProcess(result);
+            return result;
         }
 
         return null;

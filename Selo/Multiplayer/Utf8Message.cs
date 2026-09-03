@@ -3,12 +3,12 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Unicode;
 
-namespace Gaida.API.Multiplayer;
+namespace Selo.Multiplayer;
 
 /// <summary>
-/// A protocol frame assembled straight into an <see cref="ArrayPool{T}" /> buffer.
-/// Building one costs no string and no intermediate byte[]; the rental goes back on
-/// <see cref="Dispose" />, which every send path runs in a finally.
+///     A protocol frame assembled straight into an <see cref="ArrayPool{T}" /> buffer.
+///     Building one costs no string and no intermediate byte[]; the rental goes back on
+///     <see cref="Dispose" />, which every send path runs in a finally.
 /// </summary>
 public sealed class Utf8Message : IBufferWriter<byte>, IDisposable
 {
@@ -63,9 +63,11 @@ public sealed class Utf8Message : IBufferWriter<byte>, IDisposable
     }
 
     /// <summary>
-    /// Formats a value straight to UTF-8. Handing this to <see cref="Utf8.TryWrite(Span{byte},ref
-    /// Utf8.TryWriteInterpolatedStringHandler,out int)" /> keeps the numeric paths on the
-    /// framework's own UTF-8 formatters and keeps the culture identical to ToString().
+    ///     Formats a value straight to UTF-8. Handing this to
+    ///     <see cref="Utf8.TryWrite(Span{byte},ref
+    /// Utf8.TryWriteInterpolatedStringHandler,out int)" /> keeps the numeric paths
+    ///     on the
+    ///     framework's own UTF-8 formatters and keeps the culture identical to ToString().
     /// </summary>
     public void Write<T>(T value)
     {
@@ -91,9 +93,9 @@ public sealed class Utf8Message : IBufferWriter<byte>, IDisposable
 }
 
 /// <summary>
-/// Lets a call site write <c>Broadcast($"current {index}")</c> and have the interpolation
-/// land in a pooled buffer as UTF-8, instead of producing a string that then has to be
-/// encoded into a second throwaway array.
+///     Lets a call site write <c>Broadcast($"current {index}")</c> and have the interpolation
+///     land in a pooled buffer as UTF-8, instead of producing a string that then has to be
+///     encoded into a second throwaway array.
 /// </summary>
 [InterpolatedStringHandler]
 public readonly struct Utf8MessageHandler

@@ -6,13 +6,13 @@ namespace Gaida.Platforms.YouTube.Cache;
 
 public class YouTubeCacher(ILogger logger)
 {
-    public ILogger Logger { get; } = logger.ForContext<YouTubeCacher>();
-    
     private const string CacheFolder = "./cache";
     private const string FileName = "YouTube.json";
+
     private static readonly string CachePath =
         Environment.GetEnvironmentVariable("YOUTUBE_CACHE_DB", EnvironmentVariableTarget.Process) ??
         $"{CacheFolder}/{FileName}";
+
     protected readonly Dictionary<string, YouTubeResult> Cache = new();
 
     protected readonly JsonSerializerOptions JsonSerializerOptions = new()
@@ -22,6 +22,7 @@ public class YouTubeCacher(ILogger logger)
     };
 
     protected readonly SemaphoreSlim Sync = new(1, 1);
+    public ILogger Logger { get; } = logger.ForContext<YouTubeCacher>();
 
     // ponytail: writes a full snapshot to a temp file and renames it into place, so a crash mid-write
     // never leaves a half-written cache. The old in-place truncate+append trick was faster but could
@@ -36,7 +37,10 @@ public class YouTubeCacher(ILogger logger)
         {
             var tempPath = $"{CachePath}.tmp";
             await using (var file = File.Create(tempPath))
+            {
                 await JsonSerializer.SerializeAsync(file, Cache.Values, JsonSerializerOptions);
+            }
+
             File.Move(tempPath, CachePath, true);
         }
         catch (Exception e)
@@ -58,7 +62,7 @@ public class YouTubeCacher(ILogger logger)
 
         await Sync.WaitAsync();
         Logger.Information("Loading YouTube cache from: {CachePath}", CachePath);
-        
+
         try
         {
             if (!File.Exists(CachePath))

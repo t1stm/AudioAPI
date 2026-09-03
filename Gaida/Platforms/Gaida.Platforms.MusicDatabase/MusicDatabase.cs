@@ -7,7 +7,7 @@ using Serilog;
 
 namespace Gaida.Platforms.MusicDatabase;
 
-public class MusicDatabase : Platform, ISupportsSearch, ISupportsRandomResults
+public sealed class MusicDatabase : Platform, ISupportsSearch, ISupportsRandomResults
 {
     private readonly MusicSearchProvider _provider;
 
@@ -40,6 +40,12 @@ public class MusicDatabase : Platform, ISupportsSearch, ISupportsRandomResults
     public IAsyncEnumerable<PlatformResult> GetArtistSongs(string artist)
     {
         return _provider.GetArtistSongs(artist);
+    }
+
+    /// <returns>One level of the library's folder tree, for the explorer.</returns>
+    public (IReadOnlyList<(string Name, int Songs)> Folders, IReadOnlyList<PlatformResult> Files) Browse(string? path)
+    {
+        return _provider.Browse(path);
     }
 
     /// <returns>The library's answer to a YouTube title, or <c>null</c> when it has none worth offering.</returns>

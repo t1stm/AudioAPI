@@ -1,12 +1,17 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
-using Gaida.Core.Platforms;
 
-namespace Gaida.API.Multiplayer.Handlers;
+namespace Selo.Multiplayer.Handlers;
 
 public class VirtualPlayer(MessageQueue messageQueue)
 {
+    /// <summary>Who reported the current item as played out.</summary>
+    protected readonly HashSet<string> Finished = [];
+
+    /// <summary>Who reported the current item as buffered.</summary>
+    protected readonly HashSet<string> Loaded = [];
+
     /// <summary>
     ///     Guards every read and write of the room clock, the queue and the two barrier counters, and is held
     ///     across the broadcast so state changes and the frames announcing them leave in the same order. Each
@@ -24,12 +29,6 @@ public class VirtualPlayer(MessageQueue messageQueue)
 
     protected int CurrentIndex;
 
-    /// <summary>Who reported the current item as played out.</summary>
-    protected readonly HashSet<string> Finished = [];
-
-    /// <summary>Who reported the current item as buffered.</summary>
-    protected readonly HashSet<string> Loaded = [];
-
     /// <summary>
     ///     Whether the room is still waiting on everyone to buffer the current track. Only an armed
     ///     barrier may release the clock: a client answers the <c>current</c> frame it gets on the way
@@ -42,7 +41,7 @@ public class VirtualPlayer(MessageQueue messageQueue)
     protected bool Playing = true;
 
     protected long? StartTime;
-    public List<PlatformResult> Items { get; set; } = [];
+    public List<TrackDto> Items { get; set; } = [];
 
     public async Task Next()
     {
@@ -237,7 +236,7 @@ public class VirtualPlayer(MessageQueue messageQueue)
         }
     }
 
-    public async Task Enqueue(PlatformResult result)
+    public async Task Enqueue(TrackDto result)
     {
         await Sync.WaitAsync();
 
@@ -440,10 +439,10 @@ public class VirtualPlayer(MessageQueue messageQueue)
     }
 
     /// <summary>
-    /// The queue frame, serialised straight into a pooled buffer. This used to be the single
-    /// largest allocation in the room: a JSON string, a second string for the interpolation,
-    /// and a third array for the UTF-8 encoding — three copies of the whole queue, all of them
-    /// large enough to reach gen1 on a busy room.
+    ///     The queue frame, serialised straight into a pooled buffer. This used to be the single
+    ///     largest allocation in the room: a JSON string, a second string for the interpolation,
+    ///     and a third array for the UTF-8 encoding — three copies of the whole queue, all of them
+    ///     large enough to reach gen1 on a busy room.
     /// </summary>
     protected Utf8Message QueueMessage()
     {
@@ -467,10 +466,10 @@ public class VirtualPlayer(MessageQueue messageQueue)
     }
 
     /// <summary>
-    /// When this frame left the room, in Unix milliseconds. Every frame that moves the
-    /// shared clock carries one, so a client can subtract the flight this frame actually
-    /// took rather than the quickest one the link has managed lately — which is what
-    /// half a round trip amounts to, and which understates any frame that got queued.
+    ///     When this frame left the room, in Unix milliseconds. Every frame that moves the
+    ///     shared clock carries one, so a client can subtract the flight this frame actually
+    ///     took rather than the quickest one the link has managed lately — which is what
+    ///     half a round trip amounts to, and which understates any frame that got queued.
     /// </summary>
     public static long Stamp()
     {
@@ -486,6 +485,6 @@ public class VirtualPlayer(MessageQueue messageQueue)
         // there, and worst of all `GetCurrentTime`, which rebases `StartTime`
         // through here on every `sync` a paused room is asked for.
         // The double carries it exactly: 10^9 * 3600 is well inside 53 bits.
-        return (long) (timeSpan.TotalSeconds * Stopwatch.Frequency);
+        return (long)(timeSpan.TotalSeconds * Stopwatch.Frequency);
     }
 }

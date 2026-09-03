@@ -18,7 +18,10 @@ public partial class MusicManager(ILogger logger)
     public static string StorageDirectory =>
         Environment.GetEnvironmentVariable("STORAGE", EnvironmentVariableTarget.Process) ?? "./";
 
-    public static string AlbumCoverLocation => Domain + "/Album_Covers";
+    // TrimEnd because DOMAIN is written with a trailing slash as often as not, and concatenating it
+    // straight onto "/Album_Covers" produced "https://host//Album_Covers/<hash>.jpg" — a URL that
+    // renders in a browser but that Cover.cs's HttpClient fetch and any strict client both choke on.
+    public static string AlbumCoverLocation => Domain.TrimEnd('/') + "/Album_Covers";
 
     public async Task Initialize()
     {
@@ -98,7 +101,8 @@ public partial class MusicManager(ILogger logger)
         // happen here or those names stay path-derived forever.
         var legacy = existing.Where(entry => entry.WasLegacy).ToList();
         foreach (var entry in legacy) await RereadTags(entry);
-        if (legacy.Count > 0) Logger.Information("Re-read tags for {Count} entries of '{Artist}'", legacy.Count, artist);
+        if (legacy.Count > 0)
+            Logger.Information("Re-read tags for {Count} entries of '{Artist}'", legacy.Count, artist);
 
         var newFiles = NewFiles(existing, songs).ToList();
         if (stale == 0 && newFiles.Count == 0 && legacy.Count == 0) return existing;
@@ -223,6 +227,49 @@ public partial class MusicManager(ILogger logger)
 
         Logger.Debug("MusicManager: Found song for ID {Id}: {Title}", id, search.Title);
         return search;
+    }
+
+    /// <summary>
+    ///     The library as the folder tree it already is on disk: one level of it, so the client asks for the
+    ///     next level only when someone opens it.
+    /// </summary>
+    /// <param name="path">Folder relative to the storage root; empty or "/" for the root itself.</param>
+    /// <returns>The immediate subfolders with the songs beneath each, and the songs directly in the folder.</returns>
+    public (List<(string Name, int Songs)> Folders, List<MusicInfo> Files) Browse(string? path)
+    {
+        // Nothing here touches the filesystem: the path is only ever compared against the RelativeLocation
+        // strings already in memory, so "../" matches no prefix and escapes nothing. Separators are '/'
+        // because ParseFile splits on '/' too — a backslash is normalized rather than supported.
+        var prefix = (path ?? string.Empty).Replace('\\', '/').Trim('/');
+        if (prefix.Length > 0) prefix += "/";
+
+        var folders = new Dictionary<string, int>(StringComparer.Ordinal);
+        var files = new List<MusicInfo>();
+
+        foreach (var song in Songs)
+        {
+            if (song.RelativeLocation is not { } location ||
+                !location.StartsWith(prefix, StringComparison.Ordinal)) continue;
+
+            var rest = location[prefix.Length..];
+            var slash = rest.IndexOf('/');
+
+            if (slash < 0) files.Add(song);
+            else folders[rest[..slash]] = folders.GetValueOrDefault(rest[..slash]) + 1;
+        }
+
+        Logger.Debug("MusicManager: Browsed '{Path}': {Folders} folders, {Files} files", prefix, folders.Count,
+            files.Count);
+
+        // ponytail: one linear scan of the song list per request. 3671 entries is sub-millisecond and a prefix
+        // index would need invalidating on every rescan — build one only if the library passes six figures.
+        return ([
+                .. folders.OrderBy(folder => folder.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(folder => (Name: folder.Key, Songs: folder.Value))
+            ],
+            [
+                .. files.OrderBy(song => song.DisplayTitle, StringComparer.OrdinalIgnoreCase)
+            ]);
     }
 
     [GeneratedRegex(@"\(.*?\)")]

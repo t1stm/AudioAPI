@@ -1,17 +1,14 @@
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
-using System.Runtime.CompilerServices;
 using System.Text;
-using Gaida.API;
-using Gaida.API.Controllers.Helpers;
-using Gaida.API.Multiplayer;
-using Gaida.API.Multiplayer.Handlers;
-using Gaida.Core.Platforms;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
-using MultiplayerController = Gaida.API.Controllers.Multiplayer;
+using Selo.Controllers.Helpers;
+using Selo.Multiplayer;
+using Selo.Multiplayer.Handlers;
+using MultiplayerController = Selo.Controllers.Multiplayer;
 
 namespace Gaida.Tests;
 
@@ -20,7 +17,7 @@ public class MultiplayerManagerTests
     [Fact]
     public async Task CreateNewRoomRegistersRoomAndRaisesChangeEvent()
     {
-        var manager = new MultiplayerManager(TestObjects.ManagerService());
+        var manager = new MultiplayerManager(new HttpClient());
         var changeCount = 0;
         manager.RoomsChanged += () =>
         {
@@ -41,7 +38,7 @@ public class MultiplayerManagerTests
     [Fact]
     public async Task TheLastMemberLeavingTakesTheRoomWithThem()
     {
-        var manager = new MultiplayerManager(TestObjects.ManagerService());
+        var manager = new MultiplayerManager(new HttpClient());
         var roomId = await manager.CreateNewRoom();
         var room = Assert.IsType<Room>(manager.GetRoom(roomId));
         var changeCount = 0;
@@ -71,7 +68,7 @@ public class MultiplayerManagerTests
     [Fact]
     public async Task ARoomNobodyEverJoinedStays()
     {
-        var manager = new MultiplayerManager(TestObjects.ManagerService());
+        var manager = new MultiplayerManager(new HttpClient());
         var roomId = await manager.CreateNewRoom();
         var room = Assert.IsType<Room>(manager.GetRoom(roomId));
 
@@ -85,7 +82,7 @@ public class MultiplayerManagerTests
     [Fact]
     public async Task UpdatingRoomInfoRaisesManagerChangeEvent()
     {
-        var manager = new MultiplayerManager(TestObjects.ManagerService());
+        var manager = new MultiplayerManager(new HttpClient());
         var roomId = await manager.CreateNewRoom();
         var room = Assert.IsType<Room>(manager.GetRoom(roomId));
         var socket = new RecordingWebSocket();
@@ -499,7 +496,7 @@ public class MultiplayerRoomTests
     [Fact]
     public async Task RoomRoutesChatSyncAndInfoCommands()
     {
-        var room = new Room(Guid.NewGuid(), TestObjects.ManagerService());
+        var room = new Room(Guid.NewGuid(), new HttpClient());
         var socket = new RecordingWebSocket();
         var user = await room.GetOrAddUser("host:trace", socket, "Ada");
         socket.ClearMessages();
@@ -521,7 +518,7 @@ public class MultiplayerRoomTests
     [Fact]
     public async Task RemovingAUserWhoNeverJoinedIsHarmless()
     {
-        var room = new Room(Guid.NewGuid(), TestObjects.ManagerService());
+        var room = new Room(Guid.NewGuid(), new HttpClient());
         var socket = new RecordingWebSocket();
         await room.GetOrAddUser("present", socket, "Present User");
         socket.ClearMessages();
@@ -536,7 +533,7 @@ public class MultiplayerRoomTests
     [Fact]
     public async Task RemovingUserBroadcastsDepartureToRemainingUsers()
     {
-        var room = new Room(Guid.NewGuid(), TestObjects.ManagerService());
+        var room = new Room(Guid.NewGuid(), new HttpClient());
         var leavingSocket = new RecordingWebSocket();
         var remainingSocket = new RecordingWebSocket();
         await room.GetOrAddUser("leaving", leavingSocket, "Leaving User");
@@ -580,7 +577,7 @@ public class MultiplayerControllerTests
     [Fact]
     public async Task CreateRoomReturnsTheRegisteredRoom()
     {
-        var manager = new MultiplayerManager(TestObjects.ManagerService());
+        var manager = new MultiplayerManager(new HttpClient());
         var controller = Controller(manager);
 
         var result = await controller.CreateRoom();
@@ -593,7 +590,7 @@ public class MultiplayerControllerTests
     [Fact]
     public async Task WebSocketEndpointsRejectRegularHttpRequests()
     {
-        var controller = Controller(new MultiplayerManager(TestObjects.ManagerService()));
+        var controller = Controller(new MultiplayerManager(new HttpClient()));
 
         Assert.IsType<BadRequestResult>(await controller.Rooms());
         Assert.IsType<BadRequestResult>(await controller.Join(Guid.NewGuid().ToString(), null));
@@ -602,7 +599,7 @@ public class MultiplayerControllerTests
     [Fact]
     public async Task AJoinThatFaultsStillTakesTheUserBackOutOfTheRoom()
     {
-        var manager = new MultiplayerManager(TestObjects.ManagerService());
+        var manager = new MultiplayerManager(new HttpClient());
         var roomId = await manager.CreateNewRoom();
         var room = manager.GetRoom(roomId)!;
 
@@ -622,7 +619,7 @@ public class MultiplayerControllerTests
     [Fact]
     public async Task AJoinWhoseReceiveFailsStillTakesTheUserBackOutOfTheRoom()
     {
-        var manager = new MultiplayerManager(TestObjects.ManagerService());
+        var manager = new MultiplayerManager(new HttpClient());
         var roomId = await manager.CreateNewRoom();
         var room = manager.GetRoom(roomId)!;
 
@@ -662,13 +659,6 @@ public class MultiplayerControllerTests
 
 internal static class TestObjects
 {
-    public static ManagerService ManagerService()
-    {
-        // MultiplayerManager and non-"add" room commands only retain this dependency;
-        // skipping its constructor keeps these unit tests offline and avoids background timers.
-        return (ManagerService)RuntimeHelpers.GetUninitializedObject(typeof(ManagerService));
-    }
-
     public static (VirtualPlayer Player, UserStore Store) Player()
     {
         var store = new UserStore();
@@ -676,8 +666,8 @@ internal static class TestObjects
     }
 
     /// <summary>
-    /// The frame with its trailing stamp checked and stripped, so the assertions below
-    /// can stay about the position rather than about a wall clock.
+    ///     The frame with its trailing stamp checked and stripped, so the assertions below
+    ///     can stay about the position rather than about a wall clock.
     /// </summary>
     public static string Unstamped(string frame)
     {
@@ -691,30 +681,19 @@ internal static class TestObjects
         return frame[..split];
     }
 
-    /// <summary>The same, over a whole transcript: only the frames that carry a position
-    /// are stamped, so the rest have to pass through untouched.</summary>
+    /// <summary>
+    ///     The same, over a whole transcript: only the frames that carry a position
+    ///     are stamped, so the rest have to pass through untouched.
+    /// </summary>
     public static IEnumerable<string> Unstamped(IEnumerable<string> frames)
     {
         return frames.Select(frame =>
             frame.StartsWith("seek ") || frame.StartsWith("sync ") ? Unstamped(frame) : frame);
     }
 
-    public static PlatformResult Result(string id)
+    public static TrackDto Result(string id)
     {
-        return new TestPlatformResult
-        {
-            ID = id,
-            Downloaders = [],
-            Name = id
-        };
-    }
-
-    private sealed class TestPlatformResult : PlatformResult
-    {
-        public override string GetDownloadUrl()
-        {
-            return ID;
-        }
+        return new TrackDto { Id = id, Name = id };
     }
 }
 

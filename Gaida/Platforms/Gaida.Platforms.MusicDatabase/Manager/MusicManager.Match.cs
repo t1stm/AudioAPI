@@ -24,6 +24,16 @@ public sealed record LocalMatch(
 
 public partial class MusicManager
 {
+    /// <summary>A weak match has to agree on length; a strong one never has to, since uploads carry intros.</summary>
+    public const double WeakDurationSeconds = 20;
+
+    /// <summary>An unrecognised bracket is a small doubt, not a disqualification.</summary>
+    private const double UnknownTagPenalty = 0.02;
+
+    private const double TitleWeight = 0.65;
+
+    private const double ArtistWeight = 0.35;
+
     // ponytail: calibration knobs, not constants of nature — re-run CalibrationTests over the library and
     // re-read the CSV whenever the library's tagging habits change. WeakMatch == StrongMatch switches the
     // weak band off with no branch to delete.
@@ -34,15 +44,6 @@ public partial class MusicManager
     // 0.72 runs roughly eight right to three wrong — honest enough for a prompt that says "possibly".
     public static double StrongMatch = 0.80;
     public static double WeakMatch = 0.72;
-
-    /// <summary>A weak match has to agree on length; a strong one never has to, since uploads carry intros.</summary>
-    public const double WeakDurationSeconds = 20;
-
-    /// <summary>An unrecognised bracket is a small doubt, not a disqualification.</summary>
-    private const double UnknownTagPenalty = 0.02;
-
-    private const double TitleWeight = 0.65;
-    private const double ArtistWeight = 0.35;
 
     /// <summary>
     ///     The library's answer to a YouTube result: the same recording, a plain copy of a tagged upload, or
@@ -150,6 +151,6 @@ public partial class MusicManager
 
     private static IReadOnlyList<string> Ordered(IEnumerable<string> tags)
     {
-        return tags.OrderBy(tag => tag, StringComparer.Ordinal).ToArray();
+        return [.. tags.OrderBy(tag => tag, StringComparer.Ordinal)];
     }
 }

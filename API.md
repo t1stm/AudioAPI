@@ -1,6 +1,6 @@
 # Public Audio API
 
-The production base URL is `https://api.gergov.bg`. All endpoints below are rooted at `/Audio` and use JSON unless they stream audio.
+The example production base URL is `https://api.example.com`. All endpoints below are rooted at `/Audio` and use JSON unless they stream audio.
 
 ## Discovery result
 
@@ -12,13 +12,17 @@ The production base URL is `https://api.gergov.bg`. All endpoints below are root
   "name": "Track title",
   "artist": "Artist name",
   "album": "Album title",
-  "contentUrl": "https://api.gergov.bg/Audio/DownloadRaw?id=audio%3A%2F%2Fexample-id",
+  "contentUrl": "https://api.example.com/Audio/DownloadRaw?id=audio%3A%2F%2Fexample-id",
   "duration": "00:03:45",
-  "thumbnailUrl": null
+  "thumbnailUrl": null,
+  "originalTitle": "Заглавие",
+  "originalArtist": "Изпълнител"
 }
 ```
 
-`id`, `name`, `artist`, `contentUrl`, and `duration` are always non-null. Local-library IDs always begin with `audio://`; YouTube IDs use `yt://`. `album` and `thumbnailUrl` may be `null`. `contentUrl` is an absolute downloadable raw-audio URL.
+`id`, `name`, `artist`, `contentUrl`, and `duration` are always non-null. Local-library IDs always begin with `audio://`; YouTube IDs use `yt://`. `album`, `thumbnailUrl`, `originalTitle` and `originalArtist` may be `null`. `contentUrl` is an absolute downloadable raw-audio URL.
+
+`originalTitle` and `originalArtist` carry the untransliterated title and artist as the source tagged them. **`name` and `artist` are sourced from them when present**, falling back to the romanized form, so a track tagged in Cyrillic or Japanese renders in its own script by default and `name` will usually equal `originalTitle`. The romanized form is not on the wire — it is used server-side for search and matching only. Clients that want the romanized string should not expect it here.
 
 - `Search` accepts normal text (including Cyrillic), local IDs, the server's `yt://` IDs, and playlist URLs.
 - `RandomResults` accepts `count` from 1 through 200, inclusive. An invalid count returns `400 {"error":{"code":"invalid_count","message":"..."}}`.
@@ -79,10 +83,41 @@ Responses are `Cache-Control: public, max-age=604800`. The cache directory comes
 
 This is what an embedded Discord activity uses for every thumbnail: the discovery endpoints hand out absolute ytimg and cover-host URLs, and the activity iframe can only reach hosts it has a URL mapping for.
 
+## Library tree
+
+`GET /Audio/Browse?path={folder}` returns one level of the local library's folder tree, so a client
+can open folders one at a time instead of pulling the whole thing. Omit `path`, or send an empty
+one, for the root.
+
+```json
+{
+  "path": "Bulgarian/Естрада",
+  "folders": [
+    { "name": "Братя Аргирови", "path": "Bulgarian/Естрада/Братя Аргирови", "songs": 5 }
+  ],
+  "files": []
+}
+```
+
+`folders` are the immediate subfolders, sorted case-insensitively; `songs` counts every track
+anywhere beneath the folder, not only the ones directly in it. `files` are the tracks sitting
+directly in `path`, as ordinary discovery results — the same shape `Search` returns, so a browsed
+track plays and queues exactly like a searched one. Only the local library is in the tree; there
+are no `yt://` results here.
+
+Leading, trailing and duplicated slashes are trimmed, and backslashes are read as separators. The
+answer never touches the filesystem — the path is matched against the in-memory library's stored
+locations — so a path nobody has, `..` included, is an empty folder rather than an error. There is
+no failure response.
+
 ## Audio downloads and CORS
 
 `GET /Audio/Download/{codec}/{bitrate}?id={id}` streams `Opus`, `Vorbis`, `FLAC`, `MP3`, or `AAC`; the frontend default is `/Audio/Download/Opus/112`. The stream advertises and supports standard HTTP `Range` requests; a seek request waits for the first cached encode to finish, then receives a normal `206` byte-range response. `DownloadRaw` is used by `contentUrl` and sends an attachment filename.
 
-`GET /Audio/Preload/{codec}/{bitrate}?id={id}` starts that same encode without a body, so a Download that follows finds it already running. `202` means this call started it, `200` that it was already under way — repeats are cheap and only push the encoder's expiry back. The frontend calls it 20 s before a track ends and when the skip button is hovered.
+`GET /Audio/Preload/{codec}/{bitrate}?id={id}` starts that same encode without a body, so a Download that follows finds it already running. `202` means this call started it, `200` that it was already under way — repeats are cheap and only push the cache entry's expiry back. The frontend calls it 20 s before a track ends and when the skip button is hovered.
 
-CORS allows the deployed `gergov.bg` frontend (including subdomains) and `localhost`, `127.0.0.1`, and `::1` Vite origins at any port. Additional exact origins may be configured with `Cors:AllowedOrigins`. Production absolute links come from `PublicApiBaseUrl` (default `https://api.gergov.bg`).
+Preload is not just a nicety: it moves the encode for the next track into the current track's playtime, which is what stops a multiplayer room from stampeding the encoder every time everyone advances at once.
+
+`Download`, `DownloadRaw` and `Preload` are served by the caching tier, which coalesces concurrent requests for the same `codec`/`bitrate`/`id` into a single encode and serves byte-range requests once an encode has finished. Range requests on an encode still in progress are answered `200` with `Accept-Ranges: none`; a completed one advertises `bytes` and answers `206`.
+
+CORS allows the deployed `example.com` frontend (including subdomains) and `localhost`, `127.0.0.1`, and `::1` Vite origins at any port. Additional exact origins may be configured with `Cors:AllowedOrigins`. Production absolute links come from `PublicApiBaseUrl` (example: `https://api.example.com`).

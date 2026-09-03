@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Gaida.API.Multiplayer.Handlers;
+namespace Selo.Multiplayer.Handlers;
 
 public class MessageQueue(UserStore store)
 {
@@ -28,11 +28,6 @@ public class MessageQueue(UserStore store)
         await Sync.WaitAsync();
         try
         {
-            // ponytail: one socket at a time. A room is a handful of listeners and the frames
-            // are a few dozen bytes, so Parallel.ForEachAsync was costing more per broadcast in
-            // scheduling and closure allocations than it saved in latency — and it waited for
-            // every send anyway, so a stalled peer blocked the room either way. Fan back out if
-            // rooms ever grow past a few dozen members.
             foreach (var (_, user) in store.Users)
                 try
                 {
@@ -40,11 +35,7 @@ public class MessageQueue(UserStore store)
                 }
                 catch (Exception)
                 {
-                    // A peer that dropped between the state check and the send must not take the frame
-                    // away from everybody after it in the enumeration: one bad connection used to leave
-                    // the rest of the room without the `seek` or `playing` that had just gone out, and
-                    // they stayed at the old position until something else moved the clock. The socket's
-                    // own read loop reaps it from the store on its way out.
+                    // a user went kaboom, will be removed on next heartbeat by other handlers
                 }
         }
         finally

@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
 
-namespace Gaida.API.Multiplayer;
+namespace Selo.Multiplayer;
 
-public class MultiplayerManager(ManagerService managerService)
+public class MultiplayerManager(HttpClient gaida)
 {
     // concurrent so the room-list socket can serialise the collection while another request
     // creates a room, which the dictionary-plus-semaphore pair never actually guarded
@@ -15,7 +15,7 @@ public class MultiplayerManager(ManagerService managerService)
     {
         var guid = Guid.NewGuid();
 
-        Rooms.TryAdd(guid, new Room(guid, managerService)
+        Rooms.TryAdd(guid, new Room(guid, gaida)
         {
             OnInfoModified = () => RoomsChanged?.Invoke(),
             OnEmptied = () => RemoveRoom(guid)

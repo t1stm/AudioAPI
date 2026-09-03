@@ -1,14 +1,14 @@
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
 
-namespace Gaida.API.Multiplayer.Handlers;
+namespace Selo.Multiplayer.Handlers;
 
 public class UserStore
 {
     /// <summary>
-    /// The live members. Concurrent because the broadcast path walks it on every frame while
-    /// connections are still joining and leaving — under the old dictionary-plus-semaphore that
-    /// walk was unsynchronised and a join landing mid-broadcast could tear the enumeration.
+    ///     The live members. Concurrent because the broadcast path walks it on every frame while
+    ///     connections are still joining and leaving — under the old dictionary-plus-semaphore that
+    ///     walk was unsynchronised and a join landing mid-broadcast could tear the enumeration.
     /// </summary>
     public ConcurrentDictionary<string, User> Users { get; } = new();
 

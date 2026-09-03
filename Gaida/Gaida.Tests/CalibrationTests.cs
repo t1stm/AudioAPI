@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using Gaida.Platforms.MusicDatabase;
 using Gaida.Platforms.MusicDatabase.Manager;
 
 namespace Gaida.Tests;
@@ -18,8 +17,11 @@ namespace Gaida.Tests;
 ///     </para>
 ///     <para>
 ///         Run it with the library and cache pointed at:
-///         <c>STORAGE=~/Music YOUTUBE_CACHE_DB=./cache/YouTube.json VARIANT_CALIBRATION_CSV=/tmp/variants.csv
-///         dotnet test --filter CalibrationPass</c>. Without those it is a no-op, so ordinary runs stay green.
+///         <c>
+///             STORAGE=~/Music YOUTUBE_CACHE_DB=./cache/YouTube.json VARIANT_CALIBRATION_CSV=/tmp/variants.csv
+///             dotnet test --filter CalibrationPass
+///         </c>
+///         . Without those it is a no-op, so ordinary runs stay green.
 ///     </para>
 /// </summary>
 public class CalibrationTests
@@ -72,7 +74,7 @@ public class CalibrationTests
 
                 scored++;
                 csv.Append(CultureInfo.InvariantCulture,
-                    $"{match.Score:F3},{match.Kind},{string.Join(' ', match.YouTubeTags)},")
+                        $"{match.Score:F3},{match.Kind},{string.Join(' ', match.YouTubeTags)},")
                     .Append(CultureInfo.InvariantCulture,
                         $"{string.Join(' ', match.LibraryTags)},{match.DurationDelta.TotalSeconds:F0},")
                     .Append(CultureInfo.InvariantCulture,
@@ -112,6 +114,9 @@ public class CalibrationTests
     /// <summary>Loads the real library without the cover extraction pass, which writes files this does not want.</summary>
     private sealed class CalibrationMusicManager() : MusicManager(Serilog.Core.Logger.None)
     {
-        public Task LoadLibrary() => Load();
+        public Task LoadLibrary()
+        {
+            return Load();
+        }
     }
 }

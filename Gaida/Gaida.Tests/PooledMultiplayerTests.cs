@@ -1,8 +1,8 @@
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
-using Gaida.API.Controllers.Helpers;
-using Gaida.API.Multiplayer;
+using Selo.Controllers.Helpers;
+using Selo.Multiplayer;
 
 namespace Gaida.Tests;
 
@@ -45,7 +45,7 @@ public class Utf8MessageTests
         using var message = new Utf8Message(4);
         message.Write("queue "u8);
 
-        using (var writer = new Utf8JsonWriter(message, Gaida.Core.Platforms.CustomSerializer.WriterOptions))
+        using (var writer = new Utf8JsonWriter(message, CustomSerializer.WriterOptions))
         {
             JsonSerializer.Serialize(writer, new[] { "a+b", "&" });
         }
@@ -91,15 +91,28 @@ public class WebSocketTextReaderFrameTests
         public override WebSocketState State => WebSocketState.Open;
         public override string? SubProtocol => null;
 
-        public override void Abort() { }
-        public override void Dispose() { }
+        public override void Abort()
+        {
+        }
 
-        public override Task CloseAsync(WebSocketCloseStatus s, string? d, CancellationToken t) => Task.CompletedTask;
-        public override Task CloseOutputAsync(WebSocketCloseStatus s, string? d, CancellationToken t) =>
-            Task.CompletedTask;
+        public override void Dispose()
+        {
+        }
 
-        public override Task<WebSocketReceiveResult> ReceiveAsync(ArraySegment<byte> buffer, CancellationToken token) =>
+        public override Task CloseAsync(WebSocketCloseStatus s, string? d, CancellationToken t)
+        {
+            return Task.CompletedTask;
+        }
+
+        public override Task CloseOutputAsync(WebSocketCloseStatus s, string? d, CancellationToken t)
+        {
+            return Task.CompletedTask;
+        }
+
+        public override Task<WebSocketReceiveResult> ReceiveAsync(ArraySegment<byte> buffer, CancellationToken token)
+        {
             throw new NotSupportedException();
+        }
 
         public override ValueTask<ValueWebSocketReceiveResult> ReceiveAsync(Memory<byte> buffer,
             CancellationToken cancellationToken)
@@ -112,10 +125,15 @@ public class WebSocketTextReaderFrameTests
                 new ValueWebSocketReceiveResult(count, WebSocketMessageType.Text, offset >= payload.Length));
         }
 
-        public override Task SendAsync(ArraySegment<byte> b, WebSocketMessageType t, bool e, CancellationToken c) =>
-            Task.CompletedTask;
+        public override Task SendAsync(ArraySegment<byte> b, WebSocketMessageType t, bool e, CancellationToken c)
+        {
+            return Task.CompletedTask;
+        }
 
         public override ValueTask SendAsync(ReadOnlyMemory<byte> b, WebSocketMessageType t, bool e,
-            CancellationToken c) => ValueTask.CompletedTask;
+            CancellationToken c)
+        {
+            return ValueTask.CompletedTask;
+        }
     }
 }

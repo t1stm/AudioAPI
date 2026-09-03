@@ -39,6 +39,15 @@ public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlayli
     protected override List<SearchProvider> SearchProviders { get; set; }
     protected override List<ContentGetter> ContentDownloaders { get; set; }
 
+    public async IAsyncEnumerable<PlatformResult> SearchPlaylist(string playlist,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        Logger.Debug("Searching for playlist: {Playlist}", playlist);
+        await foreach (var result in FirstProviderWithResults<ISupportsPlaylist>(
+                           (provider, token) => provider.SearchPlaylist(playlist, token), cancellationToken))
+            yield return result;
+    }
+
     /// <summary>Random picks come from what earlier searches already cached, so discovery costs no YouTube call.</summary>
     public async IAsyncEnumerable<PlatformResult> GetRandomResults(int count,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -49,15 +58,6 @@ public sealed partial class YouTube : Platform, ISupportsSearch, ISupportsPlayli
             result.Downloaders = ContentDownloaders;
             yield return result;
         }
-    }
-
-    public async IAsyncEnumerable<PlatformResult> SearchPlaylist(string playlist,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        Logger.Debug("Searching for playlist: {Playlist}", playlist);
-        await foreach (var result in FirstProviderWithResults<ISupportsPlaylist>(
-                           (provider, token) => provider.SearchPlaylist(playlist, token), cancellationToken))
-            yield return result;
     }
 
     public async IAsyncEnumerable<PlatformResult> SearchKeywords(string keywords,

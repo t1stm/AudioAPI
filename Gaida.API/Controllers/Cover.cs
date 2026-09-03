@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Gaida.API.Contracts;
 using Microsoft.AspNetCore.Mvc;
+using SFile = System.IO.File;
 
 namespace Gaida.API.Controllers;
 
@@ -14,6 +15,9 @@ namespace Gaida.API.Controllers;
 [Route("[controller]")]
 public class Cover(ILogger<Cover> logger, IConfiguration configuration) : ControllerBase
 {
+    /// <summary>Artwork is small and immutable in practice, but a re-extracted local cover should still land within a week.</summary>
+    private const string CacheControl = "public, max-age=604800";
+
     /// <summary>Everything upstream actually serves; anything else is stored and served back as JPEG.</summary>
     private static readonly Dictionary<string, string> ImageTypes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -24,9 +28,6 @@ public class Cover(ILogger<Cover> logger, IConfiguration configuration) : Contro
     };
 
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
-
-    /// <summary>Artwork is small and immutable in practice, but a re-extracted local cover should still land within a week.</summary>
-    private const string CacheControl = "public, max-age=604800";
 
     private string CacheDirectory =>
         configuration["THUMBNAIL_CACHE"] is { Length: > 0 } configured
@@ -113,7 +114,7 @@ public class Cover(ILogger<Cover> logger, IConfiguration configuration) : Contro
 
         try
         {
-            await using (var file = System.IO.File.Create(temporaryPath))
+            await using (var file = SFile.Create(temporaryPath))
             {
                 int read;
                 while ((read = await source.ReadAsync(buffer, cancellationToken)) > 0)
@@ -127,11 +128,11 @@ public class Cover(ILogger<Cover> logger, IConfiguration configuration) : Contro
                 complete = true;
             }
 
-            System.IO.File.Move(temporaryPath, cachePath, true);
+            SFile.Move(temporaryPath, cachePath, true);
         }
         finally
         {
-            if (!complete) System.IO.File.Delete(temporaryPath);
+            if (!complete) SFile.Delete(temporaryPath);
         }
     }
 

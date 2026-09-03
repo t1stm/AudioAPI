@@ -21,12 +21,6 @@ public abstract class Platform : ISupportsID
     public virtual HashSet<string>.AlternateLookup<ReadOnlySpan<char>> SearchPlaylistIdentifiersLookup =>
         SearchPlaylistIdentifiers.GetAlternateLookup<ReadOnlySpan<char>>();
 
-    /// <summary>Whether this platform recognises the query as one of its playlist URLs.</summary>
-    public virtual bool IsPlaylistUrl(ReadOnlySpan<char> query)
-    {
-        return false;
-    }
-
     protected abstract List<SearchProvider> SearchProviders { get; set; }
     protected abstract List<ContentGetter> ContentDownloaders { get; set; }
 
@@ -46,10 +40,16 @@ public abstract class Platform : ISupportsID
         return null;
     }
 
+    /// <summary>Whether this platform recognises the query as one of its playlist URLs.</summary>
+    public virtual bool IsPlaylistUrl(ReadOnlySpan<char> query)
+    {
+        return false;
+    }
+
     public virtual void Initialize()
     {
-        SearchProviders = SearchProviders.OrderByDescending(x => x.Priority).ToList();
-        ContentDownloaders = ContentDownloaders.OrderByDescending(x => x.Priority).ToList();
+        SearchProviders = [.. SearchProviders.OrderByDescending(x => x.Priority)];
+        ContentDownloaders = [.. ContentDownloaders.OrderByDescending(x => x.Priority)];
 
         SearchProviders.ForEach(s => s.RegisterContentDownloaders(ContentDownloaders));
     }

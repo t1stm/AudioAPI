@@ -1,7 +1,7 @@
 using System.Globalization;
 using Gaida.API.Contracts;
-using Gaida.Platforms.MusicDatabase;
-using Gaida.Platforms.MusicDatabase.Manager;
+using Gaida.Core;
+using Gaida.Core.Platforms;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Gaida.API.Controllers;
@@ -19,19 +19,22 @@ public class Query(ILogger<Query> logger, IConfiguration configuration, IHostEnv
     public async Task<ActionResult<QueryResolutionDto>> FindQueryType(string? query,
         [FromServices] ManagerService managerService)
     {
-        var parsed = QueryParser.Parse(query);
-        if (parsed.Kind == ParsedQueryKind.Invalid)
-            return BadRequest(Error("invalid_query", parsed.ErrorMessage!));
+        if (string.IsNullOrWhiteSpace(query))
+            return BadRequest(Error("invalid_query", "Query is required."));
 
+        var trimmed = query.Trim();
         try
         {
-            return parsed.Kind switch
+            // Fanned out across every platform pod's /classify: first claim wins, and nobody claiming means
+            // an ordinary keyword search — the one classification rule left in Gaida.
+            var claim = await managerService.Manager.ClassifyAsync(trimmed, HttpContext.RequestAborted);
+            if (claim.Error is not null) return BadRequest(Error("invalid_query", claim.Error));
+
+            return claim.Kind switch
             {
-                ParsedQueryKind.Search => Ok(new QueryResolutionDto { Kind = "search", Query = parsed.Query }),
-                ParsedQueryKind.Local => await ResolveOne("local", parsed.Query, managerService),
-                ParsedQueryKind.YouTubeVideo => await ResolveOne("youtubeVideo", parsed.Query, managerService),
-                ParsedQueryKind.YouTubePlaylist => await ResolvePlaylist(parsed, managerService),
-                _ => BadRequest(Error("invalid_query", "The query is not supported."))
+                QueryType.ID => await ResolveOne(KindOf(claim.Query), claim.Query, managerService),
+                QueryType.Playlist => await ResolvePlaylist(claim.Query, managerService),
+                _ => Ok(new QueryResolutionDto { Kind = "search", Query = trimmed })
             };
         }
         catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
@@ -40,7 +43,7 @@ public class Query(ILogger<Query> logger, IConfiguration configuration, IHostEnv
         }
         catch (Exception exception)
         {
-            logger.LogError(exception, "Failed to resolve query {Query}", parsed.Query);
+            logger.LogError(exception, "Failed to resolve query {Query}", trimmed);
             return StatusCode(StatusCodes.Status503ServiceUnavailable,
                 Error("resolver_unavailable", "The query resolver is temporarily unavailable."));
         }
@@ -48,7 +51,7 @@ public class Query(ILogger<Query> logger, IConfiguration configuration, IHostEnv
 
     /// <summary>
     ///     Searches the local library only: the client sends the title rather than an ID, so this touches
-    ///     nothing but the in-memory song list and can run after every roll.
+    ///     nothing but the local pod's in-memory song list and can run after every roll.
     /// </summary>
     [HttpGet]
     [Route("/Audio/Local/Variant")]
@@ -56,7 +59,7 @@ public class Query(ILogger<Query> logger, IConfiguration configuration, IHostEnv
     [ProducesResponseType<LocalVariantDto>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ApiErrorBody>(StatusCodes.Status400BadRequest)]
-    public ActionResult<LocalVariantDto> LocalVariant(string? name, string? artist, string? duration,
+    public async Task<ActionResult<LocalVariantDto>> LocalVariant(string? name, string? artist, string? duration,
         [FromServices] ManagerService managerService)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -67,28 +70,25 @@ public class Query(ILogger<Query> logger, IConfiguration configuration, IHostEnv
             !TimeSpan.TryParse(duration, CultureInfo.InvariantCulture, out length))
             return BadRequest(Error("invalid_query", "The duration must look like 00:04:32."));
 
-        var found = managerService.Manager.GetPlatform<MusicDatabase>().FindLocalVariant(name, artist, length);
-        if (found is null) return NoContent();
+        if (managerService.Manager.PlatformFor("audio://") is not HttpPlatform local) return NoContent();
 
-        var (match, result) = found.Value;
-        var mapped = DiscoveryResultMapper.Map(result, Request, configuration, environment);
+        var found = await local.VariantAsync(name, artist, length, HttpContext.RequestAborted);
+        if (found?.Result is null) return NoContent();
+
+        var mapped = ToSearchResult(found.Result);
         if (mapped is null) return NoContent();
 
         return Ok(new LocalVariantDto(
-            match.Kind switch
-            {
-                LocalMatchKind.Same => "same",
-                LocalMatchKind.Variant => "variant",
-                _ => "weak"
-            },
-            Math.Round(match.Score, 3),
-            (int)Math.Round(match.DurationDelta.TotalSeconds),
-            match.YouTubeTags,
-            match.LibraryTags,
+            found.Match ?? "weak",
+            Math.Round(found.Score, 3),
+            found.DurationDeltaSeconds,
+            found.YouTubeTags ?? [],
+            found.LibraryTags ?? [],
             mapped));
     }
 
-    private async Task<ActionResult<QueryResolutionDto>> ResolveOne(string kind, string id, ManagerService managerService)
+    private async Task<ActionResult<QueryResolutionDto>> ResolveOne(string kind, string id,
+        ManagerService managerService)
     {
         var result = await managerService.Manager.SearchID(id, HttpContext.RequestAborted);
         if (result is null) return NotFound(Error("not_found", "No result was found for this ID."));
@@ -99,10 +99,11 @@ public class Query(ILogger<Query> logger, IConfiguration configuration, IHostEnv
             : Ok(new QueryResolutionDto { Kind = kind, Query = id, Result = mapped });
     }
 
-    private async Task<ActionResult<QueryResolutionDto>> ResolvePlaylist(ParsedQuery parsed, ManagerService managerService)
+    private async Task<ActionResult<QueryResolutionDto>> ResolvePlaylist(string playlistUrl,
+        ManagerService managerService)
     {
         var results = new List<SearchResultDto>();
-        await foreach (var result in managerService.Manager.SearchPlaylist(parsed.Query, HttpContext.RequestAborted))
+        await foreach (var result in managerService.Manager.SearchPlaylist(playlistUrl, HttpContext.RequestAborted))
         {
             var mapped = DiscoveryResultMapper.Map(result, Request, configuration, environment);
             if (mapped is not null) results.Add(mapped);
@@ -111,11 +112,62 @@ public class Query(ILogger<Query> logger, IConfiguration configuration, IHostEnv
         return Ok(new QueryResolutionDto
         {
             Kind = "youtubePlaylist",
-            Query = parsed.Query,
-            PlaylistId = parsed.PlaylistId,
+            Query = playlistUrl,
+            PlaylistId = ExtractPlaylistId(playlistUrl),
             Results = results
         });
     }
 
-    private static ApiErrorBody Error(string code, string message) => new(new ApiError(code, message));
+    private SearchResultDto? ToSearchResult(PodResultDto dto)
+    {
+        // The local pod's own conversion lives on HttpPlatform; this is the one-off case where a
+        // sub-resource (the variant's matched track) needs the same treatment without a full search.
+        return DiscoveryResultMapper.Map(new HttpResult
+        {
+            ID = dto.Id ?? "",
+            Name = dto.Name,
+            Artist = dto.Artist,
+            Album = dto.Album,
+            Duration = TimeSpan.TryParse(dto.Duration, CultureInfo.InvariantCulture, out var d) ? d : TimeSpan.Zero,
+            ThumbnailUrl = dto.ThumbnailUrl,
+            OriginalTitle = dto.OriginalTitle,
+            OriginalArtist = dto.OriginalArtist,
+            Downloaders = []
+        }, Request, configuration, environment);
+    }
+
+    /// <summary>
+    ///     The response's <c>kind</c> for a resolved ID, read off its protocol prefix — display metadata,
+    ///     not routing (routing already happened via <c>/classify</c>).
+    /// </summary>
+    private static string KindOf(string id)
+    {
+        return id switch
+        {
+            _ when id.StartsWith("audio://", StringComparison.Ordinal) => "local",
+            _ when id.StartsWith("yt://", StringComparison.Ordinal) => "youtubeVideo",
+            _ => "id"
+        };
+    }
+
+    /// <summary>
+    ///     Pulls a YouTube-style <c>list=</c> parameter off a normalized playlist URL, for the
+    ///     <c>playlistId</c> field the public contract documents. Best-effort: null when the pod's normalized
+    ///     form does not carry one.
+    /// </summary>
+    private static string? ExtractPlaylistId(string url)
+    {
+        var index = url.IndexOf("list=", StringComparison.Ordinal);
+        if (index < 0) return null;
+
+        var start = index + "list=".Length;
+        var end = url.IndexOfAny(['&', '#'], start);
+        var value = end < 0 ? url[start..] : url[start..end];
+        return Uri.UnescapeDataString(value);
+    }
+
+    private static ApiErrorBody Error(string code, string message)
+    {
+        return new ApiErrorBody(new ApiError(code, message));
+    }
 }

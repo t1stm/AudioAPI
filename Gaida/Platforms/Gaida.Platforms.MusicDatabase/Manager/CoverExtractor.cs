@@ -34,7 +34,7 @@ public class CoverExtractor
         {
             var location = info.ToMusicResult([]).Path;
             var image = Flac.GetImageFromFile(location) ?? WavPack.GetImageFromFile(location) ??
-                        Id3V2.GetImageFromTag(location);
+                Id3V2.GetImageFromTag(location);
             if (image is null) continue;
 
             var hash = Convert.ToHexStringLower(SHA1.HashData(image));

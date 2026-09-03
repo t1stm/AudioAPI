@@ -13,9 +13,9 @@ public static class CustomSerializer
     };
 
     /// <summary>
-    /// For serializing into a caller-owned <see cref="Utf8JsonWriter" />: that overload takes
-    /// its escaping from the writer, not from <see cref="SerializerOptions" />, so the encoder
-    /// has to be repeated here or the output quietly changes.
+    ///     For serializing into a caller-owned <see cref="Utf8JsonWriter" />: that overload takes
+    ///     its escaping from the writer, not from <see cref="SerializerOptions" />, so the encoder
+    ///     has to be repeated here or the output quietly changes.
     /// </summary>
     public static readonly JsonWriterOptions WriterOptions = new()
     {

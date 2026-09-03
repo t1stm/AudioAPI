@@ -16,7 +16,10 @@ public class Player(VoiceConnection connection, DiscordMessage message)
     {
         var writer = Connection.CreateAudioWriter(AudioFormat.Float32LE48KHzStereoPCM);
 
-        var ffmpeg = new FFmpegEncoder();
-        ffmpeg.Convert("-f f32le -ar 48000 -ac 2");
+        // ponytail: unfinished — nothing ever fed the old encoder either, so there is no behaviour
+        // to preserve here, only the call shape. FFmpegEncoder is now static and stream-based:
+        //   await FFmpegEncoder.EncodeAsync(source, writer, "-f f32le -ar 48000 -ac 2", token);
+        // Wire `source` from PlayerQueue and `writer` to a Stream, and this becomes one line.
+        await Task.CompletedTask;
     }
 }

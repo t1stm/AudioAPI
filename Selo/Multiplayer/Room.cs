@@ -1,21 +1,22 @@
 using System.Net.WebSockets;
+using System.Text.Json;
 using System.Text.Json.Serialization;
-using Gaida.API.Multiplayer.Handlers;
+using Selo.Multiplayer.Handlers;
 
-namespace Gaida.API.Multiplayer;
+namespace Selo.Multiplayer;
 
 public class Room
 {
-    protected readonly ManagerService ManagerService;
+    protected readonly HttpClient Gaida;
     [JsonIgnore] protected readonly VirtualPlayer Player;
     [JsonIgnore] protected readonly MessageQueue Queue;
 
     [JsonIgnore] protected readonly UserStore Store;
 
-    public Room(Guid guid, ManagerService managerService)
+    public Room(Guid guid, HttpClient gaida)
     {
         RoomID = guid;
-        ManagerService = managerService;
+        Gaida = gaida;
         RoomName = guid.ToString();
 
         Store = new UserStore();
@@ -41,13 +42,8 @@ public class Room
     ///     Raised once the last member is gone, so an abandoned room does not sit in the list — and
     ///     hold its queue and its clock — for the life of the process.
     /// </summary>
-    /// <remarks>
-    ///     ponytail: fires the moment the room empties, so a solo member whose connection blips
-    ///     loses the room rather than reconnecting into it. Give the room a retain window and this
-    ///     becomes "empty since when": stamp the time here and let the manager sweep the rooms that
-    ///     have been empty longer than they are allowed to be.
-    /// </remarks>
-    [JsonIgnore] public Action? OnEmptied { get; init; }
+    [JsonIgnore]
+    public Action? OnEmptied { get; init; }
 
     public ValueTask<User> GetOrAddUser(string id, WebSocket webSocket, string? initialUsername)
     {
@@ -65,16 +61,15 @@ public class Room
     public async Task RemoveUser(string id)
     {
         var user = Store.GetUser(id);
-        // a socket can close without ever having joined — nothing left, so
-        // nothing to announce and no barrier that could have changed
+        // a socket can close without ever having joined, so let's just return in that case
         if (user is null) return;
 
         await Store.RemoveUser(id);
         await Queue.Send($"chat System %% User '{user.ChatUsername}' left from the session.");
         await Player.UserLeft(id);
 
-        // last one out: announced to the room first, because after this the room is gone
-        if (Store.Count == 0) OnEmptied?.Invoke();
+        if (Store.Count == 0)
+            OnEmptied?.Invoke();
     }
 
     public Task HandleUserMessage(User user, string message)
@@ -83,9 +78,9 @@ public class Room
     }
 
     /// <summary>
-    /// Takes the frame as memory over the reader's buffer: splitting a command used to cut two
-    /// strings out of every inbound message, and this path runs once per keystroke-rate action
-    /// from every member of every room.
+    ///     Takes the frame as memory over the reader's buffer: splitting a command used to cut two
+    ///     strings out of every inbound message, and this path runs once per keystroke-rate action
+    ///     from every member of every room.
     /// </summary>
     public Task HandleUserMessage(User user, ReadOnlyMemory<char> message)
     {
@@ -96,46 +91,38 @@ public class Room
             : HandleParameterlessMessages(message, user);
     }
 
-    // deliberately not async: the switch dispatches on a span, and every arm is already a Task,
-    // so returning them directly skips a state machine per message
     protected Task HandleParameterMessages(ReadOnlyMemory<char> name, ReadOnlyMemory<char> value, User user)
     {
-        switch (name.Span)
+        return name.Span switch
         {
-            case "add":
-                return Enqueue(value.ToString());
-
-            case "setnext":
-                return int.TryParse(value.Span, out var nextIndex) ? Player.SetNext(nextIndex) : Task.CompletedTask;
-
-            case "skipto":
-                return int.TryParse(value.Span, out var skipIndex) ? Player.SkipTo(skipIndex) : Task.CompletedTask;
-
-            case "seek":
-                return double.TryParse(value.Span, out var seekSeconds)
-                    ? Player.SeekTo(seekSeconds)
-                    : Task.CompletedTask;
-
-            case "remove":
-                return int.TryParse(value.Span, out var removeIndex) ? Player.Remove(removeIndex) : Task.CompletedTask;
-
-            case "chat":
-                return Queue.Send($"chat {user.ChatUsername} %% {value}");
-
-            case "updateroom":
-                return HandleUpdateRoom(value, user);
-
-            default:
-                return Task.CompletedTask;
-        }
+            "add" => Enqueue(value.ToString()),
+            "setnext" when int.TryParse(value.Span, out var nextIndex) => Player.SetNext(nextIndex),
+            "skipto" when int.TryParse(value.Span, out var skipIndex) => Player.SkipTo(skipIndex),
+            "seek" when double.TryParse(value.Span, out var seekSeconds) => Player.SeekTo(seekSeconds),
+            "remove" when int.TryParse(value.Span, out var removeIndex) => Player.Remove(removeIndex),
+            "chat" => Queue.Send($"chat {user.ChatUsername} %% {value}"),
+            "updateroom" => HandleUpdateRoom(value, user),
+            _ => Task.CompletedTask
+        };
     }
 
     protected async Task Enqueue(string id)
     {
-        var result = await ManagerService.Manager.SearchID(id);
+        SearchResultDto[]? results;
+        try
+        {
+            results = await Gaida.GetFromJsonAsync<SearchResultDto[]>(
+                $"/Audio/Search?query={Uri.EscapeDataString(id)}");
+        }
+        catch (Exception exception) when (exception is HttpRequestException or JsonException or TaskCanceledException)
+        {
+            return;
+        }
+
+        var result = results?.FirstOrDefault();
         if (result is null) return;
 
-        await Player.Enqueue(result);
+        await Player.Enqueue(result.ToTrack());
     }
 
     protected Task HandleUpdateRoom(ReadOnlyMemory<char> value, User user)
@@ -167,35 +154,18 @@ public class Room
 
     protected Task HandleParameterlessMessages(ReadOnlyMemory<char> name, User user)
     {
-        switch (name.Span)
+        return name.Span switch
         {
-            case "end":
-                return Player.SetFinished(user.ID);
-
-            case "next":
-                return Player.Next();
-
-            case "previous":
-                return Player.Previous();
-
-            case "playpause":
-                return Player.TogglePlaying();
-
-            case "stop":
-                return Player.Stop();
-
-            case "shuffle":
-                return Player.Shuffle();
-
-            case "loaded":
-                return Player.SetLoaded(user.ID);
-
-            case "sync":
-                return SyncTo(user);
-
-            default:
-                return Task.CompletedTask;
-        }
+            "end" => Player.SetFinished(user.ID),
+            "next" => Player.Next(),
+            "previous" => Player.Previous(),
+            "playpause" => Player.TogglePlaying(),
+            "stop" => Player.Stop(),
+            "shuffle" => Player.Shuffle(),
+            "loaded" => Player.SetLoaded(user.ID),
+            "sync" => SyncTo(user),
+            _ => Task.CompletedTask
+        };
     }
 
     protected Task SyncTo(User user)

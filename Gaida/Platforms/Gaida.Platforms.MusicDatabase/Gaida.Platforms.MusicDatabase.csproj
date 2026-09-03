@@ -7,11 +7,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Gaida.Core\Gaida.Core.csproj" />
+    <ProjectReference Include="..\..\Gaida.Core\Gaida.Core.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="taglib-sharp-netstandard2.0" Version="2.1.0" />
+    <PackageReference Include="taglib-sharp-netstandard2.0" Version="2.1.0"/>
   </ItemGroup>
 
 </Project>
