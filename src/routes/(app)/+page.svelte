@@ -14,7 +14,7 @@
 	import Song from '$components/home/song/Song.svelte';
 	import ArtistLink from '$components/ArtistLink.svelte';
 
-	import { Icon, Link, Play, ArrowPath } from 'svelte-hero-icons';
+	import { ArrowPath, FolderOpen, Icon, Link, Play } from 'svelte-hero-icons';
 
 	const { data }: { data: PageData } = $props();
 
@@ -408,7 +408,16 @@
 	{/if}
 
 	<section>
-		<h2 class="eyebrow mb-3">Artists in the library</h2>
+		<div class="mb-3 flex items-center gap-3">
+			<h2 class="eyebrow">Artists in the library</h2>
+			<!-- The tags above are the 200-track sample's heaviest names; this is the whole
+			     thing, in the folders it is actually stored in. -->
+			<a
+				href={resolve('/browse')}
+				class="inline-flex min-h-9 items-center gap-1.5 rounded-[5px] border border-haze px-2.5 py-1 text-xs font-semibold text-chalk hover:border-gold hover:text-gold"
+				><Icon src={FolderOpen} mini size="14" /> Browse by folder</a
+			>
+		</div>
 		<div class="flex flex-wrap gap-2">
 			{#each artists as [artist, count] (artist)}
 				<a

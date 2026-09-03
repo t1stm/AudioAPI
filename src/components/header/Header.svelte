@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Beaker, Cloud, Icon, MagnifyingGlass, User } from 'svelte-hero-icons';
+	import { Beaker, Cloud, FolderOpen, Icon, MagnifyingGlass, User } from 'svelte-hero-icons';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import session from '$states/session.svelte';
@@ -26,18 +26,36 @@
 	class="box-border flex h-12 w-full shrink-0 justify-center bg-surface-0 px-3 py-1.5 micro:hidden sm:h-14 sm:px-4 sm:py-2"
 >
 	<div class="flex h-full w-full justify-between gap-2">
-		<a
-			href={resolve('/')}
-			class="flex items-center gap-1.5 rounded-row outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-		>
-			<span class="hidden font-display text-lg font-extralight tracking-tight text-chalk sm:inline"
-				>music<b class="font-medium text-primary-500">rain</b></span
+		<!-- The mark and the way into the library travel together: one flex child, so
+		     justify-between distributes its space around the pair instead of pushing the
+		     folder off towards the search field. -->
+		<div class="flex shrink-0 items-center gap-2 sm:mr-2">
+			<a
+				href={resolve('/')}
+				class="flex items-center gap-1.5 rounded-row outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
 			>
-			<Icon src={Cloud} solid class="size-6 shrink-0 text-primary-500" />
-			{#if isAlpha}
-				<Icon src={Beaker} micro class="mt-auto mb-1 hidden size-3.5 text-fog sm:block" />
-			{/if}
-		</a>
+				<span class="hidden font-display text-lg font-extralight tracking-tight text-chalk sm:inline"
+					>music<b class="font-medium text-primary-500">rain</b></span
+				>
+				<Icon src={Cloud} solid class="size-6 shrink-0 text-primary-500" />
+				{#if isAlpha}
+					<Icon src={Beaker} micro class="mt-auto mb-1 hidden size-3.5 text-fog sm:block" />
+				{/if}
+			</a>
+
+			<!-- Gold is the library everywhere in this app, so the way into it is gold on hover.
+			     Hidden below sm: the header is a logo, a search field and a face at 320px, and the
+			     home page carries the same link. -->
+			<a
+				href={resolve('/browse')}
+				aria-label="Browse the library by folder"
+				class="hidden size-10 shrink-0 items-center justify-center rounded-row border border-haze text-fog outline-none hover:border-gold hover:text-gold focus-visible:ring-2 focus-visible:ring-primary-500 sm:flex"
+				class:border-gold={page.url.pathname.startsWith('/browse')}
+				class:text-gold={page.url.pathname.startsWith('/browse')}
+			>
+				<Icon src={FolderOpen} micro size="20" />
+			</a>
+		</div>
 
 		<form class="flex gap-2 w-full max-w-lg" action="/search">
 			<input

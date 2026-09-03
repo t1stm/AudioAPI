@@ -64,6 +64,23 @@ export async function findQueryType(query: string, fetcher?: Fetcher) {
 	return resolution;
 }
 
+/** A subfolder of the library tree. `songs` counts everything beneath it, not just its own files. */
+export type BrowseFolder = { name: string; path: string; songs: number };
+
+/** One level of the tree: what sits directly inside `path`. */
+export type BrowseLevel = { path: string; folders: BrowseFolder[]; files: SearchResult[] };
+
+/**
+ * One level of the library's folder tree. The explorer calls this once per folder someone
+ * opens, so a library of any depth costs one small request at a time.
+ */
+export async function getBrowse(path: string, fetcher: Fetcher) {
+	const level = await getJson<BrowseLevel>(fetcher, `/Browse?path=${encodeURIComponent(path)}`);
+	level.files = proxyThumbnails(level.files);
+
+	return level;
+}
+
 export type LocalVariant = {
 	/** `same` recording, a `variant` take, or a `weak` guess that says so. */
 	match: 'same' | 'variant' | 'weak';
