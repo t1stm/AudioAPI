@@ -138,17 +138,22 @@
 		artistsLoading = false;
 	}
 
-	data.hero.then((song) => {
-		hero = song;
-		heroLoading = false;
-		if (song) lookUpVariant(song, rollToken);
-	});
-	fill(curated, data.picks).catch(() => {});
-	data.artistSongs.then((stream) => (stream ? fill(artistSongs, stream) : (artistSongs.length = 0))).catch(() => {});
-	countArtists();
-
+	// The requests are already in flight from the load function; this is where what
+	// they carry starts landing in the page. In onMount rather than beside it, so the
+	// slot arrays are read when they are handed over rather than captured at init.
 	onMount(() => {
 		recentlyPlayed = getRecentlyPlayed();
+
+		data.hero.then((song) => {
+			hero = song;
+			heroLoading = false;
+			if (song) lookUpVariant(song, rollToken);
+		});
+		fill(curated, data.picks).catch(() => {});
+		data.artistSongs
+			.then((stream) => (stream ? fill(artistSongs, stream) : (artistSongs.length = 0)))
+			.catch(() => {});
+		countArtists();
 	});
 
 	async function lookUpVariant(song: SearchResult, token: number) {
