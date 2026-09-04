@@ -7,20 +7,34 @@
 	import queue from '$states/queue.svelte';
 	import session from '$states/session.svelte';
 	import { getRecentlyPlayed } from '$lib/recentlyPlayed';
-	import { AudioApiError, findQueryType, getArtistLocal, getLocalVariant, getRandomSongs } from '$requests/songs';
+	import {
+		AudioApiError,
+		findQueryType,
+		getLocalVariant,
+		getRandomSongs,
+		streamArtistLocal,
+		streamRandomSongs
+	} from '$requests/songs';
 	import type { LocalVariant } from '$requests/songs';
 	import { convertTimeSpanStringToSeconds, getTimeString } from '$lib';
 	import { SliderInteractions } from '$lib/sliderInteractions.svelte.js';
 	import Song from '$components/home/song/Song.svelte';
+	import SongSkeleton from '$components/home/song/SongSkeleton.svelte';
+	import Skeleton from '$components/Skeleton.svelte';
 	import ArtistLink from '$components/ArtistLink.svelte';
 
 	import { ArrowPath, FolderOpen, Icon, Link, Play } from 'svelte-hero-icons';
 
 	const { data }: { data: PageData } = $props();
 
-	let hero = $state<SearchResult | null>(data.hero);
-	let curated = $state<SearchResult[]>(data.songs);
-	let artistSongs = $state<SearchResult[]>(data.artistSongs);
+	let hero = $state<SearchResult | null>(null);
+	let heroLoading = $state(true);
+	// Slots, not lists: each track lands in its own place and every slot the stream
+	// has not reached yet keeps its placeholder. The count is what was asked for;
+	// the end of the stream settles what it really is.
+	let curated = $state<(SearchResult | null)[]>(Array(30).fill(null));
+	// the artist endpoint takes no count, so a row's worth is the guess
+	let artistSongs = $state<(SearchResult | null)[]>(Array(6).fill(null));
 	let recentlyPlayed = $state<SearchResult[]>([]);
 	let rolling = $state(false);
 	let rollingPicks = $state(false);
@@ -38,14 +52,10 @@
 	let pasteError = $state('');
 	// Counts come from the one 200-track sample the page already loads, so the
 	// heaviest names in the library surface first without a second request.
-	let artists = $derived(
-		Object.entries(
-			data.librarySongs.reduce<Record<string, number>>((tally, song) => {
-				if (song.artist) tally[song.artist] = (tally[song.artist] ?? 0) + 1;
-				return tally;
-			}, {})
-		).sort(([nameA, countA], [nameB, countB]) => countB - countA || nameA.localeCompare(nameB))
-	);
+	// ponytail: the sample is the heaviest request on the page and exists only for
+	// this tally. Drop it for an artist-count endpoint once the API has one.
+	let artists = $state<[string, number][]>([]);
+	let artistsLoading = $state(true);
 	const artistUrl = (name: string) => `${resolve('/artist')}?term=${encodeURIComponent(name)}`;
 	let heroDuration = $derived(hero ? getTimeString(convertTimeSpanStringToSeconds(hero.duration)) : '');
 	let heroInLibrary = $derived(hero?.id.startsWith('audio://') ?? false);
@@ -97,9 +107,48 @@
 		if (pending && promptFirst) promptFirst.focus();
 	});
 
+	/**
+	 * Each track lands in its own slot as the response produces it. The slots the
+	 * stream never reaches are dropped at its end — including all of them, which is
+	 * how a failed request becomes an empty section rather than a page of shapes.
+	 */
+	async function fill(slots: (SearchResult | null)[], stream: AsyncIterable<SearchResult>) {
+		let index = 0;
+		try {
+			for await (const song of stream) slots[index++] = song;
+		} finally {
+			slots.length = index;
+		}
+	}
+
+	// The tally is sorted by count, so filling it per track would reshuffle the whole
+	// cloud two hundred times. This one is drained first and shown once.
+	async function countArtists() {
+		const tally: Record<string, number> = {};
+		try {
+			for await (const song of data.librarySongs) {
+				if (song.artist) tally[song.artist] = (tally[song.artist] ?? 0) + 1;
+			}
+		} catch {
+			// whatever was counted before it died is still worth showing
+		}
+		artists = Object.entries(tally).sort(
+			([nameA, countA], [nameB, countB]) => countB - countA || nameA.localeCompare(nameB)
+		);
+		artistsLoading = false;
+	}
+
+	data.hero.then((song) => {
+		hero = song;
+		heroLoading = false;
+		if (song) lookUpVariant(song, rollToken);
+	});
+	fill(curated, data.picks).catch(() => {});
+	data.artistSongs.then((stream) => (stream ? fill(artistSongs, stream) : (artistSongs.length = 0))).catch(() => {});
+	countArtists();
+
 	onMount(() => {
 		recentlyPlayed = getRecentlyPlayed();
-		if (hero) lookUpVariant(hero, rollToken);
 	});
 
 	async function lookUpVariant(song: SearchResult, token: number) {
@@ -122,8 +171,14 @@
 		try {
 			const nextHero = (await getRandomSongs(fetch, 1, youTubePercent / 100))[0] ?? null;
 			hero = nextHero;
-			artistSongs = nextHero ? await getArtistLocal(nextHero.artist, fetch) : [];
-			if (nextHero) lookUpVariant(nextHero, token);
+			// fresh slots: the row shows placeholders again and fills from the new
+			// artist. A fill still running from the last roll writes into the array it
+			// was handed, which nothing renders any more.
+			artistSongs = Array(6).fill(null);
+			if (nextHero) {
+				lookUpVariant(nextHero, token);
+				fill(artistSongs, streamArtistLocal(nextHero.artist, fetch)).catch(() => {});
+			} else artistSongs.length = 0;
 		} finally {
 			rolling = false;
 		}
@@ -132,8 +187,11 @@
 	async function rollPicks() {
 		if (rollingPicks) return;
 		rollingPicks = true;
+		curated = Array(30).fill(null);
 		try {
-			curated = await getRandomSongs(fetch, 30, youTubePercent / 100);
+			await fill(curated, streamRandomSongs(fetch, 30, youTubePercent / 100));
+		} catch {
+			// fill's own end has already trimmed the row to what arrived
 		} finally {
 			rollingPicks = false;
 		}
@@ -358,6 +416,33 @@
 					</div>
 				</div>
 			</div>
+		{:else if heroLoading}
+			<!-- the same grid, so the hero lands in the space it was already holding -->
+			<div
+				class="grid gap-5 p-4 sm:grid-cols-[11rem_1fr] sm:items-center sm:gap-6 sm:p-6 lg:grid-cols-[15rem_1fr] lg:gap-8 lg:p-8"
+				aria-busy="true"
+			>
+				<Skeleton class="aspect-square w-full max-w-32 rounded-row sm:max-w-44 lg:max-w-60" />
+				<div class="flex min-w-0 flex-col justify-center">
+					<Skeleton class="h-3 w-20" />
+					<Skeleton class="mt-3 h-7 w-3/4 max-w-md" />
+					<Skeleton class="mt-2 h-4 w-40" />
+					<Skeleton class="mt-3 h-3 w-32" />
+					<div class="mt-4 flex flex-wrap gap-2">
+						<Skeleton class="h-11 w-24 rounded-row" />
+						<Skeleton class="h-11 w-32 rounded-row" />
+						<Skeleton class="h-11 w-32 rounded-row" />
+					</div>
+					<div class="mt-5 max-w-xs sm:max-w-sm">
+						<div class="mb-2 flex items-center justify-between">
+							<Skeleton class="h-3 w-24" />
+							<Skeleton class="h-3 w-24" />
+						</div>
+						<Skeleton class="h-2 w-full rounded-row" />
+					</div>
+				</div>
+			</div>
+			<p class="sr-only" aria-live="polite">Loading the roll.</p>
 		{:else}
 			<p class="p-6 text-fog">The roll is resting for a moment. Try again shortly.</p>
 		{/if}
@@ -393,8 +478,11 @@
 	{#if artistSongs.length > 0}
 		<section>
 			<h2 class="eyebrow mb-3">More from this artist</h2>
-			<div class="flex gap-4 overflow-x-auto pb-2">
-				{#each artistSongs as song (song.id)}<Song {song} />{/each}
+			<!-- keyed by slot, not by track: the slot is what persists while the row fills -->
+			<div class="flex gap-4 overflow-x-auto pb-2" aria-busy={artistSongs.includes(null)}>
+				{#each artistSongs as song, slot (slot)}
+					{#if song}<Song {song} />{:else}<SongSkeleton />{/if}
+				{/each}
 			</div>
 		</section>
 	{/if}
@@ -418,15 +506,25 @@
 				><Icon src={FolderOpen} mini size="14" /> Browse by folder</a
 			>
 		</div>
-		<div class="flex flex-wrap gap-2">
-			{#each artists as [artist, count] (artist)}
-				<a
-					href={artistUrl(artist)}
-					class="inline-flex min-h-9 items-center rounded-full border border-haze bg-surface-0 px-3 py-1 text-sm text-chalk transition-colors hover:border-gold hover:text-gold"
-					>{artist}<span class="ml-1.5 font-mono text-[0.68rem] text-fog">{count}</span></a
-				>
-			{/each}
-		</div>
+		{#if artistsLoading}
+			<div class="flex flex-wrap gap-2" aria-busy="true">
+				<!-- uneven widths so it reads as a wrapped line of names, not a grid -->
+				{#each ['w-20', 'w-32', 'w-24', 'w-36', 'w-28', 'w-20', 'w-32', 'w-24', 'w-36', 'w-28', 'w-24', 'w-32'] as width, slot (slot)}
+					<Skeleton class="h-9 rounded-full {width}" />
+				{/each}
+			</div>
+			<p class="sr-only" aria-live="polite">Counting the artists in the library.</p>
+		{:else}
+			<div class="flex flex-wrap gap-2">
+				{#each artists as [artist, count] (artist)}
+					<a
+						href={artistUrl(artist)}
+						class="inline-flex min-h-9 items-center rounded-full border border-haze bg-surface-0 px-3 py-1 text-sm text-chalk transition-colors hover:border-gold hover:text-gold"
+						>{artist}<span class="ml-1.5 font-mono text-[0.68rem] text-fog">{count}</span></a
+					>
+				{/each}
+			</div>
+		{/if}
 	</section>
 
 	<section>
@@ -440,8 +538,13 @@
 				><Icon src={ArrowPath} mini size="14" class={rollingPicks ? 'animate-spin' : ''} /> Roll again</button
 			>
 		</div>
-		<div class="grid grid-flow-col-dense grid-rows-2 gap-4 overflow-x-auto p-2 sm:gap-6">
-			{#each curated as song (song.id)}<Song {song} />{/each}
+		<div
+			class="grid grid-flow-col-dense grid-rows-2 gap-4 overflow-x-auto p-2 sm:gap-6"
+			aria-busy={curated.includes(null)}
+		>
+			{#each curated as song, slot (slot)}
+				{#if song}<Song {song} />{:else}<SongSkeleton />{/if}
+			{/each}
 		</div>
 	</section>
 </div>

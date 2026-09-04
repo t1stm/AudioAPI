@@ -1,5 +1,6 @@
 import type { SearchResult } from '$states/search.svelte';
 import { audioApi, proxyThumbnails } from '$lib/discord';
+import { streamJson } from '$lib/streamJson';
 import quality from '$states/quality.svelte';
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -50,6 +51,36 @@ export function getArtistLocal(term: string, fetcher: Fetcher) {
 
 export function getArtistYouTube(term: string, fetcher: Fetcher) {
 	return getResults(fetcher, `/Artist/YouTube?term=${encodeURIComponent(term)}`);
+}
+
+/**
+ * The same results, one at a time, so a row can fill in as the API produces them
+ * instead of waiting on the last track. Against an endpoint that answers all at
+ * once this yields the whole list in one pass — the caller cannot tell, and does
+ * not need to.
+ */
+async function* streamResults(fetcher: Fetcher, path: string): AsyncGenerator<SearchResult> {
+	const response = await fetcher(`${audioApi}${path}`);
+
+	if (!response.ok || !response.body) {
+		const payload = await response.json().catch(() => null);
+		const message = payload?.error?.message ?? `The audio service returned ${response.status}.`;
+		throw new AudioApiError(message, response.status);
+	}
+
+	for await (const result of streamJson<SearchResult>(response.body)) {
+		// one at a time, so the thumbnail is already rewritten by the time the row renders
+		yield proxyThumbnails([result])[0];
+	}
+}
+
+export function streamRandomSongs(fetcher: Fetcher, count = 30, youTubeShare?: number) {
+	const share = youTubeShare === undefined ? '' : `&youTubeShare=${youTubeShare}`;
+	return streamResults(fetcher, `/RandomResults?count=${count}${share}`);
+}
+
+export function streamArtistLocal(term: string, fetcher: Fetcher) {
+	return streamResults(fetcher, `/Artist/Local?term=${encodeURIComponent(term)}`);
 }
 
 export async function findQueryType(query: string, fetcher?: Fetcher) {

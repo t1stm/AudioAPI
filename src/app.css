@@ -361,3 +361,10 @@
 		inset: -14px 0;
 	}
 }
+
+/* Tailwind's own pulse ignores the setting; every skeleton on the page uses it. */
+@media (prefers-reduced-motion: reduce) {
+	.animate-pulse {
+		animation: none;
+	}
+}
