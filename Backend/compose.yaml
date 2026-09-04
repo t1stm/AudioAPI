@@ -30,7 +30,7 @@ services:
     <<: *service
     build:
       context: .
-      dockerfile: Gaida.Pods.MusicDatabase/Dockerfile
+      dockerfile: Platforms/Gaida.Pods.MusicDatabase/Dockerfile
     environment:
       <<: *env
       STORAGE: /music
@@ -53,7 +53,7 @@ services:
     <<: *service
     build:
       context: .
-      dockerfile: Gaida.Pods.YouTube/Dockerfile
+      dockerfile: Platforms/Gaida.Pods.YouTube/Dockerfile
     environment:
       <<: *env
       YOUTUBE_CACHE_DB: /cache/YouTube.json   # YouTubeCacher — the search cache
@@ -71,7 +71,7 @@ services:
     <<: *service
     build:
       context: .
-      dockerfile: Gaida.Pods.Spotify/Dockerfile
+      dockerfile: Platforms/Gaida.Pods.Spotify/Dockerfile
     environment:
       <<: *env
       SPOTIFY_ID: ${SPOTIFY_ID:-}
@@ -86,7 +86,7 @@ services:
     <<: *service
     build:
       context: .
-      dockerfile: Gaida.API/Dockerfile
+      dockerfile: Services/Gaida.API/Dockerfile
     environment:
       <<: *env
       Platforms__0__Url: http://gaida-local:8080
@@ -115,7 +115,7 @@ services:
     <<: *service
     build:
       context: .
-      dockerfile: Dunav/Dockerfile
+      dockerfile: Services/Dunav/Dockerfile
     environment:
       <<: *env
       Gaida__Url: http://gaida-api:8080
@@ -141,7 +141,7 @@ services:
     <<: *service
     build:
       context: .
-      dockerfile: Selo/Dockerfile
+      dockerfile: Services/Selo/Dockerfile
     environment:
       <<: *env
       # Room.cs:135 — the single audio coupling, SearchID only.
@@ -157,7 +157,7 @@ services:
     <<: *service
     build:
       context: .
-      dockerfile: Dom/Dockerfile
+      dockerfile: Services/Dom/Dockerfile
     environment:
       <<: *env
       Dom__DataFile: /data/dom.json

@@ -1,38 +1,38 @@
 <Solution>
-  <Folder Name="/Gaida/">
-    <Project Path="Gaida/Gaida.Core/Gaida.Core.csproj"/>
-    <Project Path="Gaida/Gaida.CLI/Gaida.CLI.csproj"/>
-    <Project Path="Gaida/Gaida.Tests/Gaida.Tests.csproj"/>
-  </Folder>
-  <Folder Name="/Gaida/Platforms/">
-    <Project Path="Gaida/Platforms/Gaida.Platforms.YouTube/Gaida.Platforms.YouTube.csproj"/>
-    <Project Path="Gaida/Platforms/Gaida.Platforms.MusicDatabase/Gaida.Platforms.MusicDatabase.csproj"/>
-    <Project Path="Gaida/Platforms/Gaida.Platforms.Spotify/Gaida.Platforms.Spotify.csproj"/>
-  </Folder>
   <Folder Name="/DSharpPlus/">
-    <Project Path="DSharpPlus/DSharpPlus/DSharpPlus.csproj"/>
-    <Project Path="DSharpPlus/DSharpPlus.Commands/DSharpPlus.Commands.csproj"/>
-    <Project Path="DSharpPlus/DSharpPlus.CommandsNext/DSharpPlus.CommandsNext.csproj"/>
-    <Project Path="DSharpPlus/DSharpPlus.Http.AspNetCore/DSharpPlus.Http.AspNetCore.csproj"/>
-    <Project Path="DSharpPlus/DSharpPlus.Interactivity/DSharpPlus.Interactivity.csproj"/>
-    <Project Path="DSharpPlus/DSharpPlus.Voice/DSharpPlus.Voice.csproj"/>
-    <Project Path="DSharpPlus/DSharpPlus.Tests/DSharpPlus.Tests.csproj"/>
+    <Project Path="DSharpPlus/DSharpPlus/DSharpPlus.csproj" />
+    <Project Path="DSharpPlus/DSharpPlus.Commands/DSharpPlus.Commands.csproj" />
+    <Project Path="DSharpPlus/DSharpPlus.CommandsNext/DSharpPlus.CommandsNext.csproj" />
+    <Project Path="DSharpPlus/DSharpPlus.Http.AspNetCore/DSharpPlus.Http.AspNetCore.csproj" />
+    <Project Path="DSharpPlus/DSharpPlus.Interactivity/DSharpPlus.Interactivity.csproj" />
+    <Project Path="DSharpPlus/DSharpPlus.Voice/DSharpPlus.Voice.csproj" />
+    <Project Path="DSharpPlus/DSharpPlus.Tests/DSharpPlus.Tests.csproj" />
   </Folder>
   <Folder Name="/DSharpPlus/Analyzers/">
-    <Project Path="DSharpPlus/DSharpPlus.Analyzers/DSharpPlus.Analyzers/DSharpPlus.Analyzers.csproj"/>
-    <Project Path="DSharpPlus/DSharpPlus.Analyzers/DSharpPlus.Analyzers.Test/DSharpPlus.Analyzers.Test.csproj"/>
+    <Project Path="DSharpPlus/DSharpPlus.Analyzers/DSharpPlus.Analyzers/DSharpPlus.Analyzers.csproj" />
+    <Project Path="DSharpPlus/DSharpPlus.Analyzers/DSharpPlus.Analyzers.Test/DSharpPlus.Analyzers.Test.csproj" />
   </Folder>
   <Folder Name="/DSharpPlus/obsolete/">
-    <Project Path="DSharpPlus/obsolete/DSharpPlus.SlashCommands/DSharpPlus.SlashCommands.csproj"/>
+    <Project Path="DSharpPlus/obsolete/DSharpPlus.SlashCommands/DSharpPlus.SlashCommands.csproj" />
+  </Folder>
+  <Folder Name="/Gaida Library/">
+    <Project Path="Gaida Library/Gaida.CLI/Gaida.CLI.csproj" />
+    <Project Path="Gaida Library/Gaida.Core/Gaida.Core.csproj" />
+    <Project Path="Gaida Library/Gaida.Tests/Gaida.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Platforms/">
+    <Project Path="Platforms/Gaida.Pods.MusicDatabase/Gaida.Pods.MusicDatabase.csproj" />
+    <Project Path="Platforms/Gaida.Pods.Spotify/Gaida.Pods.Spotify.csproj" />
+    <Project Path="Platforms/Gaida.Pods.YouTube/Gaida.Pods.YouTube.csproj" />
+    <Project Path="Platforms/Gaida.Platforms.MusicDatabase/Gaida.Platforms.MusicDatabase.csproj" />
+    <Project Path="Platforms/Gaida.Platforms.Spotify/Gaida.Platforms.Spotify.csproj" />
+    <Project Path="Platforms/Gaida.Platforms.YouTube/Gaida.Platforms.YouTube.csproj" />
   </Folder>
   <Folder Name="/Services/">
-    <Project Path="Dunav/Dunav.csproj"/>
-    <Project Path="Selo/Selo.csproj"/>
-    <Project Path="Dom/Dom.csproj"/>
-    <Project Path="Gaida.Pods.MusicDatabase/Gaida.Pods.MusicDatabase.csproj"/>
-    <Project Path="Gaida.Pods.YouTube/Gaida.Pods.YouTube.csproj"/>
-    <Project Path="Gaida.Pods.Spotify/Gaida.Pods.Spotify.csproj"/>
+    <Project Path="Services/Dunav/Dunav.csproj" />
+    <Project Path="Services/Gaida.API/Gaida.API.csproj" />
+    <Project Path="Services/Gaida.Bot/Gaida.Bot.csproj" />
+    <Project Path="Services/Selo/Selo.csproj" />
+    <Project Path="Services/Dom/Dom.csproj" />
   </Folder>
-  <Project Path="Gaida.API/Gaida.API.csproj"/>
-  <Project Path="Gaida.Bot/Gaida.Bot.csproj"/>
 </Solution>
