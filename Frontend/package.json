@@ -1,0 +1,49 @@
+{
+	"name": "music-site-2",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"start": "vite",
+		"build": "tsc && vite build",
+		"deploy": "npm run build && rsync -a --delete build/ /srv/http/music.gergov.bg/",
+		"preview": "vite preview",
+		"test": "vitest run",
+		"format": "prettier --write .",
+		"lint": "eslint .",
+		"lint:fix": "eslint --fix .",
+		"type-check": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@discord/embedded-app-sdk": "^2.5.0",
+		"@fontsource-variable/golos-text": "^5.3.0",
+		"@fontsource-variable/jetbrains-mono": "^5.3.0",
+		"@fontsource-variable/unbounded": "^5.3.0",
+		"svelte-hero-icons": "^5.2.0"
+	},
+	"devDependencies": {
+		"@eslint/compat": "^2.1.0",
+		"@eslint/js": "^8.57.1",
+		"@sveltejs/adapter-static": "^3.0.10",
+		"@sveltejs/kit": "^2.48.4",
+		"@sveltejs/vite-plugin-svelte": "^4.0.4",
+		"@tailwindcss/forms": "^0.5.11",
+		"@tailwindcss/typography": "^0.5.20",
+		"@tailwindcss/vite": "^4.1.17",
+		"eslint": "^8.56.0",
+		"eslint-config-prettier": "^9.1.0",
+		"eslint-plugin-prettier": "^5.1.3",
+		"eslint-plugin-svelte": "^3.23.0",
+		"globals": "^15.15.0",
+		"jsdom": "^23.2.0",
+		"prettier": "^3.2.1",
+		"sass": "^1.79.5",
+		"svelte": "^5.43.6",
+		"tailwindcss": "^4.1.17",
+		"typescript": "^5.3.3",
+		"typescript-eslint": "^8.69.0",
+		"vite": "^5.0.11",
+		"vitest": "^1.2.0"
+	}
+}
