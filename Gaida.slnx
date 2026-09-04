@@ -28,6 +28,7 @@
   <Folder Name="/Services/">
     <Project Path="Dunav/Dunav.csproj"/>
     <Project Path="Selo/Selo.csproj"/>
+    <Project Path="Dom/Dom.csproj"/>
     <Project Path="Gaida.Pods.MusicDatabase/Gaida.Pods.MusicDatabase.csproj"/>
     <Project Path="Gaida.Pods.YouTube/Gaida.Pods.YouTube.csproj"/>
   </Folder>

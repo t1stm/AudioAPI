@@ -87,5 +87,22 @@ services:
     depends_on:
       - gaida-api
 
+  # Accounts and playlists. Depends on nothing, and holds the only data in this file
+  # that does not rebuild itself if you delete it.
+  dom:
+    <<: *service
+    build:
+      context: .
+      dockerfile: Dom/Dockerfile
+    environment:
+      <<: *aspnet-environment
+      Dom__DataFile: /data/dom.json
+      Dom__CoverDir: /covers
+    ports:
+      - "${DOM_PORT:-5343}:8080"
+    volumes:
+      - ${DOM_DATA_PATH:-./data/dom}:/data
+      - ${DOM_COVER_PATH:-./data/dom-covers}:/covers
+
 volumes:
   thumbnails:

@@ -110,6 +110,124 @@ answer never touches the filesystem — the path is matched against the in-memor
 locations — so a path nobody has, `..` included, is an empty folder rather than an error. There is
 no failure response.
 
+## Accounts
+
+`/Audio/Accounts/*` is served by Dom, which owns accounts and playlists. It calls no
+other service and is the only part of the stack holding data that does not rebuild itself.
+
+Everything here sends a password or a bearer token in the request body or an `Authorization`
+header. **These endpoints must only be reachable over TLS.**
+
+```
+POST /Audio/Accounts/Register   {"username":"…","password":"…"}   201
+POST /Audio/Accounts/Login      {"username":"…","password":"…"}   200
+GET  /Audio/Accounts/Me         Authorization: Bearer …           200
+POST /Audio/Accounts/Logout     Authorization: Bearer …           204
+```
+
+`Register` and `Login` answer with the account and a token:
+
+```json
+{"username":"Радост","token":"KZ8m…","expiresUtc":"2026-10-04T18:22:41.9+00:00"}
+```
+
+The token is 32 random bytes, base64url. Send it as `Authorization: Bearer <token>`. It lasts 30
+days and the expiry does not slide, so a client keeps `expiresUtc` and signs in again rather than
+discovering the token is dead mid-session. `Logout` revokes one token — the other devices signed in
+to the same account stay signed in — and answers `204` whether or not the token was still live.
+
+`Me` returns `{"username":"Радост","createdUtc":"…"}`.
+
+A username is 2–32 characters with no whitespace and no control characters; any script is accepted,
+so `Радост` and `ラジオ` are ordinary usernames. Two accounts may not differ only by case, and
+`Login` matches case-insensitively. A password is 8–256 characters.
+
+Passwords are stored as PBKDF2-SHA256, 210 000 iterations, per-user 16-byte salt, with the
+iteration count recorded per user so it can be raised later without a migration. A client may hash
+before sending, but that is not a security boundary and the server does not assume it: whatever
+arrives is treated as the secret and hashed again on arrival.
+
+Errors use the same envelope as the rest of the API:
+
+| Status | `code` | When |
+| --- | --- | --- |
+| 400 | `invalid_request` | the username or password breaks a rule above; the message says which |
+| 409 | `username_taken` | that name, case-insensitively, already exists |
+| 401 | `invalid_credentials` | wrong password **or** no such account — deliberately the same answer to both |
+| 401 | `unauthorized` | the endpoint needs a bearer token and did not get a live one |
+
+```json
+{"error":{"code":"username_taken","message":"That username is taken. Pick another."}}
+```
+
+Nothing rate-limits `Register` or `Login`.
+
+## Playlists
+
+`/Audio/Playlists/*` is served by Dom as well. A playlist is a named, ordered list of tracks that
+belongs to one account and is either public or not. The tracks are **snapshots** taken when they
+were saved, not references — a playlist renders without a single call to the rest of the stack, and
+a track retagged in the library keeps the name it was saved under.
+
+```
+GET    /Audio/Playlists/Public                                        200
+GET    /Audio/Playlists/Mine       Authorization: Bearer …            200
+GET    /Audio/Playlists/{id}       Authorization: Bearer … (optional) 200
+POST   /Audio/Playlists            Bearer  {"name":"…","isPublic":false,"tracks":[…]}  201
+PATCH  /Audio/Playlists/{id}       Bearer  {"name":"…"} / {"isPublic":true} / {"tracks":[…]}  200
+DELETE /Audio/Playlists/{id}       Bearer                             204
+```
+
+`Public` and `Mine` return summaries, newest change first:
+
+```json
+{
+  "id": "p_9f31a04c7b2e5d18", "name": "Late shift", "owner": "kris", "isPublic": true,
+  "trackCount": 14, "duration": "00:51:07",
+  "coverUrl": "/Audio/Playlists/p_9f31a04c7b2e5d18/Cover",
+  "firstTrackId": "local://…", "firstTrackThumbnailUrl": "https://…",
+  "createdUtc": "…", "updatedUtc": "…"
+}
+```
+
+`coverUrl` is `null` until somebody uploads one, and is a **path, not an absolute URL**: inside the
+Discord activity the API is reachable only under the frame's own `/.proxy` prefix, so the client is
+the one that knows its own base. `firstTrackThumbnailUrl` is `null` on an empty playlist. Artwork
+falls back first to the first track's thumbnail and then to the client's own "no artwork" image.
+
+`GET /Audio/Playlists/{id}` returns the same fields plus `tracks`:
+
+```json
+{"id":"…","tracks":[{"id":"local://…","name":"…","artist":"…","album":null,"duration":"00:03:41","thumbnailUrl":"https://…"}]}
+```
+
+The bearer token is optional on that one: a public playlist is a link that works for anybody. A
+playlist you may not see answers `404`, never `403` — a 403 would confirm it exists. The same is
+true of one you do not own on `PATCH` and `DELETE`.
+
+On `PATCH`, a field that is absent is a field left alone; `{"isPublic":true}` changes visibility and
+nothing else. `tracks`, when sent, replaces the list — reordering and removing are both a `PATCH`
+with the list you want.
+
+### Covers
+
+```
+PUT /Audio/Playlists/{id}/Cover   Bearer, multipart/form-data   200 {"coverUrl":"…"}
+GET /Audio/Playlists/{id}/Cover                                 image, or 404
+```
+
+`PUT` takes one file — PNG, JPEG or WebP, at most 2 MB — under any field name, and replaces
+whatever cover the playlist had. Only the owner may send one. `GET` serves it from Dom's own origin
+with `Cache-Control: public, max-age=604800`, which is why a client that has just replaced a cover
+should cache-bust with the playlist's `updatedUtc`. A private playlist's cover is as private as the
+playlist: no cover, no playlist, and one you may not see are all `404`. Deleting a playlist deletes
+its cover.
+
+A name is 1–80 characters. A playlist holds at most 1000 tracks, and every track needs an `id` and a
+`name`; `duration` is a `hh:mm:ss` `TimeSpan` string like everywhere else in this API, and anything
+unparseable is stored as zero. Bad input answers `400 invalid_request` with a message that says
+which rule; a missing or dead token answers `401 unauthorized`.
+
 ## Audio downloads and CORS
 
 `GET /Audio/Download/{codec}/{bitrate}?id={id}` streams `Opus`, `Vorbis`, `FLAC`, `MP3`, or `AAC`; the frontend default is `/Audio/Download/Opus/112`. The stream advertises and supports standard HTTP `Range` requests; a seek request waits for the first cached encode to finish, then receives a normal `206` byte-range response. `DownloadRaw` is used by `contentUrl` and sends an attachment filename.
