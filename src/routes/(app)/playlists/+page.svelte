@@ -1,18 +1,31 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { PageData } from './$types';
 	import account from '$states/account.svelte';
 	import playlists from '$states/playlists.svelte';
 	import PlaylistCard from '$components/playlist/PlaylistCard.svelte';
+	import PlaylistCardSkeleton from '$components/playlist/PlaylistCardSkeleton.svelte';
 
 	const { data }: { data: PageData } = $props();
 
+	let sharedLoading = $state(true);
+
 	// the load function fetched the public list once; the store owns it from here, so a
 	// playlist made public from your own page shows up without a reload
-	playlists.shared = data.shared;
+	onMount(async () => {
+		playlists.shared = await data.shared;
+		sharedLoading = false;
+	});
 
-	// `mine` needs the token, which lands after the layout's onMount reads localStorage
+	// `mine` needs the token, which lands after the layout's onMount reads localStorage.
+	// Held here rather than read off the store: `playlists.loading` also covers saving and
+	// renaming, and this is only about the first read of your own list.
+	let mineLoading = $state(false);
+
 	$effect(() => {
-		if (account.token) playlists.loadMine();
+		if (!account.token) return;
+		mineLoading = true;
+		playlists.loadMine().finally(() => (mineLoading = false));
 	});
 
 	let mine = $derived(playlists.mine);
@@ -52,6 +65,16 @@
 				Sign in to keep playlists. Open the account panel from your avatar in the header to sign
 				in or create an account.
 			</p>
+		{:else if mineLoading}
+			<div
+				class="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))]"
+				aria-busy="true"
+			>
+				{#each [...Array(4).keys()] as card (card)}
+					<PlaylistCardSkeleton />
+				{/each}
+			</div>
+			<p class="sr-only" aria-live="polite">Loading your playlists.</p>
 		{:else if mine.length === 0}
 			<p class="max-w-lg text-fog">You have no playlists. Queue a few tracks and save them.</p>
 		{:else}
@@ -74,10 +97,20 @@
 
 	<section class="flex flex-col gap-2">
 		<h2 class="eyebrow flex items-center gap-3">
-			From everybody else · {playlists.others.length}
+			From everybody else · {sharedLoading ? '…' : playlists.others.length}
 			<span class="h-px flex-1 bg-haze"></span>
 		</h2>
-		{#if playlists.others.length === 0}
+		{#if sharedLoading}
+			<div
+				class="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))]"
+				aria-busy="true"
+			>
+				{#each [...Array(6).keys()] as card (card)}
+					<PlaylistCardSkeleton />
+				{/each}
+			</div>
+			<p class="sr-only" aria-live="polite">Loading the public playlists.</p>
+		{:else if playlists.others.length === 0}
 			<p class="max-w-lg text-fog">
 				{#if playlists.shared.length > 0}
 					Nobody else has shared a playlist yet.

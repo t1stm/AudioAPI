@@ -1,11 +1,23 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { PageData } from './$types';
+	import type { BrowseLevel } from '$requests/songs';
 	import FolderRow from '$components/browse/FolderRow.svelte';
 	import SearchRow from '$components/search/SearchRow.svelte';
+	import RowSkeleton from '$components/RowSkeleton.svelte';
 
 	const { data }: { data: PageData } = $props();
-	let root = $derived(data.root);
+
+	let root = $state<BrowseLevel | null>(null);
+	let loading = $state(true);
+
+	onMount(async () => {
+		root = await data.root;
+		loading = false;
+	});
 </script>
+
+<svelte:head><title>Browse · musicrain</title></svelte:head>
 
 <div class="page mx-auto w-full max-w-5xl gap-6 p-4 sm:gap-9 sm:p-6 sm:pb-28">
 	<div>
@@ -20,7 +32,16 @@
 		</p>
 	</div>
 
-	{#if root.folders.length === 0 && root.files.length === 0}
+	{#if loading}
+		<div class="flex flex-col" aria-busy="true">
+			{#each [...Array(8).keys()] as row (row)}
+				<RowSkeleton />
+			{/each}
+		</div>
+		<p class="sr-only" aria-live="polite">Opening the library.</p>
+	{:else if !root}
+		<p class="max-w-lg text-fog">The library could not be reached. Try again shortly.</p>
+	{:else if root.folders.length === 0 && root.files.length === 0}
 		<p class="max-w-lg text-fog">
 			The library is empty. Once the server has indexed a folder of music it shows up here.
 		</p>

@@ -1,5 +1,6 @@
 import type { SearchResult } from '$states/search.svelte';
 import { audioApi, proxyThumbnails } from '$lib/discord';
+import { streamResults } from './songs';
 
 export async function getSearch(
 	term: string,
@@ -10,4 +11,12 @@ export async function getSearch(
 	const data = await r.json();
 
 	return proxyThumbnails(data as SearchResult[]);
+}
+
+/** The same search, one result at a time, for a page that fills in as they arrive. */
+export function streamSearch(
+	term: string,
+	fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+) {
+	return streamResults(fetch, `/Search?query=${encodeURIComponent(term)}`);
 }

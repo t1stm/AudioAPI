@@ -59,7 +59,7 @@ export function getArtistYouTube(term: string, fetcher: Fetcher) {
  * once this yields the whole list in one pass — the caller cannot tell, and does
  * not need to.
  */
-async function* streamResults(fetcher: Fetcher, path: string): AsyncGenerator<SearchResult> {
+export async function* streamResults(fetcher: Fetcher, path: string): AsyncGenerator<SearchResult> {
 	const response = await fetcher(`${audioApi}${path}`);
 
 	if (!response.ok || !response.body) {
@@ -81,6 +81,10 @@ export function streamRandomSongs(fetcher: Fetcher, count = 30, youTubeShare?: n
 
 export function streamArtistLocal(term: string, fetcher: Fetcher) {
 	return streamResults(fetcher, `/Artist/Local?term=${encodeURIComponent(term)}`);
+}
+
+export function streamArtistYouTube(term: string, fetcher: Fetcher) {
+	return streamResults(fetcher, `/Artist/YouTube?term=${encodeURIComponent(term)}`);
 }
 
 export async function findQueryType(query: string, fetcher?: Fetcher) {

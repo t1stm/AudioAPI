@@ -1,16 +1,12 @@
 import type { PageLoad } from './$types';
-import { getSearch } from '$requests/search';
+import { streamSearch } from '$requests/search';
 
-export const load: PageLoad = async ({ url, fetch }) => {
+/** Awaits nothing: the page renders its rows as placeholders and fills them in. */
+export const load: PageLoad = ({ url, fetch }) => {
 	const term = url.searchParams.get('term');
-	if (!term) {
-		return {
-			term: '',
-			results: []
-		};
-	}
+
 	return {
-		term,
-		results: await getSearch(term, fetch)
+		term: term ?? '',
+		results: term ? streamSearch(term, fetch) : null
 	};
 };

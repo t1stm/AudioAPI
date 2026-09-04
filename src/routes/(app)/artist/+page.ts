@@ -1,14 +1,14 @@
 import type { PageLoad } from './$types';
-import { getArtistLocal, getArtistYouTube } from '$requests/songs';
+import { streamArtistLocal, streamArtistYouTube } from '$requests/songs';
 
-export const load: PageLoad = async ({ url, fetch }) => {
+/** Awaits nothing: both sides render as placeholder rows and fill themselves in. */
+export const load: PageLoad = ({ url, fetch }) => {
 	const term = url.searchParams.get('term')?.trim() ?? '';
-	if (!term) return { term, localResults: [], youtubeResults: [] };
+	if (!term) return { term, localResults: null, youtubeResults: null };
 
-	const [localResults, youtubeResults] = await Promise.all([
-		getArtistLocal(term, fetch),
-		getArtistYouTube(term, fetch)
-	]);
-
-	return { term, localResults, youtubeResults };
+	return {
+		term,
+		localResults: streamArtistLocal(term, fetch),
+		youtubeResults: streamArtistYouTube(term, fetch)
+	};
 };
