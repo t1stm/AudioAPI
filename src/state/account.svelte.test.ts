@@ -1,0 +1,77 @@
+import { beforeEach, expect, it, vi } from 'vitest';
+import account from './account.svelte';
+import { login, logout } from '$requests/accounts';
+import user from './user.svelte';
+
+vi.mock('$requests/accounts', () => ({
+	login: vi.fn(),
+	register: vi.fn(),
+	logout: vi.fn(),
+}));
+
+const session = (expiresUtc: string) => ({
+	username: 'kris',
+	token: 'tok',
+	expiresUtc,
+});
+
+// jsdom hands out no localStorage under vitest's default document origin, and the
+// point of these tests is what the store does with one
+const kept = new Map<string, string>();
+vi.stubGlobal('localStorage', {
+	getItem: (key: string) => kept.get(key) ?? null,
+	setItem: (key: string, value: string) => kept.set(key, value),
+	removeItem: (key: string) => kept.delete(key),
+});
+
+beforeEach(() => {
+	kept.clear();
+	account.token = null;
+	account.username = null;
+	user.source = 'local';
+});
+
+it('keeps the session across a reload', async () => {
+	vi.mocked(login).mockResolvedValue(session(new Date(Date.now() + 86_400_000).toISOString()));
+	await account.signIn('kris', 'correct horse battery');
+
+	account.token = null;
+	account.username = null;
+	account.load();
+
+	expect(account.signedIn).toBe(true);
+	expect(account.username).toBe('kris');
+});
+
+it('drops a token that has already expired', async () => {
+	vi.mocked(login).mockResolvedValue(session(new Date(Date.now() - 1000).toISOString()));
+	await account.signIn('kris', 'correct horse battery');
+
+	account.load();
+
+	expect(account.signedIn).toBe(false);
+	expect(kept.get('musicrain.token')).toBe(undefined);
+});
+
+it('signs out locally even when Dom cannot be reached', async () => {
+	vi.mocked(login).mockResolvedValue(session(new Date(Date.now() + 86_400_000).toISOString()));
+	vi.mocked(logout).mockRejectedValue(new Error('offline'));
+	await account.signIn('kris', 'correct horse battery');
+
+	await account.signOut();
+
+	expect(account.signedIn).toBe(false);
+	expect(kept.get('musicrain.token')).toBe(undefined);
+});
+
+// the room identity is a name for a socket, but nobody wants to be `kris` here and
+// `Anonymous 4` in a room
+it('offers the account name to the room identity, unless Discord already named you', async () => {
+	vi.mocked(login).mockResolvedValue(session(new Date(Date.now() + 86_400_000).toISOString()));
+	await account.signIn('kris', 'correct horse battery');
+	expect(user.username).toBe('kris');
+
+	user.adopt('discord_name', null);
+	await account.signIn('kris', 'correct horse battery');
+	expect(user.username).toBe('discord_name');
+});

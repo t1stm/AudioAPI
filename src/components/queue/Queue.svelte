@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { convertTimeSpanStringToSeconds, getTimeString } from '$lib';
+	import account from '$states/account.svelte';
 	import audio from '$states/audio.svelte';
 	import current from '$states/current.svelte';
+	import playlists, { toSnapshot } from '$states/playlists.svelte';
 	import queue from '$states/queue.svelte';
 	import session from '$states/session.svelte';
 	import type { SearchResult } from '$states/search.svelte';
@@ -58,6 +60,31 @@
 
 	function itemLabel(item: SearchResult) {
 		return `${item.name} by ${item.artist}`;
+	}
+
+	// The dock is 380px wide, so saving is not a modal — the footer row becomes the
+	// name field and comes back when it is done with.
+	let naming = $state(false);
+	let draftName = $state('');
+	let saved = $state<{ id: string; name: string } | null>(null);
+
+	function openSave() {
+		saved = null;
+		naming = true;
+		draftName = `Queue · ${new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`;
+	}
+
+	async function savePlaylist(event: SubmitEvent) {
+		event.preventDefault();
+		if (!draftName.trim()) return;
+
+		// In a room the queue is the server's, not yours — saving still works, it
+		// snapshots what is playing right now.
+		const made = await playlists.save({ name: draftName.trim(), tracks: items.map(toSnapshot) });
+		if (!made) return;
+
+		saved = { id: made.id, name: made.name };
+		naming = false;
 	}
 </script>
 
@@ -139,16 +166,55 @@
 		{/if}
 	</section>
 
+	{#if playlists.error}
+		<p class="pt-2 text-xs text-ember">{playlists.error}</p>
+	{/if}
+
 	<footer class="flex items-center gap-2 border-t border-haze pt-3">
-		<span class="mr-auto font-mono text-[0.68rem] uppercase tracking-[0.13em] text-fog">{items.length} tracks · {remainingTime} left</span>
-		<button type="button" class="min-h-9 rounded-[5px] border border-haze px-2 py-1 text-xs font-semibold hover:bg-surface-200" onclick={() => queue.shuffle()}>
-			Shuffle
-		</button>
+		{#if naming && account.signedIn}
+			<form class="flex w-full items-center gap-2" onsubmit={savePlaylist}>
+				<!-- svelte-ignore a11y_autofocus -->
+				<input
+					type="text"
+					bind:value={draftName}
+					maxlength="80"
+					autofocus
+					aria-label="Playlist name"
+					class="rounded-row border border-haze bg-dark-0 min-w-0 flex-1 py-1 text-xs text-chalk ring-primary-0 focus:border-primary-0 focus-visible:ring-2"
+					onkeydown={(event) => {
+						if (event.key === 'Escape') naming = false;
+					}}
+				/>
+				<button
+					type="submit"
+					disabled={playlists.loading}
+					class="min-h-9 shrink-0 rounded-[5px] bg-primary-600 px-2 py-1 text-xs font-semibold text-white hover:bg-primary-0 disabled:opacity-60"
+				>
+					{playlists.loading ? 'Saving…' : 'Save playlist'}
+				</button>
+			</form>
+		{:else}
+			<span class="mr-auto truncate font-mono text-[0.68rem] uppercase tracking-[0.13em] text-fog">
+				{#if naming}
+					Sign in to keep playlists.
+				{:else if saved}
+					Saved to <a class="text-primary-500 underline-offset-4 hover:underline" href={`${resolve('/playlist')}?id=${saved.id}`}>{saved.name}</a>
+				{:else}
+					{items.length} tracks · {remainingTime} left
+				{/if}
+			</span>
+			<button type="button" class="min-h-9 rounded-[5px] border border-haze px-2 py-1 text-xs font-semibold hover:bg-surface-200" onclick={openSave}>
+				Save
+			</button>
+			<button type="button" class="min-h-9 rounded-[5px] border border-haze px-2 py-1 text-xs font-semibold hover:bg-surface-200" onclick={() => queue.shuffle()}>
+				Shuffle
+			</button>
 		{#if !session.inRoom}
 			<!-- the protocol has no clear -->
 			<button type="button" class="min-h-9 rounded-[5px] border border-haze px-2 py-1 text-xs font-semibold text-fog hover:bg-surface-200 hover:text-chalk" onclick={() => queue.clearOthers()}>
 				Clear
 			</button>
+			{/if}
 		{/if}
 	</footer>
 	{/if}

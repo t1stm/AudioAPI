@@ -116,6 +116,22 @@ class Queue {
 		this.items = [...this.items.slice(0, firstUpcoming), ...shuffled];
 	}
 
+	/**
+	 * Play all: the list becomes the queue and the first track starts. In a room the
+	 * queue is the server's, so the tracks are appended instead of replacing anything.
+	 */
+	replaceWith(items: SearchResult[]) {
+		if (this.remote) {
+			for (const item of items) this.remote(`add ${item.id}`);
+			return;
+		}
+		if (items.length === 0) return;
+
+		this.items = [...items];
+		this.currentIndex = 0;
+		this.setCurrent();
+	}
+
 	/** The Clear button: keep what is playing, drop everything around it. */
 	clearOthers() {
 		const now = this.items[this.currentIndex];

@@ -14,6 +14,7 @@
 	import Queue from '$components/queue/Queue.svelte';
 	import Chat from '$components/chat/Chat.svelte';
 	import SessionStrip from '$components/session/SessionStrip.svelte';
+	import account from '$states/account.svelte';
 	import queue from '$states/queue.svelte';
 	import rooms from '$states/rooms.svelte';
 	import session from '$states/session.svelte';
@@ -38,6 +39,7 @@
 
 	onMount(async () => {
 		user.load();
+		account.load();
 		// clears Discord's activity loading screen; a no-op in a normal browser tab
 		await initDiscord();
 		// skips the "pick a name" gate on the room page and fills the header avatar

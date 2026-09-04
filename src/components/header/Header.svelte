@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { Beaker, Cloud, FolderOpen, Icon, MagnifyingGlass, User } from 'svelte-hero-icons';
+	import { Beaker, Cloud, FolderOpen, Icon, MagnifyingGlass, RectangleStack, User } from 'svelte-hero-icons';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
+	import account from '$states/account.svelte';
 	import session from '$states/session.svelte';
 	import user from '$states/user.svelte';
 
@@ -9,6 +10,8 @@
 	let searchTerm = $derived(page.url.searchParams.get('term') ?? '');
 	let editingName = $state(false);
 	let draftName = $state('');
+	let accountName = $state('');
+	let accountPassword = $state('');
 
 	function openName() {
 		draftName = user.username ?? '';
@@ -19,6 +22,15 @@
 		event.preventDefault();
 		user.choose(draftName);
 		editingName = false;
+	}
+
+	/** Signing in fills the name field too, so the panel does not contradict itself. */
+	async function signIn(create: boolean) {
+		const done = create
+			? await account.signUp(accountName, accountPassword)
+			: await account.signIn(accountName, accountPassword);
+		accountPassword = '';
+		if (done) draftName = user.username ?? draftName;
 	}
 </script>
 
@@ -54,6 +66,18 @@
 				class:text-gold={page.url.pathname.startsWith('/browse')}
 			>
 				<Icon src={FolderOpen} micro size="20" />
+			</a>
+
+			<!-- Playlists are not the library — they are what people cut out of it — so this
+			     door is the app's own violet, not gold. Hidden below sm: for the same reason. -->
+			<a
+				href={resolve('/playlists')}
+				aria-label="Playlists"
+				class="hidden size-10 shrink-0 items-center justify-center rounded-row border border-haze text-fog outline-none hover:border-primary-0 hover:text-primary-500 focus-visible:ring-2 focus-visible:ring-primary-500 sm:flex"
+				class:border-primary-0={page.url.pathname.startsWith('/playlist')}
+				class:text-primary-500={page.url.pathname.startsWith('/playlist')}
+			>
+				<Icon src={RectangleStack} micro size="20" />
 			</a>
 		</div>
 
@@ -96,32 +120,104 @@
 			</button>
 
 			{#if editingName}
-				<form
+				<div
 					class="absolute right-0 z-30 mt-2 w-[min(18rem,calc(100vw-1.5rem))] rounded-panel border border-haze bg-surface-100 p-3 text-left"
-					onsubmit={saveName}
 				>
-					<h2 class="eyebrow mb-2">Your name</h2>
-					<input
-						type="text"
-						bind:value={draftName}
-						maxlength="60"
-						placeholder="Anonymous"
-						aria-label="Your name"
-						class="rounded-row border border-haze bg-dark-0 w-full text-sm text-chalk placeholder:text-fog ring-primary-0 focus:border-primary-0 focus-visible:ring-2"
-					/>
-					{#if session.inRoom}
-						<!-- the server applies a name only when a connection registers -->
-						<p class="mt-2 text-xs text-fog">
-							Renaming reconnects you. The room sees you leave and come back.
-						</p>
-					{/if}
-					<button
-						type="submit"
-						class="mt-3 w-full rounded-row bg-primary-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-0"
-					>
-						Save name
-					</button>
-				</form>
+					<form onsubmit={saveName}>
+						<h2 class="eyebrow mb-2">Your name</h2>
+						<input
+							type="text"
+							bind:value={draftName}
+							maxlength="60"
+							placeholder="Anonymous"
+							aria-label="Your name"
+							class="rounded-row border border-haze bg-dark-0 w-full text-sm text-chalk placeholder:text-fog ring-primary-0 focus:border-primary-0 focus-visible:ring-2"
+						/>
+						{#if session.inRoom}
+							<!-- the server applies a name only when a connection registers -->
+							<p class="mt-2 text-xs text-fog">
+								Renaming reconnects you. The room sees you leave and come back.
+							</p>
+						{/if}
+						<button
+							type="submit"
+							class="mt-3 w-full rounded-row bg-primary-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-0"
+						>
+							Save name
+						</button>
+					</form>
+
+					<!-- An account is a different thing from the name above: it is what playlists
+					     belong to. No /login route — the popover is already the place a face opens. -->
+					<section class="mt-4 border-t border-haze pt-3">
+						{#if account.signedIn}
+							<h2 class="eyebrow mb-2">Account</h2>
+							<p class="truncate text-sm">
+								Signed in as <b class="font-semibold">{account.username}</b>
+							</p>
+							<a
+								href={resolve('/playlists')}
+								class="mt-2 block text-sm text-primary-500 underline-offset-4 hover:underline"
+								onclick={() => (editingName = false)}
+							>
+								Your playlists
+							</a>
+							<button
+								type="button"
+								class="mt-3 w-full rounded-row border border-haze px-3 py-1.5 text-sm font-semibold text-fog hover:bg-surface-200 hover:text-chalk"
+								onclick={() => account.signOut()}
+							>
+								Sign out
+							</button>
+						{:else}
+							<form
+								onsubmit={(event) => {
+									event.preventDefault();
+									signIn(false);
+								}}
+							>
+								<h2 class="eyebrow mb-2">Account</h2>
+								<p class="mb-2 text-xs text-fog">Sign in to keep playlists.</p>
+								<input
+									type="text"
+									bind:value={accountName}
+									maxlength="32"
+									autocomplete="username"
+									placeholder="Username"
+									aria-label="Username"
+									class="rounded-row border border-haze bg-dark-0 w-full text-sm text-chalk placeholder:text-fog ring-primary-0 focus:border-primary-0 focus-visible:ring-2"
+								/>
+								<input
+									type="password"
+									bind:value={accountPassword}
+									maxlength="256"
+									autocomplete="current-password"
+									placeholder="Password"
+									aria-label="Password"
+									class="rounded-row border border-haze bg-dark-0 mt-2 w-full text-sm text-chalk placeholder:text-fog ring-primary-0 focus:border-primary-0 focus-visible:ring-2"
+								/>
+								{#if account.error}<p class="mt-2 text-xs text-ember">{account.error}</p>{/if}
+								<div class="mt-3 flex gap-2">
+									<button
+										type="submit"
+										disabled={account.busy}
+										class="flex-1 rounded-row bg-primary-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-0 disabled:opacity-60"
+									>
+										{account.busy ? 'Working…' : 'Sign in'}
+									</button>
+									<button
+										type="button"
+										disabled={account.busy}
+										class="flex-1 rounded-row border border-haze px-3 py-1.5 text-sm font-semibold hover:bg-surface-200 disabled:opacity-60"
+										onclick={() => signIn(true)}
+									>
+										Create an account
+									</button>
+								</div>
+							</form>
+						{/if}
+					</section>
+				</div>
 			{/if}
 		</div>
 	</div>
