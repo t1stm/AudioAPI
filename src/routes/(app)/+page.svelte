@@ -267,6 +267,8 @@
 	}
 </script>
 
+<svelte:head><title>musicrain</title></svelte:head>
+
 <div class="page gap-10 p-4 sm:p-6 sm:pb-28">
 	<section
 		class="overflow-hidden rounded-panel border border-haze bg-surface-100 bg-[radial-gradient(120%_140%_at_8%_20%,color-mix(in_srgb,var(--color-primary-0)_26%,transparent),transparent_62%)]"
