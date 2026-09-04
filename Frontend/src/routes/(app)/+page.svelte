@@ -12,6 +12,7 @@
 		findQueryType,
 		getLocalVariant,
 		getRandomSongs,
+		isPlaylist,
 		streamArtistLocal,
 		streamRandomSongs
 	} from '$requests/songs';
@@ -251,7 +252,7 @@
 				await goto(searchUrl);
 				return;
 			}
-			if (resolved.kind === 'youtubePlaylist') {
+			if (isPlaylist(resolved)) {
 				if (resolved.results.length === 0) {
 					pasteMessage = 'That playlist did not contain any playable tracks.';
 					return;

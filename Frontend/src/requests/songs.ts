@@ -7,12 +7,22 @@ type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Respons
 export type QueryResolution =
 	| { kind: 'local' | 'youtubeVideo'; query: string; result: SearchResult }
 	| {
-			kind: 'youtubePlaylist';
+			/** A Spotify playlist arrives already resolved: Spotify has no audio, so the API
+			 *  looked every track up in the library or on YouTube and dropped what it could not
+			 *  find. The entries are ordinary playable results either way. */
+			kind: 'youtubePlaylist' | 'spotifyPlaylist';
 			query: string;
 			playlistId: string;
 			results: SearchResult[];
 	  }
 	| { kind: 'search'; query: string };
+
+/** Both playlist kinds carry `results`; every other resolution carries at most one `result`. */
+export function isPlaylist(
+	resolution: QueryResolution
+): resolution is Extract<QueryResolution, { results: SearchResult[] }> {
+	return resolution.kind === 'youtubePlaylist' || resolution.kind === 'spotifyPlaylist';
+}
 
 export class AudioApiError extends Error {
 	constructor(
@@ -93,7 +103,7 @@ export async function findQueryType(query: string, fetcher?: Fetcher) {
 		`/FindQueryType?query=${encodeURIComponent(query)}`
 	);
 
-	if (resolution.kind === 'youtubePlaylist') resolution.results = proxyThumbnails(resolution.results);
+	if (isPlaylist(resolution)) resolution.results = proxyThumbnails(resolution.results);
 	else if (resolution.kind !== 'search') resolution.result = proxyThumbnails([resolution.result])[0];
 
 	return resolution;

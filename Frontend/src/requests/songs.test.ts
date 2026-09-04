@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { dropPrefetch, prefetchSong, takePrefetched } from './songs';
+import { dropPrefetch, findQueryType, isPlaylist, prefetchSong, takePrefetched } from './songs';
 import quality from '$states/quality.svelte';
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -72,5 +72,38 @@ describe('prefetchSong', () => {
 		await flush();
 
 		expect(takePrefetched('a')).toBeNull();
+	});
+});
+
+describe('findQueryType', () => {
+	/** A Spotify playlist resolves to a playlist, not to a single track. Reading it as one put an
+	 *  `undefined` into the queue, because the resolution carries `results` and no `result`. */
+	it('reads both playlist kinds as playlists', async () => {
+		for (const kind of ['youtubePlaylist', 'spotifyPlaylist'] as const) {
+			vi.stubGlobal(
+				'fetch',
+				vi.fn(() =>
+					Promise.resolve(
+						Response.json({ kind, query: 'q', playlistId: 'p', results: [{ id: 'yt://a' }] })
+					)
+				)
+			);
+
+			const resolution = await findQueryType('anything');
+
+			expect(isPlaylist(resolution)).toBe(true);
+			expect(isPlaylist(resolution) && resolution.results).toHaveLength(1);
+		}
+	});
+
+	it('leaves a single result alone', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(() => Promise.resolve(Response.json({ kind: 'youtubeVideo', query: 'q', result: { id: 'yt://a' } })))
+		);
+
+		const resolution = await findQueryType('anything');
+
+		expect(isPlaylist(resolution)).toBe(false);
 	});
 });
