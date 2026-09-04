@@ -1,0 +1,177 @@
+# Gaida Project Docker Compose
+# see the nginx example config for more info.
+#
+# Every host-specific value and every secret lives in .env beside this file, which
+# docker compose reads on its own and .gitignore keeps out of the repository. The
+# defaults below are what a fresh checkout runs on; .env is what this host runs on.
+
+#
+#   /Audio/Download*, /Audio/Preload*  → 127.0.0.1:5341  (dunav)
+#   /Audio/Multiplayer*                → 127.0.0.1:5342  (selo, WebSocket upgrade)
+#   /Audio/Accounts*, /Audio/Playlists* → 127.0.0.1:5343  (dom)
+#   everything else                    → 127.0.0.1:5340  (gaida-api)
+
+name: gaida
+
+x-service: &service
+  restart: unless-stopped
+  environment: &env
+    ASPNETCORE_URLS: http://+:8080
+    ASPNETCORE_ENVIRONMENT: Production
+    # DiscoveryContracts.cs:83 ignores PublicApiBaseUrl in Development — this has to be Production.
+
+services:
+  # ── Platform pods ──────────────────────────────────────────────────────────────
+  # Each owns its own storage and its own caching. Neither is replicable: local is
+  # pinned to the library, and a second YouTube pod shares one egress IP and just
+  # reaches YouTube's rate limit sooner.
+
+  gaida-local:
+    <<: *service
+    build:
+      context: .
+      dockerfile: Gaida.Pods.MusicDatabase/Dockerfile
+    environment:
+      <<: *env
+      STORAGE: /music
+      ALBUM_COVERS: /covers
+      # Public prefix substituted into MusicInfo.CoverUrl (MusicManager.cs:58). Needs the scheme:
+      # the value becomes an absolute thumbnailUrl that Cover.cs fetches with HttpClient, and a
+      # bare "example.com/" is not a URL it can resolve.
+      DOMAIN: ${PUBLIC_DOMAIN:-http://localhost}
+    volumes:
+      # Read-write, not :ro — MusicManager.cs:77 opens Info.json OpenOrCreate/ReadWrite,
+      # CoverExtractor.cs:25,50 rewrites it and writes extracted covers, and the tag
+      # re-read migration in MUSICDB_FORMAT_PLAN.md rewrites every Info.json in the tree.
+      - ${MUSIC_LIBRARY_PATH:-./data/music}:/music
+      # The web root nginx serves as $PUBLIC_DOMAIN/Album_Covers — which is exactly what
+      # DOMAIN builds the public thumbnailUrl from, so covers written here are immediately
+      # fetchable. 1487 covers, 401M.
+      - ${ALBUM_COVERS_PATH:-./data/covers}:/covers
+
+  gaida-youtube:
+    <<: *service
+    build:
+      context: .
+      dockerfile: Gaida.Pods.YouTube/Dockerfile
+    environment:
+      <<: *env
+      YOUTUBE_CACHE_DB: /cache/YouTube.json   # YouTubeCacher — the search cache
+      YOUTUBE_CACHE: /webm                    # GetterLocalCache / YouTubeCacheProvider
+    volumes:
+      - ${YOUTUBE_CACHE_DB_PATH:-./data/youtube-cache}:/cache
+      # The existing webm cache — 25463 files, 90G; pointing this anywhere else starts empty
+      # and re-downloads the lot from YouTube.
+      - ${YOUTUBE_AUDIO_CACHE_PATH:-./data/youtube-audio}:/webm
+    # Image needs yt-dlp on PATH for GetterYtDlp.
+
+  # Metadata only: Spotify hands over track names, and Gaida.API resolves each one against the library or
+  # YouTube (Platforms__2__Resolve below). Without credentials the pod still runs and simply finds nothing.
+  gaida-spotify:
+    <<: *service
+    build:
+      context: .
+      dockerfile: Gaida.Pods.Spotify/Dockerfile
+    environment:
+      <<: *env
+      SPOTIFY_ID: ${SPOTIFY_ID:-}
+      SPOTIFY_SECRET: ${SPOTIFY_SECRET:-}
+
+  # ── Proxy + encoder ────────────────────────────────────────────────────────────
+  # The only stateless service, and so the only one worth scaling:
+  #   docker compose up -d --scale gaida-api=4
+  # Dunav being single-instance is what makes that safe — dedup happens upstream, so
+  # four replicas never encode the same track twice.
+  gaida-api:
+    <<: *service
+    build:
+      context: .
+      dockerfile: Gaida.API/Dockerfile
+    environment:
+      <<: *env
+      Platforms__0__Url: http://gaida-local:8080
+      Platforms__0__Ids: audio://
+      Platforms__1__Url: http://gaida-youtube:8080
+      Platforms__1__Ids: yt://,yt-playlist://
+      Platforms__2__Url: http://gaida-spotify:8080
+      Platforms__2__Ids: spotify://,spotify-playlist://
+      # Its results are names, not playable IDs -- see Gaida.API/PlayableResolver.cs.
+      Platforms__2__Resolve: "true"
+      Resolve__Concurrency: ${RESOLVE_CONCURRENCY:-4}
+      PublicApiBaseUrl: ${PUBLIC_API_BASE_URL:-http://localhost:5340}
+      THUMBNAIL_CACHE: /thumbnails
+      # Content.cs:86-99 — the platform name lives here rather than in code.
+      Random__Shares__youtube: ${YOUTUBE_RANDOM_SHARE:-0.4}
+    ports:
+      # Host ports are the 534x block; the container always listens on 8080.
+      - "127.0.0.1:${GAIDA_API_PORT:-5340}:8080"
+    volumes:
+      - thumbnails:/thumbnails
+    # Image needs ffmpeg on PATH.
+
+  # ── Fan-out cache ──────────────────────────────────────────────────────────────
+
+  dunav:
+    <<: *service
+    build:
+      context: .
+      dockerfile: Dunav/Dockerfile
+    environment:
+      <<: *env
+      Gaida__Url: http://gaida-api:8080
+      Dunav__RetentionMinutes: ${DUNAV_RETENTION_MINUTES:-45}
+      # Bodies live here as ordinary files, one per cache key. Deliberately NOT a tmpfs mount and
+      # deliberately not a bind mount of the host's /tmp: tmpfs pages are charged to this container's
+      # memory cgroup and cannot be reclaimed, which is the OOM this design exists to avoid. Left
+      # unmounted, /tmp is the overlay2 layer on / -- ordinary files, reclaimable page cache.
+      # See DUNAV_SPILL_PLAN.md.
+      Dunav__CacheDir: /tmp/dunav
+      # A DISK budget now, not a memory one, so it is sized against free space on / rather than
+      # against mem_limit (see .env).
+      Dunav__MaxBytes: ${DUNAV_MAX_BYTES:-21474836480}
+    ports:
+      - "127.0.0.1:${DUNAV_PORT:-5341}:8080"
+    # Was 6g when the cache lived on the heap. Resident memory is now the runtime plus roughly
+    # 64 KiB per in-flight connection, independent of catalog size. Watch it before trimming further.
+    mem_limit: ${DUNAV_MEMORY_LIMIT:-1g}
+
+  # ── Rooms ──────────────────────────────────────────────────────────────────────
+
+  selo:
+    <<: *service
+    build:
+      context: .
+      dockerfile: Selo/Dockerfile
+    environment:
+      <<: *env
+      # Room.cs:135 — the single audio coupling, SearchID only.
+      Gaida__Url: http://gaida-api:8080
+    ports:
+      - "127.0.0.1:${SELO_PORT:-5342}:8080"
+
+  # ── Accounts and playlists ─────────────────────────────────────────────────────
+  # Talks to nothing. Unlike every other service here, losing its volume loses real
+  # user data rather than a cache that refills itself — this is the one to back up.
+
+  dom:
+    <<: *service
+    build:
+      context: .
+      dockerfile: Dom/Dockerfile
+    environment:
+      <<: *env
+      Dom__DataFile: /data/dom.json
+      Dom__CoverDir: /covers
+    ports:
+      - "127.0.0.1:${DOM_PORT:-5343}:8080"
+    volumes:
+      # A named volume, deliberately unlike Dunav's cache dir: that one is throwaway
+      # by design, this one is the accounts.
+      - dom-data:/data
+      # Uploaded playlist covers. Losing these loses artwork, not playlists.
+      - dom-covers:/covers
+
+volumes:
+  thumbnails:
+  dom-data:
+  dom-covers:
