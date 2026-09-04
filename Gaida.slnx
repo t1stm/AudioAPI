@@ -31,6 +31,7 @@
     <Project Path="Dom/Dom.csproj"/>
     <Project Path="Gaida.Pods.MusicDatabase/Gaida.Pods.MusicDatabase.csproj"/>
     <Project Path="Gaida.Pods.YouTube/Gaida.Pods.YouTube.csproj"/>
+    <Project Path="Gaida.Pods.Spotify/Gaida.Pods.Spotify.csproj"/>
   </Folder>
   <Project Path="Gaida.API/Gaida.API.csproj"/>
   <Project Path="Gaida.Bot/Gaida.Bot.csproj"/>

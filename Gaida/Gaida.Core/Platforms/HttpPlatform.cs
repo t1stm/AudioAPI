@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Gaida.Core.Platforms.Optional.Supports;
 using Gaida.Core.Streams;
+using Gaida.Core.Utils;
 using Serilog;
 
 namespace Gaida.Core.Platforms;
@@ -153,7 +154,11 @@ public sealed class HttpPlatform : Platform, ISupportsSearch, ISupportsPlaylist,
         }
     }
 
-    private HttpResult ToResult(PodResultDto dto)
+    /// <summary>
+    ///     A pod DTO as this platform's result, downloaders attached. Public because a sub-resource can come
+    ///     back outside a list route — <c>/variant</c>'s matched track, which the resolver plays.
+    /// </summary>
+    public HttpResult ToResult(PodResultDto dto)
     {
         return new HttpResult
         {
@@ -171,11 +176,36 @@ public sealed class HttpPlatform : Platform, ISupportsSearch, ISupportsPlaylist,
         };
     }
 
-    private async IAsyncEnumerable<PlatformResult> FetchList(string path,
+    /// <summary>
+    ///     Reads the pod's array as it arrives rather than after its last byte, so a slow producer (a long
+    ///     YouTube playlist, a per-track lookup) reaches the caller item by item.
+    /// </summary>
+    /// <remarks>
+    ///     <see cref="HttpCompletionOption.ResponseHeadersRead" /> is not optional here: the default buffers
+    ///     the whole body before <c>GetAsync</c> returns, and the async enumerator would then be reading from
+    ///     memory. A <c>try</c> cannot wrap a <c>yield return</c>, so the failure handling that
+    ///     <see cref="GetAsync{T}" /> does inline sits in <see cref="FetchList" /> around this instead —
+    ///     same "never take the other pods down" contract, one place, every caller covered.
+    /// </remarks>
+    private async IAsyncEnumerable<PlatformResult> FetchListCore(string path,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var dtos = await GetAsync<List<PodResultDto>>(path, cancellationToken) ?? [];
-        foreach (var dto in dtos) yield return ToResult(dto);
+        using var response =
+            await _http.GetAsync(path, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+        // A pod that does not support a route answers 404, which is "nothing found", not a failure.
+        if (!response.IsSuccessStatusCode) yield break;
+
+        await using var body = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await foreach (var dto in JsonSerializer.DeserializeAsyncEnumerable<PodResultDto>(body, jsonOptions,
+                           cancellationToken))
+            if (dto is not null)
+                yield return ToResult(dto);
+    }
+
+    private IAsyncEnumerable<PlatformResult> FetchList(string path, CancellationToken cancellationToken)
+    {
+        return FetchListCore(path, cancellationToken).Guarded(Logger, path, cancellationToken);
     }
 
     /// <summary>

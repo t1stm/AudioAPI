@@ -37,6 +37,7 @@ builder.Services.AddCors(options => options.AddPolicy("Frontend", policy => poli
 
 builder.Services.AddSingleton(Log.Logger);
 builder.Services.AddSingleton<ManagerService>();
+builder.Services.AddSingleton<PlayableResolver>();
 
 var app = builder.Build();
 

@@ -13,6 +13,7 @@ Everything below was verified on this machine against the live library at `/nvme
 | `dotnet build Gaida.slnx` | clean, 0 warnings (excluding the DSharpPlus submodule) |
 | `dotnet test Gaida/Gaida.Tests` | 3 / 3 pass (incl. the live YouTube download test) |
 | `/Audio/Search` (ID + keywords), `/Audio/RandomResults`, `/Audio/Artist/*` | verified |
+| The same four, streamed element by element (`STREAMING_PLAN.md`) | built and unit-tested; not yet measured against a live deployment |
 | `/Audio/DownloadRaw`, `/Audio/Download/{codec}/{bitrate}` | verified (9.5 MB raw, 3.3 MB opus) |
 | Multiplayer websockets (create → push → join → add → rename → loaded → sync) | verified, 0 server-side errors |
 | `/openapi/v1.json` | 200 |

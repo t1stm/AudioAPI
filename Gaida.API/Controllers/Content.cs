@@ -3,6 +3,7 @@ using Gaida.API.Contracts;
 using Gaida.Core;
 using Gaida.Core.FFmpeg;
 using Gaida.Core.Platforms;
+using Gaida.Core.Utils;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Gaida.API.Controllers;
@@ -12,48 +13,49 @@ namespace Gaida.API.Controllers;
 public class Content(ILogger<Content> logger, IConfiguration configuration, IHostEnvironment environment)
     : ControllerBase
 {
+    /// <summary>
+    ///     Results are serialised as they arrive, so library hits render while YouTube is still being asked
+    ///     and a long playlist fills track by track. Everything that can still fail with a status code —
+    ///     classify, and the single-ID lookup — happens before the sequence is handed over.
+    /// </summary>
     [HttpGet]
     [Route("/Audio/Search")]
     [Produces("application/json")]
-    public async Task<ActionResult<IReadOnlyList<SearchResultDto>>> Search(string? query,
-        [FromServices] ManagerService managerService)
+    [ProducesResponseType<IReadOnlyList<SearchResultDto>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Search(string? query, [FromServices] ManagerService managerService,
+        [FromServices] PlayableResolver resolver)
     {
         if (string.IsNullOrWhiteSpace(query)) return Ok(Array.Empty<SearchResultDto>());
         logger.LogInformation("Searching for {Query}", query);
 
         var manager = managerService.Manager;
         var cancellationToken = HttpContext.RequestAborted;
-        var results = new List<SearchResultDto>();
 
+        ClassifyClaim claim;
         try
         {
-            var claim = await manager.ClassifyAsync(query, cancellationToken);
+            claim = await manager.ClassifyAsync(query, cancellationToken);
             if (claim.Error is not null)
             {
                 // A pod recognised the query as its own but rejected it (e.g. a malformed yt:// id). Discovery
                 // stays a valid empty result rather than surfacing the resolver's 400 here — that belongs to
                 // /Audio/FindQueryType, which callers use before they commit to a search.
                 logger.LogWarning("Classify rejected {Query}: {Error}", query, claim.Error);
-                return Ok(results);
+                return Ok(Array.Empty<SearchResultDto>());
             }
 
-            switch (claim.Kind)
+            if (claim.Kind == QueryType.ID)
             {
-                case QueryType.ID:
-                {
-                    var found = await manager.SearchID(claim.Query, cancellationToken);
-                    AddMappedResult(results, found);
-                    break;
-                }
+                var found = await manager.SearchID(claim.Query, cancellationToken);
 
-                case QueryType.Playlist:
-                    await AddMappedResults(results, manager.SearchPlaylist(claim.Query, cancellationToken));
-                    break;
+                // A Spotify link resolves to a name, not to audio — the playable track is whatever the
+                // library or YouTube has for it.
+                if (found is not null) found = await resolver.ResolveOne(found, cancellationToken);
 
-                case QueryType.Keywords:
-                default:
-                    await AddMappedResults(results, manager.SearchKeywords(claim.Query, cancellationToken));
-                    break;
+                var mapped = found is null
+                    ? null
+                    : DiscoveryResultMapper.Map(found, Request, configuration, environment);
+                return Ok(mapped is null ? Array.Empty<SearchResultDto>() : [mapped]);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -64,15 +66,28 @@ public class Content(ILogger<Content> logger, IConfiguration configuration, IHos
         {
             // Discovery remains a valid JSON response even when an upstream provider is unavailable.
             logger.LogError(exception, "Search failed for {Query}", query);
+            return Ok(Array.Empty<SearchResultDto>());
         }
 
-        return Ok(results);
+        // Both of these are already guarded per platform inside AudioManager, so one unreachable pod
+        // shortens the stream instead of tearing the response.
+        var results = claim.Kind == QueryType.Playlist
+            ? manager.SearchPlaylist(claim.Query, cancellationToken)
+            : manager.SearchKeywords(claim.Query, cancellationToken);
+
+        // Only a metadata-only playlist pays for the resolver: its window would otherwise hold back the
+        // first result of an ordinary search until four had arrived.
+        if (managerService.NeedsResolving(claim.Query)) results = resolver.Resolve(results, cancellationToken);
+
+        return Ok(this.Mapped(results, configuration, environment));
     }
 
     [HttpGet]
     [Route("/Audio/RandomResults")]
     [Produces("application/json")]
-    public async Task<ActionResult<IReadOnlyList<SearchResultDto>>> RandomResults(
+    [ProducesResponseType<IReadOnlyList<SearchResultDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorBody>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> RandomResults(
         [FromServices] ManagerService managerService, int count = 10, double? youTubeShare = null)
     {
         if (count is < 1 or > 200)
@@ -84,7 +99,7 @@ public class Content(ILogger<Content> logger, IConfiguration configuration, IHos
 
         logger.LogInformation("Returning {Count} random results with a {Share} YouTube share", count, share);
         var manager = managerService.Manager;
-        var results = new List<SearchResultDto>();
+        var cancellationToken = HttpContext.RequestAborted;
 
         // Randomized rounding preserves the requested share over time while allowing either source
         // to be selected for small requests (for example, count=1 chooses YouTube 40% of the time).
@@ -93,16 +108,19 @@ public class Content(ILogger<Content> logger, IConfiguration configuration, IHos
         if (Random.Shared.NextDouble() < exactYouTubeCount - youTubeCount)
             youTubeCount++;
 
-        if (manager.PlatformFor("yt://") is HttpPlatform youTube)
-            await AddMappedResults(results, youTube.GetRandomResults(youTubeCount, HttpContext.RequestAborted));
+        var youTube = manager.PlatformFor("yt://") is HttpPlatform youTubePlatform
+            ? youTubePlatform.GetRandomResults(youTubeCount, cancellationToken)
+            : Array.Empty<PlatformResult>().AsAsync();
 
-        // Local backfills whatever the YouTube cache was short of, so the caller always gets `count` results.
-        if (manager.PlatformFor("audio://") is HttpPlatform local)
-            await AddMappedResults(results, local.GetRandomResults(count - results.Count, HttpContext.RequestAborted));
+        // ponytail: local is asked for the full count rather than the shortfall. It answers from an in-memory
+        // shuffle, so over-asking is free, and whatever YouTube turns out to be short of is already on its
+        // way — which is the only way a backfill can work when neither source has finished yet.
+        var local = manager.PlatformFor("audio://") is HttpPlatform localPlatform
+            ? localPlatform.GetRandomResults(count, cancellationToken)
+            : Array.Empty<PlatformResult>().AsAsync();
 
-        var shuffled = results.ToArray();
-        Random.Shared.Shuffle(shuffled);
-        return Ok(shuffled);
+        return Ok(this.Mapped(youTube.RandomMerge(youTubeCount, local, count, cancellationToken),
+            configuration, environment));
     }
 
     [HttpGet]
@@ -201,17 +219,4 @@ public class Content(ILogger<Content> logger, IConfiguration configuration, IHos
         Response.Headers.ETag = $"\"{etag}\"";
     }
 
-    private void AddMappedResult(ICollection<SearchResultDto> destination, PlatformResult? result)
-    {
-        if (result is null) return;
-        var mapped = DiscoveryResultMapper.Map(result, Request, configuration, environment);
-        if (mapped is not null) destination.Add(mapped);
-    }
-
-    private async Task AddMappedResults(ICollection<SearchResultDto> destination,
-        IAsyncEnumerable<PlatformResult> source)
-    {
-        await foreach (var result in source.WithCancellation(HttpContext.RequestAborted))
-            AddMappedResult(destination, result);
-    }
 }

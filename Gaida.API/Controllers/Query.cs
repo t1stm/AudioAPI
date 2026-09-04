@@ -17,7 +17,7 @@ public class Query(ILogger<Query> logger, IConfiguration configuration, IHostEnv
     [ProducesResponseType<ApiErrorBody>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorBody>(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<QueryResolutionDto>> FindQueryType(string? query,
-        [FromServices] ManagerService managerService)
+        [FromServices] ManagerService managerService, [FromServices] PlayableResolver resolver)
     {
         if (string.IsNullOrWhiteSpace(query))
             return BadRequest(Error("invalid_query", "Query is required."));
@@ -32,8 +32,8 @@ public class Query(ILogger<Query> logger, IConfiguration configuration, IHostEnv
 
             return claim.Kind switch
             {
-                QueryType.ID => await ResolveOne(KindOf(claim.Query), claim.Query, managerService),
-                QueryType.Playlist => await ResolvePlaylist(claim.Query, managerService),
+                QueryType.ID => await ResolveOne(claim.Query, managerService, resolver),
+                QueryType.Playlist => await ResolvePlaylist(claim.Query, managerService, resolver),
                 _ => Ok(new QueryResolutionDto { Kind = "search", Query = trimmed })
             };
         }
@@ -87,33 +87,49 @@ public class Query(ILogger<Query> logger, IConfiguration configuration, IHostEnv
             mapped));
     }
 
-    private async Task<ActionResult<QueryResolutionDto>> ResolveOne(string kind, string id,
-        ManagerService managerService)
+    private async Task<ActionResult<QueryResolutionDto>> ResolveOne(string id, ManagerService managerService,
+        PlayableResolver resolver)
     {
         var result = await managerService.Manager.SearchID(id, HttpContext.RequestAborted);
+
+        // A Spotify link resolves to a name; what the client gets back is whatever platform actually has the
+        // track, which is also what `kind` then reports.
+        if (result is not null) result = await resolver.ResolveOne(result, HttpContext.RequestAborted);
         if (result is null) return NotFound(Error("not_found", "No result was found for this ID."));
 
         var mapped = DiscoveryResultMapper.Map(result, Request, configuration, environment);
         return mapped is null
             ? NotFound(Error("not_found", "No result was found for this ID."))
-            : Ok(new QueryResolutionDto { Kind = kind, Query = id, Result = mapped });
+            : Ok(new QueryResolutionDto { Kind = KindOf(result.ID), Query = id, Result = mapped });
     }
 
+    /// <summary>
+    ///     The one discovery response still assembled whole: <c>results</c> lives inside an envelope, and a
+    ///     half-written envelope is not something a streaming client can read. Callers that want the entries as
+    ///     they arrive should send the canonical <c>query</c> back to <c>/Audio/Search</c>, which routes a
+    ///     playlist claim to the same lookup and streams it — see API.md.
+    /// </summary>
     private async Task<ActionResult<QueryResolutionDto>> ResolvePlaylist(string playlistUrl,
-        ManagerService managerService)
+        ManagerService managerService, PlayableResolver resolver)
     {
+        var entries = managerService.Manager.SearchPlaylist(playlistUrl, HttpContext.RequestAborted);
+        if (managerService.NeedsResolving(playlistUrl))
+            entries = resolver.Resolve(entries, HttpContext.RequestAborted);
+
         var results = new List<SearchResultDto>();
-        await foreach (var result in managerService.Manager.SearchPlaylist(playlistUrl, HttpContext.RequestAborted))
+        await foreach (var result in entries)
         {
             var mapped = DiscoveryResultMapper.Map(result, Request, configuration, environment);
             if (mapped is not null) results.Add(mapped);
         }
 
+        var spotify = playlistUrl.StartsWith("spotify-playlist://", StringComparison.OrdinalIgnoreCase);
+
         return Ok(new QueryResolutionDto
         {
-            Kind = "youtubePlaylist",
+            Kind = spotify ? "spotifyPlaylist" : "youtubePlaylist",
             Query = playlistUrl,
-            PlaylistId = ExtractPlaylistId(playlistUrl),
+            PlaylistId = spotify ? playlistUrl["spotify-playlist://".Length..] : ExtractPlaylistId(playlistUrl),
             Results = results
         });
     }
@@ -146,6 +162,7 @@ public class Query(ILogger<Query> logger, IConfiguration configuration, IHostEnv
         {
             _ when id.StartsWith("audio://", StringComparison.Ordinal) => "local",
             _ when id.StartsWith("yt://", StringComparison.Ordinal) => "youtubeVideo",
+            _ when id.StartsWith("spotify://", StringComparison.Ordinal) => "spotifyTrack",
             _ => "id"
         };
     }

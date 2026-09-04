@@ -15,6 +15,7 @@ public class ManagerService
     public ManagerService(ILogger logger, IConfiguration configuration, IHttpClientFactory httpClientFactory)
     {
         Manager = new AudioManager(logger);
+        var metadataOnly = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var pod in configuration.GetSection("Platforms").GetChildren())
         {
@@ -25,7 +26,26 @@ public class ManagerService
             var http = httpClientFactory.CreateClient($"platform-{pod.Key}");
             http.BaseAddress = new Uri(url);
 
+            // A pod whose results are names rather than playable IDs (Spotify). One flag in config beats an
+            // interface or a per-result marker on the wire: the pod itself has no opinion about it.
+            if (pod.GetValue("Resolve", false)) metadataOnly.UnionWith(ids);
+
             Manager.RegisterPlatform(new HttpPlatform(logger, http, ids));
         }
+
+        MetadataOnly = metadataOnly;
+    }
+
+    /// <summary>
+    ///     Platform identifiers (<c>spotify://</c> and the like) whose results carry no audio and have to be
+    ///     resolved against a platform that does — see <see cref="PlayableResolver" />.
+    /// </summary>
+    public IReadOnlySet<string> MetadataOnly { get; }
+
+    /// <summary>Whether <paramref name="id" /> (or a canonical query) belongs to a metadata-only platform.</summary>
+    public bool NeedsResolving(string? id)
+    {
+        return id is not null &&
+               MetadataOnly.Any(identifier => id.StartsWith(identifier, StringComparison.OrdinalIgnoreCase));
     }
 }

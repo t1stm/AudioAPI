@@ -24,10 +24,19 @@ The example production base URL is `https://api.example.com`. All endpoints belo
 
 `originalTitle` and `originalArtist` carry the untransliterated title and artist as the source tagged them. **`name` and `artist` are sourced from them when present**, falling back to the romanized form, so a track tagged in Cyrillic or Japanese renders in its own script by default and `name` will usually equal `originalTitle`. The romanized form is not on the wire — it is used server-side for search and matching only. Clients that want the romanized string should not expect it here.
 
-- `Search` accepts normal text (including Cyrillic), local IDs, the server's `yt://` IDs, and playlist URLs.
+- `Search` accepts normal text (including Cyrillic), local IDs, the server's `yt://` IDs, and playlist URLs (YouTube and Spotify).
 - `RandomResults` accepts `count` from 1 through 200, inclusive. An invalid count returns `400 {"error":{"code":"invalid_count","message":"..."}}`.
 - `RandomResults` also accepts `youTubeShare` from 0 through 1 (default `0.4`): the share of results drawn from YouTube, with the local library supplying the rest and backfilling anything YouTube is short of. Out of range returns `400 {"error":{"code":"invalid_share","message":"..."}}`.
-- Artist endpoints return `200 []` when the artist is empty or unmatched. Both use `artist`, then `name`, then `id` as their stable sort order.
+- `Artist/Local` returns `200 []` when the artist is empty or unmatched, and uses `artist`, then `name`, then `id` as its stable sort order. `Artist/YouTube` is a keyword search and comes back in YouTube's relevance order.
+
+### Streamed responses
+
+These four endpoints write their array element by element (`Transfer-Encoding: chunked`, no `Content-Length`), so a client reading the body incrementally can render each track as it arrives instead of waiting for the last one. It is an ordinary JSON array either way — a client that calls `response.json()` needs no change.
+
+Two consequences for clients that do read it incrementally:
+
+- The status code is decided before the first element. Once the array has started, an upstream failure can only end it early, so a truncated result set is short, never an error body. Every validation error (`invalid_count`, `invalid_share`) still arrives as a normal `400` with nothing written.
+- Ordering is the producer's. `RandomResults` interleaves its YouTube and library picks as they arrive rather than shuffling a finished list; the requested `youTubeShare` still holds, and the library still backfills whatever YouTube is short of.
 
 ## Mixed query resolver
 
@@ -38,6 +47,8 @@ The example production base URL is `https://api.example.com`. All endpoints belo
 | `audio://...` | `local` | `query` is the canonical local ID; `result` is one discovery result |
 | YouTube video URL, `yt://...`, or 11-character video ID | `youtubeVideo` | `query` is canonical `yt://...`; `result` is one discovery result |
 | YouTube playlist URL, `yt-playlist://...`, or recognised playlist ID | `youtubePlaylist` | `query` is a canonical playlist URL; `playlistId`; `results` discovery-result array |
+| Spotify track URL, `spotify:track:...`, or `spotify://...` | `local` or `youtubeVideo` | Spotify has no audio, so the track is looked up in the library, then on YouTube; `kind` and `result` describe whatever was found. `404 not_found` when nothing was |
+| Spotify playlist URL, `spotify:playlist:...`, or `spotify-playlist://...` | `spotifyPlaylist` | `query` is the canonical `spotify-playlist://...`; `playlistId`; `results` are the resolved, playable tracks, in the playlist's own order. Tracks nothing was found for are left out |
 | Ordinary text | `search` | `query` is the trimmed text; call `Search` with it |
 
 Examples:
@@ -49,6 +60,10 @@ Examples:
 ```json
 {"kind":"youtubePlaylist","query":"https://www.youtube.com/playlist?list=PL...","playlistId":"PL...","results":[]}
 ```
+
+`results` is assembled whole here — it lives inside an envelope, so there is nothing to stream into. For a long playlist, send the canonical `query` back to `Search`, which routes it to the same lookup and streams the entries as they resolve.
+
+A Spotify playlist costs one lookup per track (the library first, then YouTube), a few at a time, so it is the slowest resolution this endpoint does and the one that most repays going through `Search` instead.
 
 Malformed `audio://`, `yt://`, `yt-playlist://`, or unsupported URLs return a JSON error such as:
 

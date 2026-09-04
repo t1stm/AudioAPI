@@ -5,6 +5,82 @@ namespace Gaida.Core.Utils;
 
 public static class Streaming
 {
+    /// <summary>
+    ///     Draws from two sources at random until <paramref name="total" /> items have been produced, picking
+    ///     <paramref name="first" /> with a probability of what it still owes against what is still wanted.
+    ///     What a shuffle of the finished list does for a buffered response, without a finished list — the mix
+    ///     is the same, it just arrives interleaved. A source that ends early stops being drawn from, so the
+    ///     other one backfills it.
+    /// </summary>
+    /// <remarks>
+    ///     ponytail: no prefetch, one item pulled at a time. Both sources here are pods answering from memory,
+    ///     so the round trip is already in the noise next to the client's own.
+    /// </remarks>
+    public static async IAsyncEnumerable<T> RandomMerge<T>(this IAsyncEnumerable<T> first, int firstShare,
+        IAsyncEnumerable<T> second, int total,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await using var firstEnumerator = first.GetAsyncEnumerator(cancellationToken);
+        await using var secondEnumerator = second.GetAsyncEnumerator(cancellationToken);
+
+        var owed = firstShare;
+        var emitted = 0;
+        bool firstDone = false, secondDone = false;
+
+        while (emitted < total && !(firstDone && secondDone))
+        {
+            var takeFirst = !firstDone && (secondDone || Random.Shared.Next(total - emitted) < owed);
+            var enumerator = takeFirst ? firstEnumerator : secondEnumerator;
+
+            if (!await enumerator.MoveNextAsync())
+            {
+                if (takeFirst)
+                {
+                    firstDone = true;
+                    owed = 0;
+                }
+                else
+                {
+                    secondDone = true;
+                }
+
+                continue;
+            }
+
+            if (takeFirst) owed--;
+            emitted++;
+            yield return enumerator.Current;
+        }
+    }
+
+    /// <summary>
+    ///     Runs <paramref name="selector" /> over the source with at most <paramref name="concurrency" /> lookups
+    ///     in flight, yielding in source order. For turning a list of names into playable results: the searches
+    ///     overlap, but a playlist still arrives in the order it was written. Nulls (nothing found) are dropped.
+    /// </summary>
+    public static async IAsyncEnumerable<TOut> SelectParallel<TIn, TOut>(this IAsyncEnumerable<TIn> source,
+        int concurrency, Func<TIn, CancellationToken, Task<TOut?>> selector,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default) where TOut : class
+    {
+        var pending = new Queue<Task<TOut?>>(concurrency);
+        await using var enumerator = source.GetAsyncEnumerator(cancellationToken);
+
+        while (pending.Count < concurrency && await enumerator.MoveNextAsync())
+            pending.Enqueue(selector(enumerator.Current, cancellationToken));
+
+        while (pending.Count > 0)
+        {
+            var result = await pending.Dequeue();
+
+            // Topped up only after the head completes, so the window stays at `concurrency` rather than
+            // racing ahead of what the caller is consuming.
+            if (await enumerator.MoveNextAsync())
+                pending.Enqueue(selector(enumerator.Current, cancellationToken));
+
+            if (result is not null) yield return result;
+        }
+    }
+
     /// <summary>Adapts an already-materialised sequence to the streaming interfaces.</summary>
 #pragma warning disable CS1998 // sequence is already in memory, there is nothing to await
     public static async IAsyncEnumerable<T> AsAsync<T>(this IEnumerable<T> source)

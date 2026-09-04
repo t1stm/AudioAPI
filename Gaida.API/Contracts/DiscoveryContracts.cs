@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Serialization;
 using Gaida.Core.Platforms;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Gaida.API.Contracts;
 
@@ -54,6 +55,27 @@ public sealed record QueryResolutionDto
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<SearchResultDto>? Results { get; init; }
+}
+
+/// <summary>The mapper's streaming twin: maps results as they arrive, without collecting them.</summary>
+/// <remarks>
+///     What makes the response stream is returning the sequence from the action: ASP.NET serialises an
+///     <see cref="IAsyncEnumerable{T}" /> element by element and flushes as it goes, chunked, with no
+///     Content-Length. Measured on .NET 10 — it holds for a bare return, for <c>Ok(sequence)</c>, and for
+///     records far below the serializer's buffer threshold.
+///     One consequence: the status code is settled before the first element. Once the array is open, a
+///     failure can only truncate it, so everything that can still answer 400 has to happen before the
+///     sequence is handed over.
+/// </remarks>
+public static class DiscoveryStream
+{
+    public static async IAsyncEnumerable<SearchResultDto> Mapped(this ControllerBase controller,
+        IAsyncEnumerable<PlatformResult> source, IConfiguration configuration, IHostEnvironment environment)
+    {
+        await foreach (var result in source.WithCancellation(controller.HttpContext.RequestAborted))
+            if (DiscoveryResultMapper.Map(result, controller.Request, configuration, environment) is { } mapped)
+                yield return mapped;
+    }
 }
 
 public static class DiscoveryResultMapper

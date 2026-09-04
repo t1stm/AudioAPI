@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using Gaida.Core.Platforms;
 using Gaida.Core.Streams;
 using Gaida.Core.Utils;
@@ -54,20 +55,23 @@ app.MapGet("/resolve", async (string? id, CancellationToken ct) =>
     return dto is null ? Results.NotFound() : Results.Ok(dto);
 });
 
+// The routes hand back the sequence itself: ASP.NET serialises an IAsyncEnumerable element by element
+// and flushes as it goes, so a caller reading the body incrementally sees each track without waiting for
+// the last one. A playlist is the case that pays for it: YouTubeExplode fetches it a batch at a time.
 app.MapGet("/search",
-    async (string? q, CancellationToken ct) => string.IsNullOrWhiteSpace(q)
+    IResult (string? q, CancellationToken ct) => string.IsNullOrWhiteSpace(q)
         ? Results.Ok(Array.Empty<ResultDto>())
-        : Results.Ok(await Collect(youTube.SearchKeywords(q, ct), ct)));
+        : Results.Ok(Mapped(youTube.SearchKeywords(q, ct), ct)));
 
 app.MapGet("/playlist",
-    async (string? url, CancellationToken ct) => string.IsNullOrWhiteSpace(url)
+    IResult (string? url, CancellationToken ct) => string.IsNullOrWhiteSpace(url)
         ? Results.Ok(Array.Empty<ResultDto>())
-        : Results.Ok(await Collect(youTube.SearchPlaylist(url, ct), ct)));
+        : Results.Ok(Mapped(youTube.SearchPlaylist(url, ct), ct)));
 
 app.MapGet("/random",
-    async (int count, CancellationToken ct) => count < 1
+    IResult (int count, CancellationToken ct) => count < 1
         ? Results.Ok(Array.Empty<ResultDto>())
-        : Results.Ok(await Collect(youTube.GetRandomResults(count, ct), ct)));
+        : Results.Ok(Mapped(youTube.GetRandomResults(count, ct), ct)));
 
 app.MapGet("/content", async (string? id, HttpContext http, CancellationToken ct) =>
 {
@@ -96,17 +100,13 @@ static string StripScheme(string id)
     return separator < 0 ? id : id[(separator + 3)..];
 }
 
-static async Task<List<ResultDto>> Collect(IAsyncEnumerable<PlatformResult> source,
-    CancellationToken ct)
+/// <summary>Guarded exactly where Collect had it: a provider that throws halfway ends the array cleanly.</summary>
+static async IAsyncEnumerable<ResultDto> Mapped(IAsyncEnumerable<PlatformResult> source,
+    [EnumeratorCancellation] CancellationToken ct)
 {
-    var results = new List<ResultDto>();
     await foreach (var result in source.Guarded(Log.Logger, nameof(YouTubePlatform), ct))
-    {
-        var dto = ResultMapper.Map(result);
-        if (dto is not null) results.Add(dto);
-    }
-
-    return results;
+        if (ResultMapper.Map(result) is { } dto)
+            yield return dto;
 }
 
 /// <summary>

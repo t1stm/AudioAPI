@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using Gaida.Core.Platforms;
 using Gaida.Core.Streams;
+using Gaida.Core.Utils;
 using Gaida.Platforms.MusicDatabase;
 using Gaida.Platforms.MusicDatabase.Manager;
 using Serilog;
@@ -51,25 +53,16 @@ app.MapGet("/resolve", async Task<IResult> (string? id, MusicDatabase db, Cancel
     return mapped is null ? Results.NotFound() : Results.Ok(mapped);
 });
 
-app.MapGet("/search", async Task<IResult> (string? q, MusicDatabase db, CancellationToken ct) =>
-{
-    if (string.IsNullOrWhiteSpace(q)) return Results.Ok(Array.Empty<ResultDto>());
+// The routes hand back the sequence itself: ASP.NET serialises an IAsyncEnumerable element by element and
+// flushes as it goes. Everything here is already in memory, so what it buys is the client rendering while
+// a 200-track roll or a prolific artist is still being written, rather than after the last byte.
+app.MapGet("/search", IResult (string? q, MusicDatabase db, CancellationToken ct) =>
+    string.IsNullOrWhiteSpace(q)
+        ? Results.Ok(Array.Empty<ResultDto>())
+        : Results.Ok(Mapped(db.SearchKeywords(q, ct), ct)));
 
-    var results = new List<ResultDto>();
-    await foreach (var result in db.SearchKeywords(q, ct).WithCancellation(ct))
-        if (Map(result) is { } mapped)
-            results.Add(mapped);
-    return Results.Ok(results);
-});
-
-app.MapGet("/random", async Task<IResult> (int? count, MusicDatabase db, CancellationToken ct) =>
-{
-    var results = new List<ResultDto>();
-    await foreach (var result in db.GetRandomResults(Math.Max(0, count ?? 10), ct).WithCancellation(ct))
-        if (Map(result) is { } mapped)
-            results.Add(mapped);
-    return Results.Ok(results);
-});
+app.MapGet("/random", IResult (int? count, MusicDatabase db, CancellationToken ct) =>
+    Results.Ok(Mapped(db.GetRandomResults(Math.Max(0, count ?? 10), ct), ct)));
 
 // This platform has no playlists — nothing here ever claims a query.
 app.MapGet("/playlist", IResult (string? url) => Results.NotFound());
@@ -115,12 +108,24 @@ app.MapGet("/artist", async Task<IResult> (string? term, MusicDatabase db, Cance
 {
     if (string.IsNullOrWhiteSpace(term)) return Results.Ok(Array.Empty<ResultDto>());
 
-    // Ordering is Gaida.API's job (it also merges in YouTube results) — this comes back unordered.
+    // Ordering moved here from Gaida.API so that end can stream the response through untouched: the whole
+    // library is already in memory (MusicManager.GetArtistSongs materialises a list anyway), so sorting costs
+    // nothing here where it would cost Gaida.API the entire response. The keys mirror
+    // DiscoveryResultMapper's preference for the untransliterated fields, so the artist/name/id order API.md
+    // documents is still what the client sees.
     var results = new List<ResultDto>();
     await foreach (var result in db.GetArtistSongs(term).WithCancellation(ct))
         if (Map(result) is { } mapped)
             results.Add(mapped);
-    return Results.Ok(results);
+
+    var sorted = results
+        .OrderBy(result => result.OriginalArtist is { Length: > 0 } artist ? artist : result.Artist ?? "",
+            StringComparer.OrdinalIgnoreCase)
+        .ThenBy(result => result.OriginalTitle is { Length: > 0 } title ? title : result.Name ?? "",
+            StringComparer.OrdinalIgnoreCase)
+        .ThenBy(result => result.Id, StringComparer.Ordinal);
+
+    return Results.Ok(sorted);
 });
 
 app.MapGet("/variant", IResult (string? name, string? artist, string? duration, MusicDatabase db) =>
@@ -144,6 +149,14 @@ app.MapGet("/variant", IResult (string? name, string? artist, string? duration, 
 
 app.Run();
 return;
+
+static async IAsyncEnumerable<ResultDto> Mapped(IAsyncEnumerable<PlatformResult> source,
+    [EnumeratorCancellation] CancellationToken ct)
+{
+    await foreach (var result in source.WithCancellation(ct))
+        if (Map(result) is { } mapped)
+            yield return mapped;
+}
 
 // ── DTOs — the public shape of this pod. No contentUrl: the platform doesn't know the public host. ──
 
