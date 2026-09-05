@@ -1,5 +1,6 @@
 import type { PageLoad } from './$types';
 import { getRandomSongs, streamArtistLocal, streamRandomSongs } from '$requests/songs';
+import { heroArtist } from '$lib/artists';
 
 /**
  * Awaits nothing, so the route renders on the first frame and every section fills
@@ -21,6 +22,6 @@ export const load: PageLoad = ({ fetch }) => {
 		librarySongs: streamRandomSongs(fetch, 200),
 		// needs the hero's name, so it is the one thing that still chains — but it no
 		// longer holds up anything else
-		artistSongs: hero.then((song) => (song ? streamArtistLocal(song.artist, fetch) : null))
+		artistSongs: hero.then((song) => (song ? streamArtistLocal(heroArtist(song.artist), fetch) : null))
 	};
 };

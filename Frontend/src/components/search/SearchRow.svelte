@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { ArrowDownTray, ClipboardDocument, EllipsisHorizontal, Icon, Play } from 'svelte-hero-icons';
 	import { resolve } from '$app/paths';
-	import { convertTimeSpanStringToSeconds, getTimeString } from '$lib';
+	import { convertTimeSpanStringToSeconds, getTimeString, heroArtist } from '$lib';
 	import type { SearchResult } from '$states/search.svelte';
 	import queue from '$states/queue.svelte';
 	import session from '$states/session.svelte';
@@ -11,7 +11,11 @@
 	const { result }: { result: SearchResult } = $props();
 	let duration = $derived(getTimeString(convertTimeSpanStringToSeconds(result.duration)));
 	let isLong = $derived(convertTimeSpanStringToSeconds(result.duration) > 15 * 60);
-	let artistUrl = $derived(`${resolve('/artist')}?term=${encodeURIComponent(result.artist)}`);
+	// The menu has room for one artist, so it takes the first of a joined credit — the rest are
+	// each their own link on the row itself.
+	let artistUrl = $derived(
+		`${resolve('/artist')}?term=${encodeURIComponent(heroArtist(result.artist))}`
+	);
 
 	function stopPropagation(event: Event) {
 		event.stopPropagation();

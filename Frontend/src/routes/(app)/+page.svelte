@@ -17,7 +17,7 @@
 		streamRandomSongs
 	} from '$requests/songs';
 	import type { LocalVariant } from '$requests/songs';
-	import { convertTimeSpanStringToSeconds, getTimeString } from '$lib';
+	import { convertTimeSpanStringToSeconds, getTimeString, heroArtist } from '$lib';
 	import { SliderInteractions } from '$lib/sliderInteractions.svelte.js';
 	import Song from '$components/home/song/Song.svelte';
 	import SongSkeleton from '$components/home/song/SongSkeleton.svelte';
@@ -183,7 +183,7 @@
 			artistSongs = Array(6).fill(null);
 			if (nextHero) {
 				lookUpVariant(nextHero, token);
-				fill(artistSongs, streamArtistLocal(nextHero.artist, fetch)).catch(() => {});
+				fill(artistSongs, streamArtistLocal(heroArtist(nextHero.artist), fetch)).catch(() => {});
 			} else artistSongs.length = 0;
 		} finally {
 			rolling = false;
