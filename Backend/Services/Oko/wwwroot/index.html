@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Oko</title>
+  <style>
+    :root {
+      --bg: #f6f6f4; --panel: #fff; --line: #e2e2dd; --text: #1a1a18; --dim: #6b6b64;
+      --accent: #2f6f4f; --bad: #a4342a; --warn: #8a6d1f;
+      --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #16171a; --panel: #1d1f23; --line: #2c2f35; --text: #e6e6e2; --dim: #8b8f98;
+        --accent: #6cc08a; --bad: #e0736a; --warn: #d6b25e;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+      display: grid; grid-template-columns: 210px 1fr; min-height: 100vh;
+    }
+    nav { border-right: 1px solid var(--line); padding: 16px 0; }
+    nav h1 { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim);
+             margin: 0 16px 12px; font-weight: 600; }
+    nav button {
+      display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 16px;
+      background: none; border: 0; color: var(--text); font: inherit; text-align: left; cursor: pointer;
+    }
+    nav button:hover { background: var(--panel); }
+    nav button[aria-current="true"] { background: var(--panel); box-shadow: inset 2px 0 0 var(--accent); }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
+    .dot.down { background: var(--bad); }
+    .dot.unknown { background: var(--dim); }
+    main { padding: 20px 24px 40px; min-width: 0; }
+    header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+    header h2 { margin: 0; font-size: 20px; }
+    header .url { color: var(--dim); font-family: var(--mono); font-size: 12px; }
+    .meta { color: var(--dim); font-size: 12px; margin-bottom: 16px; }
+    .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+    .tabs button {
+      background: none; border: 0; border-bottom: 2px solid transparent; padding: 6px 10px;
+      color: var(--dim); font: inherit; cursor: pointer;
+    }
+    .tabs button[aria-current="true"] { color: var(--text); border-bottom-color: var(--accent); }
+    .cards { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px; }
+    .card b { display: block; font-size: 18px; font-family: var(--mono); font-weight: 500; }
+    .card span { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; }
+    .scroll { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    th, td { text-align: left; padding: 7px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    th { color: var(--dim); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+    tr:last-child td { border-bottom: 0; }
+    td.mono, .mono { font-family: var(--mono); font-size: 12px; }
+    td.wrap { white-space: normal; max-width: 420px; }
+    .pill { padding: 1px 7px; border-radius: 10px; font-size: 11px; border: 1px solid var(--line); }
+    .pill.complete { color: var(--accent); } .pill.downloading { color: var(--warn); }
+    .pill.pending { color: var(--dim); }
+    .s2 { color: var(--accent); } .s4 { color: var(--warn); } .s5 { color: var(--bad); }
+    .bar { height: 5px; background: var(--line); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+    .bar i { display: block; height: 100%; background: var(--accent); }
+    .empty, .error { padding: 18px; color: var(--dim); }
+    .error { color: var(--bad); }
+    h3.section { font-size: 13px; margin: 18px 0 8px; }
+    h3.section:first-child { margin-top: 0; }
+    button.act {
+      background: none; border: 1px solid var(--line); border-radius: 4px; color: var(--dim);
+      font: inherit; font-size: 11px; padding: 1px 8px; margin-right: 4px; cursor: pointer;
+    }
+    button.act:hover { color: var(--text); border-color: var(--dim); }
+    button.act[data-danger]:hover { color: var(--bad); border-color: var(--bad); }
+    .rowbar { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+    .rowbar input[type=search] {
+      flex: 1; max-width: 420px; background: var(--panel); color: var(--text);
+      border: 1px solid var(--line); border-radius: 5px; padding: 5px 10px; font: inherit;
+    }
+    .editor td { background: var(--bg); }
+    .editor label { display: block; color: var(--dim); font-size: 11px; text-transform: uppercase;
+                    letter-spacing: .06em; margin-bottom: 3px; }
+    .editor .fields { display: flex; gap: 14px; flex-wrap: wrap; padding: 4px 0 8px; }
+    .editor textarea, .editor input {
+      background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 5px;
+      padding: 5px 8px; font: inherit; font-family: var(--mono); font-size: 12px; min-width: 260px;
+    }
+    .editor textarea { resize: vertical; }
+    .editor .hint { color: var(--dim); font-size: 11px; margin-top: 2px; }
+    /* A field the selection does not agree on. Dashed and dim so it reads as "nothing to show yet"
+       rather than as a value — typing over it is what turns it into one. */
+    .editor .mixed { border-style: dashed; color: var(--dim); }
+    .batch {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+      padding: 10px 14px 12px; margin-bottom: 10px;
+    }
+    .batch .head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+    .batch .head b { font-size: 13px; }
+    th.pick, td.pick { width: 1px; padding-right: 4px; }
+    td.pick input { accent-color: var(--accent); margin: 0; vertical-align: middle; }
+    tr.picked td.pick { box-shadow: inset 2px 0 0 var(--accent); }
+    #feed { margin-top: 22px; }
+    #feed h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 0 0 8px; }
+    #feedlines { max-height: 220px; overflow-y: auto; }
+    #feedlines div { padding: 3px 12px; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 12px; }
+    #feedlines .who { color: var(--dim); display: inline-block; min-width: 96px; }
+  </style>
+</head>
+<body>
+<nav>
+  <h1>Oko</h1>
+  <div id="targets"></div>
+</nav>
+
+<main>
+  <header><h2 id="title">…</h2><span class="url" id="url"></span></header>
+  <div class="meta" id="meta"></div>
+  <div class="tabs">
+    <button data-tab="state" aria-current="true">State</button>
+    <button data-tab="requests">Requests</button>
+    <button data-tab="audit">Audit</button>
+    <button data-tab="library" hidden>Library</button>
+  </div>
+  <div id="body"></div>
+
+  <section id="feed">
+    <h3>Live activity <span id="feedstate" style="text-transform:none;letter-spacing:0"></span></h3>
+    <div class="scroll" id="feedlines"></div>
+  </section>
+</main>
+
+<script>
+  const POLL_MS = 2000;
+  let selected = null, tab = "state", latest = null, events = null;
+
+  const el = (id) => document.getElementById(id);
+  const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const bytes = (n) => {
+    if (!n) return "0 B";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    const i = Math.min(Math.floor(Math.log(n) / Math.log(1024)), units.length - 1);
+    return (n / 1024 ** i).toFixed(i ? 1 : 0) + " " + units[i];
+  };
+  // Absolute, so it reads the same for an expiry in the future as for a timestamp in the past —
+  // the caller supplies the "ago" or "in", this only supplies the magnitude.
+  const ago = (iso) => {
+    const s = Math.abs(Math.round((Date.now() - new Date(iso)) / 1000));
+    if (!isFinite(s)) return "";
+    if (s < 60) return s + "s";
+    if (s < 3600) return Math.round(s / 60) + "m";
+    return Math.round(s / 3600) + "h";
+  };
+  const table = (columns, rows) => rows.length
+    ? `<div class="scroll"><table><thead><tr>${columns.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+       <tbody>${rows.map((r) => `<tr>${r.join("")}</tr>`).join("")}</tbody></table></div>`
+    : `<div class="scroll"><div class="empty">Nothing here right now.</div></div>`;
+  const cell = (v, cls = "") => `<td class="${cls}">${esc(v)}</td>`;
+
+  // ── actions ──────────────────────────────────────────────────────────────────
+  // Every button carries its target, its action and its parameters. `ask` names a parameter to
+  // prompt for at click time; `confirm` is the sentence the operator has to agree with first.
+  // Anything that destroys data gets both a confirm and the danger styling.
+  const act = (label, target, action, params, opts = {}) =>
+    `<button class="act" data-t="${esc(target)}" data-a="${esc(action)}"` +
+    ` data-p="${esc(encodeURIComponent(JSON.stringify(params)))}"` +
+    (opts.ask ? ` data-ask="${esc(opts.ask)}" data-askmsg="${esc(opts.askmsg || opts.ask)}"` : "") +
+    (opts.confirm ? ` data-confirm="${esc(opts.confirm)}"` : "") +
+    (opts.danger ? ` data-danger="1"` : "") +
+    `>${esc(label)}</button>`;
+
+  async function run(button) {
+    const params = JSON.parse(decodeURIComponent(button.dataset.p));
+
+    if (button.dataset.ask) {
+      const answer = prompt(button.dataset.askmsg, params[button.dataset.ask] ?? "");
+      if (answer === null || answer === "") return;
+      params[button.dataset.ask] = answer;
+    }
+    if (button.dataset.confirm && !confirm(button.dataset.confirm)) return;
+
+    const query = new URLSearchParams(params).toString();
+    const response = await fetch(
+      `/api/action/${encodeURIComponent(button.dataset.t)}/${encodeURIComponent(button.dataset.a)}?${query}`,
+      { method: "POST" });
+
+    if (!response.ok) {
+      let detail = await response.text();
+      try { detail = JSON.parse(detail).error ?? detail; } catch { /* not JSON; show it raw */ }
+      alert(`${button.dataset.a} failed (${response.status})\n\n${detail}`);
+    }
+    await refresh();
+    if (tab !== "state") render();
+  }
+
+  // ── the library editor (gaida-local only) ───────────────────────────────────
+  // Its own submit path rather than `run`: the variant lists are repeated query parameters
+  // (title=A&title=B), which a flat params object cannot express.
+  let libraryRows = [], editing = null;
+
+  // Which rows the batch editor will write to, and the values it opened with. `batch` holds the
+  // strings as they were rendered, so "was this field touched?" is a comparison rather than a flag —
+  // which also keeps a real value of "—" from being mistaken for a field nobody filled in.
+  const picked = new Set();
+  let batch = null, draft = null;
+
+  const lines = (values) => values.join("\n");
+  const MIXED = "—";
+
+  async function loadLibrary() {
+    const query = el("libq") ? el("libq").value : "";
+    const response = await fetch(`/api/read/${encodeURIComponent(selected)}/library?take=200&q=${encodeURIComponent(query)}`);
+    libraryRows = response.ok ? await response.json() : [];
+    // A new search means a new set of rows, and a selection you cannot see is a selection you cannot
+    // check before writing to it.
+    picked.clear();
+    batch = draft = null;
+    renderLibrary(query);
+  }
+
+  async function saveSong(id) {
+    const params = new URLSearchParams({ id });
+    for (const title of el("ed-titles").value.split("\n")) if (title.trim()) params.append("title", title.trim());
+    for (const artist of el("ed-artists").value.split("\n")) if (artist.trim()) params.append("artist", artist.trim());
+    params.append("album", el("ed-album").value.trim());
+
+    const response = await fetch(`/api/action/${encodeURIComponent(selected)}/edit-song?${params}`, { method: "POST" });
+    if (!response.ok) {
+      let detail = await response.text();
+      try { detail = JSON.parse(detail).error ?? detail; } catch { /* not JSON */ }
+      alert(`Saving failed (${response.status})\n\n${detail}`);
+      return;
+    }
+
+    const saved = await response.json();
+    libraryRows = libraryRows.map((row) => (row.id === saved.id ? saved : row));
+    editing = null;
+    renderLibrary();
+  }
+
+  // ── batch editing ────────────────────────────────────────────────────────────
+  const chosen = () => libraryRows.filter((row) => picked.has(row.id));
+
+  /// The value every chosen song already agrees on, or MIXED when they don't.
+  const shared = (read) => {
+    const rows = chosen();
+    const first = read(rows[0]);
+    return rows.every((row) => read(row) === first) ? first : MIXED;
+  };
+
+  function openBatch() {
+    batch = {
+      titles: shared((song) => lines(song.titles)),
+      artists: shared((song) => lines(song.artists)),
+      album: shared((song) => song.album ?? "")
+    };
+    draft = { ...batch };
+    editing = null;
+    renderLibrary();
+  }
+
+  /// Ticking a box redraws the table, and half-typed text must survive that. `batch` stays as the
+  /// panel opened — it is what "unmodified" is measured against — while `draft` is what is on screen.
+  function keepDraft() {
+    if (!batch || !el("bt-titles")) return;
+    draft = { titles: el("bt-titles").value, artists: el("bt-artists").value, album: el("bt-album").value };
+  }
+
+  const mixed = (value) => (value === MIXED ? ' class="mixed"' : "");
+
+  function batchPanel() {
+    const count = picked.size;
+    return `<div class="editor batch">
+        <div class="head"><b>Editing ${count} song${count === 1 ? "" : "s"}</b>
+          <span class="hint">A field left as it is stays as it is on every song. ${MIXED} means they don't agree yet.</span></div>
+        <div class="fields">
+          <div><label>Title variants</label>
+            <textarea id="bt-titles" rows="3"${mixed(batch.titles)}>${esc(draft.titles)}</textarea>
+            <div class="hint">One per line. The first is the display name.</div></div>
+          <div><label>Artist variants</label>
+            <textarea id="bt-artists" rows="3"${mixed(batch.artists)}>${esc(draft.artists)}</textarea>
+            <div class="hint">One per line. Compound names like "A &amp; B" stay on one line.</div></div>
+          <div><label>Album</label>
+            <input id="bt-album"${mixed(batch.album)} value="${esc(draft.album)}">
+            <div class="hint">Empty clears it on every selected song.</div></div>
+        </div>
+        <button class="act" id="bt-save" data-batchsave="1">Apply to ${count}</button>
+        <button class="act" data-batchcancel="1">Cancel</button>
+      </div>`;
+  }
+
+  /// The query every selected song is about to be sent, from what the panel opened with (`before`)
+  /// and what is in the boxes now (`after`). Pure, and the only place the "untouched means untouched"
+  /// rule lives — see the checks in batchFieldsCheck().
+  function batchFields(before, after) {
+    const fields = new URLSearchParams();
+    const summary = [];
+    const list = (value) => value.split("\n").map((v) => v.trim()).filter(Boolean);
+
+    if (after.titles !== before.titles) {
+      const titles = list(after.titles);
+      if (!titles.length) return { error: "A song needs at least one title. Type one, or put back what was there." };
+      for (const title of titles) fields.append("title", title);
+      summary.push(`titles → ${titles.join(" / ")}`);
+    }
+
+    if (after.artists !== before.artists) {
+      const artists = list(after.artists);
+      // An empty artist parameter is how the service is told to clear the list; sending nothing at
+      // all would mean "leave it alone", which is the opposite of what an emptied box asked for.
+      for (const artist of artists.length ? artists : [""]) fields.append("artist", artist);
+      summary.push(artists.length ? `artists → ${artists.join(" / ")}` : "artists cleared");
+    }
+
+    const album = after.album.trim();
+    if (album !== before.album.trim()) {
+      fields.append("album", album);
+      summary.push(album ? `album → ${album}` : "album cleared");
+    }
+
+    return { fields, summary };
+  }
+
+  // Open the panel at /?self-check to run this; it throws on the first failure and is otherwise silent
+  // except for one console line. The rules it pins down are the ones that fail quietly in a batch —
+  // an untouched field must send nothing at all, and an emptied one must send an empty value.
+  function batchFieldsCheck() {
+    const before = { titles: "A", artists: "B", album: "C" };
+    const query = (after) => batchFields(before, { ...before, ...after }).fields.toString();
+
+    const assert = (condition, message) => { if (!condition) throw new Error("self-check failed: " + message); };
+
+    assert(query({}) === "", "an untouched panel writes nothing");
+    assert(batchFields(before, before).summary.length === 0, "an untouched panel has nothing to confirm");
+    assert(query({ album: "" }) === "album=", "an emptied album is sent, so it clears");
+    assert(query({ artists: "" }) === "artist=", "an emptied artist list is sent, so it clears");
+    assert(batchFields(before, { ...before, titles: "" }).error, "titles cannot be emptied");
+    assert(query({ artists: " X \n\n Y " }) === "artist=X&artist=Y", "variants are trimmed and blanks dropped");
+    assert(query({ titles: "T", album: "  C  " }) === "title=T", "album whitespace alone is not a change");
+    // The one that motivates the whole before/after comparison: — is a value like any other once typed.
+    assert(batchFields({ titles: "A", artists: MIXED, album: MIXED }, { titles: "A", artists: MIXED, album: MIXED })
+      .summary.length === 0, `a selection left at ${MIXED} writes nothing`);
+
+    console.log("batchFields self-check OK");
+  }
+
+  // One request per song rather than a bulk route: the services' /Admin/edit-song already means
+  // "change the fields I sent, leave out the rest", which is exactly the rule this panel needs, and
+  // one row per song is also what the audit log should show.
+  async function saveBatch() {
+    const rows = chosen();
+    const { fields, summary, error } = batchFields(batch, {
+      titles: el("bt-titles").value, artists: el("bt-artists").value, album: el("bt-album").value
+    });
+    if (error) { alert(error); return; }
+
+    if (!summary.length) { alert("Nothing was changed, so nothing was written."); return; }
+    if (!confirm(`Apply to ${rows.length} song(s)?\n\n${summary.join("\n")}\n\nThis cannot be undone.`)) return;
+
+    const button = el("bt-save");
+    button.disabled = true;
+    const failures = [];
+
+    for (const [index, song] of rows.entries()) {
+      button.textContent = `Applying ${index + 1} of ${rows.length}…`;
+      const params = new URLSearchParams(fields);
+      params.set("id", song.id);
+
+      const response = await fetch(`/api/action/${encodeURIComponent(selected)}/edit-song?${params}`, { method: "POST" });
+      if (!response.ok) {
+        let detail = await response.text();
+        try { detail = JSON.parse(detail).error ?? detail; } catch { /* not JSON */ }
+        failures.push(`${song.titles[0] ?? song.id}: ${detail}`);
+        continue;
+      }
+
+      const saved = await response.json();
+      libraryRows = libraryRows.map((row) => (row.id === saved.id ? saved : row));
+    }
+
+    if (failures.length)
+      alert(`${rows.length - failures.length} of ${rows.length} saved.\n\n${failures.slice(0, 10).join("\n")}`);
+
+    batch = draft = null;
+    renderLibrary();
+  }
+
+  function editorRow(song) {
+    return `<tr class="editor"><td colspan="6">
+        <div class="fields">
+          <div><label>Title variants</label>
+            <textarea id="ed-titles" rows="3">${esc(lines(song.titles))}</textarea>
+            <div class="hint">One per line. The first is the display name.</div></div>
+          <div><label>Artist variants</label>
+            <textarea id="ed-artists" rows="3">${esc(lines(song.artists))}</textarea>
+            <div class="hint">One per line. Compound names like "A &amp; B" stay on one line.</div></div>
+          <div><label>Album</label>
+            <input id="ed-album" value="${esc(song.album ?? "")}">
+            <div class="hint">Empty clears it.</div></div>
+        </div>
+        <button class="act" data-save="${esc(song.id)}">Save</button>
+        <button class="act" data-cancel="1">Cancel</button>
+        <span class="hint mono">${esc(song.id)} · ${esc(song.location ?? "")}</span>
+      </td></tr>`;
+  }
+
+  function renderLibrary(query) {
+    // Rows can go away under a selection — a search reloads them — so the count the buttons quote is
+    // always of rows that are on screen right now.
+    for (const id of picked) if (!libraryRows.some((row) => row.id === id)) picked.delete(id);
+    if (batch && picked.size === 0) batch = draft = null;
+
+    const rows = [];
+    for (const song of libraryRows) {
+      const on = picked.has(song.id);
+      rows.push(`<tr class="${on ? "picked" : ""}">${[
+        `<td class="pick"><input type="checkbox" data-pick="${esc(song.id)}"${on ? " checked" : ""}
+           aria-label="Select ${esc(song.titles[0] ?? song.id)}"></td>`,
+        cell(song.artists[0] ?? "—", "wrap"),
+        cell(song.titles[0] ?? "—", "wrap"),
+        cell(song.album ?? "—", "wrap"),
+        cell(song.duration.split(".")[0], "mono"),
+        `<td><button class="act" data-edit="${esc(song.id)}">Edit</button></td>`
+      ].join("")}</tr>`);
+      if (editing === song.id) rows.push(editorRow(song));
+    }
+
+    const all = libraryRows.length > 0 && picked.size === libraryRows.length;
+
+    el("body").innerHTML =
+      `<div class="rowbar">
+         <input type="search" id="libq" placeholder="Search titles, artists, albums or paths…" value="${esc(query ?? (el("libq") ? el("libq").value : ""))}">
+         <button class="act" data-reload="1">Search</button>
+         ${libraryRows.length ? `<button class="act" data-selectall="${all ? "" : "1"}">${
+            all ? "Clear selection" : `Select all ${libraryRows.length}`}</button>` : ""}
+         ${picked.size && !batch ? `<button class="act" data-batch="1">Edit ${picked.size} selected</button>` : ""}
+         <span class="hint">${picked.size ? `${picked.size} of ` : ""}${libraryRows.length} row(s), 200 max</span>
+       </div>` +
+      (batch ? batchPanel() : "") +
+      (rows.length
+        ? `<div class="scroll"><table><thead><tr>
+             <th class="pick"></th><th>Artist</th><th>Title</th><th>Album</th><th>Length</th><th></th></tr></thead>
+             <tbody>${rows.join("")}</tbody></table></div>`
+        : `<div class="scroll"><div class="empty">Nothing matches.</div></div>`);
+
+    const box = el("libq");
+    if (box && editing === null && !batch) { box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
+  }
+
+  // ── per-service views ────────────────────────────────────────────────────────
+  const views = {
+    dunav(s, name) {
+      const pct = s.maxBytes ? Math.min(100, (s.totalBytes / s.maxBytes) * 100) : 0;
+      return `<div class="cards">
+          <div class="card"><b>${s.count}</b><span>entries</span></div>
+          <div class="card"><b>${bytes(s.totalBytes)}</b><span>of ${bytes(s.maxBytes)}</span>
+            <div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div></div>
+          <div class="card"><b>${s.retentionMinutes}m</b><span>retention</span></div>
+        </div>
+        <div class="rowbar">${act("Evict everything", name, "evict-all", {},
+          { confirm: "Evict every cached entry?\n\nAnything still streaming finishes on its own handle; the next request re-fetches.", danger: true })}</div>` +
+        table(["What", "Size", "State", "Type", "Expires", ""], s.entries.map((e) => [
+          cell(e.label ?? "—", "wrap"), cell(bytes(e.bytes), "mono"),
+          `<td><span class="pill ${esc(e.state)}">${esc(e.state)}</span></td>`,
+          cell(e.contentType ?? "—", "mono"),
+          cell(e.expiresUtc ? "in " + ago(e.expiresUtc) : "—"),
+          `<td>${act("Evict", name, "evict", { key: e.key })}</td>`
+        ]));
+    },
+
+    dom(s, name) {
+      return `<div class="cards">
+          <div class="card"><b>${s.users.length}</b><span>accounts</span></div>
+          <div class="card"><b>${s.playlists.length}</b><span>playlists</span></div>
+        </div>
+        <h3 class="section">Accounts</h3>` +
+        table(["Username", "Created", "Sessions", "Playlists", ""], s.users.map((u) => [
+          cell(u.username), cell(new Date(u.createdUtc).toLocaleDateString()),
+          cell(u.activeTokens, "mono"), cell(u.playlists, "mono"),
+          `<td>` +
+            act("Rename", name, "rename-user", { username: u.username, name: u.username },
+                { ask: "name", askmsg: `New username for ${u.username}:` }) +
+            act("Sign out", name, "sign-out-user", { username: u.username },
+                { confirm: `Sign ${u.username} out of all ${u.activeTokens} session(s)?` }) +
+            act("Reset password", name, "reset-password", { username: u.username, password: "" },
+                { ask: "password",
+                  askmsg: `New password for ${u.username} — at least 8 characters.\nThis also signs them out everywhere.` }) +
+            act("Delete", name, "delete-user", { username: u.username },
+                { confirm: `Delete the account ${u.username} and all ${u.playlists} of its playlists?\n\nThis cannot be undone.`,
+                  danger: true }) +
+          `</td>`
+        ])) +
+        `<h3 class="section">Playlists</h3>` +
+        table(["Name", "Owner", "Tracks", "Duration", "Visibility", "Updated", ""], s.playlists.map((p) => [
+          cell(p.name, "wrap"), cell(p.owner), cell(p.tracks, "mono"), cell(p.duration, "mono"),
+          cell(p.isPublic ? "public" : "private"), cell(ago(p.updatedUtc) + " ago"),
+          `<td>` +
+            act("Rename", name, "rename-playlist", { id: p.id, name: p.name },
+                { ask: "name", askmsg: `New name for "${p.name}":` }) +
+            act(p.isPublic ? "Make private" : "Make public", name, "set-playlist-public",
+                { id: p.id, isPublic: !p.isPublic }) +
+            act("Delete", name, "delete-playlist", { id: p.id },
+                { confirm: `Delete the playlist "${p.name}" (${p.owner})?\n\nThis cannot be undone.`, danger: true }) +
+          `</td>`
+        ]));
+    },
+
+    local(s) {
+      return `<div class="cards">
+          <div class="card"><b>${s.songs}</b><span>songs</span></div>
+          <div class="card"><b>${s.folders}</b><span>folders</span></div>
+          <div class="card"><b>${s.withoutAlbum}</b><span>no album</span></div>
+          <div class="card"><b>${s.withoutArtist}</b><span>no artist</span></div>
+        </div>
+        <div class="scroll"><div class="empty">Storage: <span class="mono">${esc(s.storage)}</span>.
+          Names and albums are edited on the Library tab.</div></div>`;
+    },
+
+    selo(s, name) {
+      return `<div class="cards"><div class="card"><b>${s.count}</b><span>rooms</span></div>
+          <div class="card"><b>${s.rooms.reduce((n, r) => n + r.users.length, 0)}</b><span>listeners</span></div></div>` +
+        table(["Room", "Listeners", "Playing", "Queue", "Position", ""], s.rooms.map((r) => [
+          cell(r.name, "wrap"),
+          `<td class="wrap">${r.users.length
+            ? r.users.map((u) => act((u.username ?? "anonymous") + " \u2715", name, "kick",
+                { room: r.roomId, user: u.id },
+                { confirm: `Remove ${u.username ?? "this anonymous listener"} from "${r.name}"?` })).join("")
+            : "—"}</td>`,
+          cell(r.player.current ? `${r.player.current.name ?? "?"} — ${r.player.current.artist ?? "?"}` : "—", "wrap"),
+          cell(r.player.queueLength ? `${r.player.currentIndex + 1}/${r.player.queueLength}` : "empty", "mono"),
+          cell(r.player.playing ? Math.round(r.player.positionSeconds) + "s" : "paused", "mono"),
+          `<td>${act("Close room", name, "close-room", { room: r.roomId },
+            { confirm: `Close "${r.name}" and disconnect its ${r.users.length} listener(s)?`, danger: true })}</td>`
+        ]));
+    }
+  };
+
+  function renderState(service) {
+    if (!service.up) return `<div class="scroll"><div class="error">Not answering — ${esc(service.error)}</div></div>`;
+    const view = views[service.name] || views[service.name.replace(/^gaida-/, "")];
+    if (view) {
+      try { return view(service.snapshot); } catch (e) { return `<div class="scroll"><div class="error">${esc(e.message)}</div></div>`; } }
+    return `<div class="scroll"><div class="empty">No state of its own — see the Requests tab.</div></div>`;
+  }
+
+  async function renderRequests(name) {
+    el("body").innerHTML = `<div class="scroll"><div class="empty">Loading…</div></div>`;
+    let rows;
+    try {
+      const response = await fetch(`/api/requests/${encodeURIComponent(name)}`);
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      rows = await response.json();
+    } catch (e) {
+      el("body").innerHTML = `<div class="scroll"><div class="error">${esc(e.message)}</div></div>`;
+      return;
+    }
+    if (tab !== "requests" || selected !== name) return;
+    el("body").innerHTML = table(["When", "Method", "Path", "Status", "Time"], rows.slice().reverse().map((r) => [
+      cell(ago(r.at) + " ago"), cell(r.method, "mono"), cell(r.path, "mono wrap"),
+      `<td class="mono s${String(r.status)[0]}">${r.status}</td>`, cell(r.ms + " ms", "mono")
+    ]));
+  }
+
+  // Oko's own log rather than a service's: every mutation made through this panel since it started.
+  // Not per-target, so the same list shows whichever service is selected.
+  async function renderAudit() {
+    let rows = [];
+    try { rows = await (await fetch("/api/audit")).json(); }
+    catch (e) { el("body").innerHTML = `<div class="scroll"><div class="error">${esc(e.message)}</div></div>`; return; }
+    if (tab !== "audit") return;
+
+    el("body").innerHTML =
+      `<div class="meta">Everything changed through this panel since Oko started — in memory, newest first, capped at 1000.</div>` +
+      table(["When", "Who", "Service", "Action", "Parameters", "Result"], rows.map((a) => [
+        cell(ago(a.at) + " ago"), cell(a.who), cell(a.target), cell(a.action, "mono"),
+        cell(a.parameters, "mono wrap"),
+        `<td class="mono s${String(a.status)[0]}">${esc(a.status)}${a.error ? " " + esc(a.error).slice(0, 60) : ""}</td>`
+      ]));
+  }
+
+  function render() {
+    if (tab === "requests") renderRequests(selected);
+    else if (tab === "audit") renderAudit();
+    else if (tab === "library") { editing = null; loadLibrary(); }
+    else draw();
+  }
+
+  function draw() {
+    if (!latest) return;
+    el("targets").innerHTML = latest.services.map((s) => `
+      <button data-name="${esc(s.name)}" aria-current="${s.name === selected}">
+        <span class="dot ${s.up ? "" : "down"}"></span>${esc(s.name)}</button>`).join("");
+
+    const service = latest.services.find((s) => s.name === selected) || latest.services[0];
+    if (!service) { el("body").innerHTML = `<div class="scroll"><div class="empty">No targets configured.</div></div>`; return; }
+    selected = service.name;
+
+    el("title").textContent = service.name;
+    el("url").textContent = service.url;
+    el("meta").textContent = `${service.up ? "up" : "not answering"} · refreshed ${new Date(latest.at).toLocaleTimeString()}`;
+
+    // Keyed on what the service reports about itself, not on what the target is called in config.
+    const editable = service.up && service.snapshot?.service === "gaida-local";
+    document.querySelector('[data-tab="library"]').hidden = !editable;
+    if (!editable && tab === "library") { tab = "state"; syncTabs(); }
+
+    if (tab === "state") el("body").innerHTML = renderState(service);
+  }
+
+  function syncTabs() {
+    document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-current", b.dataset.tab === tab));
+  }
+
+  async function refresh() {
+    try {
+      latest = await (await fetch("/api/snapshot")).json();
+      draw();
+    } catch { /* a failed poll is the next poll's problem */ }
+  }
+
+  function poll() { if (!document.hidden) refresh(); }
+
+  // ── live feed ────────────────────────────────────────────────────────────────
+  function openFeed() {
+    if (events) return;
+    events = new EventSource("/api/events");
+    events.addEventListener("activity", (message) => {
+      const item = JSON.parse(message.data);
+      const request = item.data;
+      const line = document.createElement("div");
+      line.innerHTML = `<span class="who">${esc(item.target)}</span>` +
+        `<span class="s${String(request.status)[0]}">${esc(request.status)}</span> ` +
+        `${esc(request.method)} ${esc(request.path)} <span class="who">${esc(request.ms)}ms</span>`;
+      const box = el("feedlines");
+      box.prepend(line);
+      while (box.childElementCount > 200) box.lastElementChild.remove();
+    });
+    events.onopen = () => el("feedstate").textContent = "";
+    events.onerror = () => el("feedstate").textContent = "— reconnecting";
+  }
+
+  function closeFeed() { if (events) { events.close(); events = null; } }
+
+  // ── wiring ───────────────────────────────────────────────────────────────────
+  el("targets").addEventListener("click", (e) => {
+    const button = e.target.closest("button[data-name]");
+    if (!button) return;
+    selected = button.dataset.name;
+    draw();
+    if (tab === "requests") renderRequests(selected);
+  });
+
+  el("body").addEventListener("click", (e) => {
+    const button = e.target.closest("button.act");
+    if (!button) return;
+
+    if (button.dataset.reload) return void loadLibrary();
+    if (button.dataset.edit) { editing = button.dataset.edit; batch = draft = null; return void renderLibrary(); }
+    if (button.dataset.cancel) { editing = null; return void renderLibrary(); }
+    if (button.dataset.save) return void saveSong(button.dataset.save);
+
+    if ("selectall" in button.dataset) {
+      picked.clear();
+      if (button.dataset.selectall) for (const song of libraryRows) picked.add(song.id);
+      keepDraft();
+      renderLibrary();
+      return;
+    }
+    if (button.dataset.batch) return void openBatch();
+    if (button.dataset.batchcancel) { batch = draft = null; return void renderLibrary(); }
+    if (button.dataset.batchsave) return void saveBatch();
+
+    run(button);
+  });
+
+  el("body").addEventListener("change", (e) => {
+    const box = e.target.closest("input[data-pick]");
+    if (!box) return;
+
+    if (box.checked) picked.add(box.dataset.pick); else picked.delete(box.dataset.pick);
+    keepDraft();
+    renderLibrary();
+    // The table was rebuilt under the pointer; put the keyboard back where it was.
+    document.querySelector(`input[data-pick="${CSS.escape(box.dataset.pick)}"]`)?.focus();
+  });
+
+  el("body").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.id === "libq") { e.preventDefault(); loadLibrary(); }
+  });
+
+  document.querySelector(".tabs").addEventListener("click", (e) => {
+    if (!e.target.dataset.tab) return;
+    tab = e.target.dataset.tab;
+    syncTabs();
+    render();
+  });
+
+  // Nothing runs while the tab is in the background: no polling, no upstream connections. Same rule
+  // Oko applies to the services — no watcher, no work.
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) closeFeed(); else { openFeed(); poll(); }
+  });
+
+  if (new URLSearchParams(location.search).has("self-check")) batchFieldsCheck();
+
+  poll();
+  setInterval(poll, POLL_MS);
+  openFeed();
+</script>
+</body>
+</html>

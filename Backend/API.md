@@ -254,3 +254,19 @@ Preload is not just a nicety: it moves the encode for the next track into the cu
 `Download`, `DownloadRaw` and `Preload` are served by the caching tier, which coalesces concurrent requests for the same `codec`/`bitrate`/`id` into a single encode and serves byte-range requests once an encode has finished. Range requests on an encode still in progress are answered `200` with `Accept-Ranges: none`; a completed one advertises `bytes` and answers `206`.
 
 CORS allows the deployed `example.com` frontend (including subdomains) and `localhost`, `127.0.0.1`, and `::1` Vite origins at any port. Additional exact origins may be configured with `Cors:AllowedOrigins`. Production absolute links come from `PublicApiBaseUrl` (example: `https://api.example.com`).
+
+## `/Admin/*` — not part of this API
+
+Every service in the stack also answers `GET /Admin/snapshot`, `GET /Admin/requests`,
+`GET /Admin/events` and a handful of service-specific `POST /Admin/*` actions. **No frontend should
+ever call these.** They are the admin panel's contract, not the public one:
+
+- they answer `404` to anyone without the `X-Admin-Token` header, so they are invisible rather than
+  merely refused, and they are not mapped at all when `ADMIN_TOKEN` is unset;
+- nginx does not route to them — no `/Admin` prefix appears in `nginx.example.conf`, and the
+  services publish only on `127.0.0.1`;
+- they expose and edit things this API deliberately does not: every account in Dom, every room in
+  Selo, the cache Dunav holds, and the names and albums in the local library.
+
+The contract, the reasoning and the shape of each service's payload are in
+[ADMIN_PLAN.md](ADMIN_PLAN.md).

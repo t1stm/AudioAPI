@@ -5,11 +5,13 @@ WORKDIR /src
 
 COPY ["Platforms/Gaida.Pods.MusicDatabase/Gaida.Pods.MusicDatabase.csproj", "Platforms/Gaida.Pods.MusicDatabase/"]
 COPY ["Gaida Library/Gaida.Core/Gaida.Core.csproj", "Gaida Library/Gaida.Core/"]
+COPY ["Gaida Library/Gaida.Admin/Gaida.Admin.csproj", "Gaida Library/Gaida.Admin/"]
 COPY ["Platforms/Gaida.Platforms.MusicDatabase/Gaida.Platforms.MusicDatabase.csproj", "Platforms/Gaida.Platforms.MusicDatabase/"]
 RUN dotnet restore "Platforms/Gaida.Pods.MusicDatabase/Gaida.Pods.MusicDatabase.csproj"
 
 COPY ["Platforms/Gaida.Pods.MusicDatabase/", "Platforms/Gaida.Pods.MusicDatabase/"]
 COPY ["Gaida Library/Gaida.Core/", "Gaida Library/Gaida.Core/"]
+COPY ["Gaida Library/Gaida.Admin/", "Gaida Library/Gaida.Admin/"]
 COPY ["Platforms/Gaida.Platforms.MusicDatabase/", "Platforms/Gaida.Platforms.MusicDatabase/"]
 RUN dotnet publish "Platforms/Gaida.Pods.MusicDatabase/Gaida.Pods.MusicDatabase.csproj" -c Release -o /app
 

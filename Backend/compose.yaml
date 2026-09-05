@@ -10,6 +10,9 @@
 #   /Audio/Multiplayer*                → 127.0.0.1:5342  (selo, WebSocket upgrade)
 #   /Audio/Accounts*, /Audio/Playlists* → 127.0.0.1:5343  (dom)
 #   everything else                    → 127.0.0.1:5340  (gaida-api)
+#
+# The admin panel is not on that list: it is published on 0.0.0.0:5344 and fronted by the host
+# firewall rather than by nginx. See the oko service at the bottom of this file and ADMIN_PLAN.md.
 
 name: gaida
 
@@ -19,6 +22,11 @@ x-service: &service
     ASPNETCORE_URLS: http://+:8080
     ASPNETCORE_ENVIRONMENT: Production
     # DiscoveryContracts.cs:83 ignores PublicApiBaseUrl in Development — this has to be Production.
+
+    # The shared secret Oko authenticates itself with. Every service gets it, because every service
+    # answers /Admin/*. Unset, each one disables its admin surface entirely and answers 404 there —
+    # the stack runs exactly as before, and Oko renders every target as down with that as the reason.
+    ADMIN_TOKEN: ${ADMIN_TOKEN:-}
 
 services:
   # ── Platform pods ──────────────────────────────────────────────────────────────
@@ -170,6 +178,47 @@ services:
       - dom-data:/data
       # Uploaded playlist covers. Losing these loses artwork, not playlists.
       - dom-covers:/covers
+
+  # ── The admin panel ────────────────────────────────────────────────────────────
+  # Reads every other service and moderates them. Holds no state of its own: no volume, nothing to
+  # back up, and losing it loses nothing. It is also the only service here that talks to all of the
+  # others, and the only one nothing talks to.
+
+  oko:
+    <<: *service
+    build:
+      context: .
+      dockerfile: Services/Oko/Dockerfile
+    environment:
+      <<: *env
+      # No default for either: Oko refuses to boot rather than serve an unauthenticated admin panel,
+      # so a missing password is a crash-loop in `docker compose logs oko` and never an open door.
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+
+      # Everything Oko watches. Names are what the panel shows; gaida-local's must stay as it is,
+      # since the library editor keys off the name the pod reports for itself.
+      Targets__0__Name: dunav
+      Targets__0__Url: http://dunav:8080
+      Targets__1__Name: selo
+      Targets__1__Url: http://selo:8080
+      Targets__2__Name: dom
+      Targets__2__Url: http://dom:8080
+      Targets__3__Name: gaida-api
+      Targets__3__Url: http://gaida-api:8080
+      Targets__4__Name: gaida-local
+      Targets__4__Url: http://gaida-local:8080
+      Targets__5__Name: gaida-youtube
+      Targets__5__Url: http://gaida-youtube:8080
+      Targets__6__Name: gaida-spotify
+      Targets__6__Url: http://gaida-spotify:8080
+    ports:
+      # The one port in this file NOT bound to 127.0.0.1: published on every interface so the host
+      # firewall decides who reaches it, as asked. That makes the firewall the only thing between
+      # the internet and every account in Dom, and Basic auth sends its password in plain base64 —
+      # so if this port is reachable from anywhere untrusted, put the nginx TLS block from
+      # nginx.example.conf in front of it and bind this back to 127.0.0.1.
+      - "${OKO_PORT:-5344}:8080"
 
 volumes:
   thumbnails:

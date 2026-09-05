@@ -1,3 +1,4 @@
+using Gaida.Admin;
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Runtime.CompilerServices;
@@ -12,7 +13,7 @@ using Serilog;
 // listening host — see RunSelfCheck.
 if (args.Contains("--self-check"))
 {
-    RunSelfCheck();
+    await RunSelfCheck();
     return;
 }
 
@@ -35,6 +36,31 @@ platform.Initialize(); // kicks off MusicManager.Initialize() (library scan) in 
 builder.Services.AddSingleton(platform);
 
 var app = builder.Build();
+
+// Unlike the other pods, this one owns state an operator edits: the library's names and albums.
+// No-op without ADMIN_TOKEN. See ADMIN_PLAN.md.
+var admin = app.MapAdmin(() => platform.Summary());
+
+// The rows to edit. A GET, so it goes through Oko's read proxy rather than its audited action one.
+admin?.MapGet("/library", IResult (string? q, int? take, MusicDatabase db) =>
+    Results.Ok(db.FindForAdmin(q, take ?? 100).Select(LibraryRow)));
+
+// Repeated `title=` / `artist=` parameters are the whole variant list, in order. A parameter that is
+// absent leaves that field alone; `album=` with no value clears it. Read off the query rather than
+// bound, because "not sent" and "sent empty" mean different things here and model binding gives both
+// as an empty array.
+admin?.MapPost("/edit-song", async Task<IResult> (string id, HttpRequest request, MusicDatabase db) =>
+{
+    var titles = Variants(request, "title");
+    var artists = Variants(request, "artist");
+    var album = request.Query.TryGetValue("album", out var value) ? value.ToString() : null;
+
+    var (entry, error) = await db.EditAsync(id, titles, artists, album);
+    if (error is not null)
+        return error == "No song with that ID." ? Results.NotFound() : Results.BadRequest(new ErrorDto(error));
+
+    return Results.Ok(LibraryRow(entry!));
+});
 
 app.MapGet("/classify", IResult (string? query) =>
 {
@@ -150,6 +176,22 @@ app.MapGet("/variant", IResult (string? name, string? artist, string? duration, 
 app.Run();
 return;
 
+// ── Admin helpers ──────────────────────────────────────────────────────────────────────────────
+
+static List<string>? Variants(HttpRequest request, string name)
+{
+    return request.Query.TryGetValue(name, out var values)
+        ? [.. values.Select(value => value ?? string.Empty)]
+        : null;
+}
+
+/// <summary>
+///     One editable row. Every variant, not just the display one: the whole point of the editor is the
+///     list <see cref="ResultDto" /> flattens down to a single name.
+/// </summary>
+static LibraryRowDto LibraryRow(MusicInfo song) => new(song.ID ?? "", [.. song.Titles], [.. song.Artists],
+    song.Album, song.RelativeLocation, song.Duration.ToString("c", CultureInfo.InvariantCulture), song.CoverUrl);
+
 static async IAsyncEnumerable<ResultDto> Mapped(IAsyncEnumerable<PlatformResult> source,
     [EnumeratorCancellation] CancellationToken ct)
 {
@@ -256,7 +298,7 @@ static async Task PumpToResponse(StreamSpreader spreader, HttpResponse response,
 // ── The one runnable check: `dotnet run --project Gaida.Pods.MusicDatabase -- selftest`. ──
 // Exercises the pure /classify and /variant logic above without needing a library on disk or a
 // listening host. Throws (nonzero exit) the moment any assertion fails.
-static void RunSelfCheck()
+static async Task RunSelfCheck()
 {
     var claimed = ClassifyAudio("audio://abc123");
     Assert(claimed is (true, "audio://abc123", null), "classify: plain id");
@@ -283,12 +325,74 @@ static void RunSelfCheck()
     Assert(!TryParseDuration("not-a-duration", out _, out var badError) &&
            badError == "The duration must look like 00:04:32.", "variant: bad duration keeps the exact message");
 
+    await EditCheck(Assert);
+
     Console.WriteLine("selftest OK");
     return;
 
     void Assert(bool condition, string message)
     {
         if (!condition) throw new Exception($"selftest failed: {message}");
+    }
+}
+
+/// <summary>
+///     The admin edit path, against a throwaway library built from one Info.json. Covers the two things
+///     that would go wrong quietly: an edit must not re-roll the ID that playlists and cache keys hold,
+///     and the saved file must keep the <c>$[DOMAIN]</c> placeholder rather than this host's domain.
+/// </summary>
+static async Task EditCheck(Action<bool, string> assert)
+{
+    var root = Path.Combine(Path.GetTempPath(), "gaida-local-selfcheck-" + Guid.NewGuid().ToString("n"));
+    var folder = Path.Combine(root, "Queen");
+    Directory.CreateDirectory(folder);
+
+    var info = Path.Combine(folder, "Info.json");
+    await File.WriteAllTextAsync(info, """
+        [{"ID":"quyoure-ab","Titles":["You_re My Best Friend"],"Artists":["Queen"],
+          "Album":"A Night at the Opera","CoverUrl":"$[DOMAIN]/cover.jpg",
+          "RelativeLocation":"Queen/Queen - You_re My Best Friend.mp3","Length":175000}]
+        """);
+
+    Environment.SetEnvironmentVariable("STORAGE", root, EnvironmentVariableTarget.Process);
+    Environment.SetEnvironmentVariable("DOMAIN", "https://music.example.com", EnvironmentVariableTarget.Process);
+
+    try
+    {
+        var database = new MusicDatabase(Serilog.Core.Logger.None);
+        await database.InitializeAsync();
+
+        var before = database.FindForAdmin("Queen", 10);
+        assert(before.Count == 1, "edit: the throwaway library loaded one song");
+        assert(before[0].CoverUrl == "https://music.example.com/Album_Covers/cover.jpg",
+            "edit: $[DOMAIN] is substituted on the way in");
+
+        var (edited, error) = await database.EditAsync("quyoure-ab",
+            ["You're My Best Friend", "You_re My Best Friend"], ["Queen", "Freddie Mercury"], "A Night at the Opera");
+
+        assert(error is null && edited is not null, $"edit: the edit succeeded ({error})");
+        assert(edited!.ID == "quyoure-ab", "edit: the ID survives an edit -- playlists and cache keys hold it");
+        assert(edited.Title == "You're My Best Friend", "edit: the first title becomes the display name");
+        assert(edited.Artists.Count == 2, "edit: every artist variant is kept");
+
+        var saved = await File.ReadAllTextAsync(info);
+        assert(saved.Contains("You're My Best Friend"), "edit: the new name reached the file");
+        assert(saved.Contains("$[DOMAIN]"), "edit: the cover placeholder is written back, not this host's domain");
+        assert(!saved.Contains("music.example.com"), "edit: no absolute domain was baked into the library");
+
+        var (_, blank) = await database.EditAsync("quyoure-ab", [" ", ""], null, null);
+        assert(blank == "A song needs at least one title.", "edit: a song cannot be left with no title");
+
+        var (missing, notFound) = await database.EditAsync("no-such-id", null, null, "X");
+        assert(missing is null && notFound == "No song with that ID.", "edit: an unknown ID is refused");
+
+        // Album cleared by an empty value, left alone by a missing one.
+        await database.EditAsync("quyoure-ab", null, null, "");
+        assert(database.FindForAdmin("Queen", 10)[0].Album is null, "edit: an empty album clears it");
+    }
+    finally
+    {
+        try { Directory.Delete(root, true); } catch (IOException) { /* temp dir */ }
     }
 }
 
@@ -304,6 +408,15 @@ public sealed record ResultDto(
     string? ThumbnailUrl,
     string? OriginalTitle,
     string? OriginalArtist);
+
+public sealed record LibraryRowDto(
+    string Id,
+    IReadOnlyList<string> Titles,
+    IReadOnlyList<string> Artists,
+    string? Album,
+    string? Location,
+    string Duration,
+    string? CoverUrl);
 
 public sealed record ClassifyDto(string? Kind, string? Id, string? Error);
 

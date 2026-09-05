@@ -17,6 +17,7 @@
   </Folder>
   <Folder Name="/Gaida Library/">
     <Project Path="Gaida Library/Gaida.CLI/Gaida.CLI.csproj" />
+    <Project Path="Gaida Library/Gaida.Admin/Gaida.Admin.csproj" />
     <Project Path="Gaida Library/Gaida.Core/Gaida.Core.csproj" />
     <Project Path="Gaida Library/Gaida.Tests/Gaida.Tests.csproj" />
   </Folder>
@@ -30,6 +31,7 @@
   </Folder>
   <Folder Name="/Services/">
     <Project Path="Services/Dunav/Dunav.csproj" />
+    <Project Path="Services/Oko/Oko.csproj" />
     <Project Path="Services/Gaida.API/Gaida.API.csproj" />
     <Project Path="Services/Gaida.Bot/Gaida.Bot.csproj" />
     <Project Path="Services/Selo/Selo.csproj" />

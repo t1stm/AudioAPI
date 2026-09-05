@@ -43,6 +43,19 @@ public class MusicSearchProvider(ILogger logger) : SearchProvider(logger),
         return (folders, [.. files.Select(PlatformResult (song) => song.ToMusicResult(ContentDownloaders))]);
     }
 
+    /// <summary>The library scan, awaitable — <see cref="Initialize" /> starts it and does not wait.</summary>
+    public Task InitializeAsync() => MusicManager.Initialize();
+
+    /// <summary>Admin: the library as rows to edit.</summary>
+    public IReadOnlyList<MusicInfo> FindForAdmin(string? query, int take) => MusicManager.Find(query, take);
+
+    /// <summary>Admin: counts for the panel's overview.</summary>
+    public object Summary() => MusicManager.Summary();
+
+    /// <summary>Admin: rewrite one song's names and album.</summary>
+    public Task<(MusicInfo? entry, string? error)> EditAsync(string id, IReadOnlyList<string>? titles,
+        IReadOnlyList<string>? artists, string? album) => MusicManager.EditAsync(id, titles, artists, album);
+
     public (LocalMatch Match, PlatformResult Result)? FindLocalVariant(string name, string? artist, TimeSpan duration)
     {
         var match = MusicManager.FindLocalVariant(name, artist, duration);

@@ -259,6 +259,194 @@ public sealed class DomStore
     }
 
     /// <summary>Points a playlist at an uploaded cover. The file itself is the controller's business.</summary>
+    // ── Admin ──────────────────────────────────────────────────────────────────────────────────
+    // Owner-agnostic on purpose: everything above asks "does this caller own it", and an operator
+    // owns nothing. Every one of these destroys or rewrites real user data that no cache refills,
+    // which is why Oko records each call before it makes it. See ADMIN_PLAN.md.
+
+    /// <summary>Renames an account, carrying its playlists across with it.</summary>
+    public (bool ok, string? error) AdminRenameUser(string username, string? newName)
+    {
+        var invalid = ValidateUsername(newName);
+        if (invalid is not null) return (false, invalid);
+
+        var name = newName!.Trim();
+
+        lock (gate)
+        {
+            if (!users.TryGetValue(User.Normalize(username), out var user)) return (false, "No such account.");
+
+            var oldKey = user.Key;
+            var newKey = User.Normalize(name);
+            if (newKey != oldKey && users.ContainsKey(newKey)) return (false, "That username is taken.");
+
+            // Playlist.Owner holds the display name and OwnerKey derives from it, so the playlists
+            // have to move with the account or every one of them orphans on rename.
+            foreach (var playlist in playlists.Values.Where(playlist => playlist.OwnerKey == oldKey))
+                playlist.Owner = name;
+
+            users.Remove(oldKey);
+            user.Username = name;
+            users[user.Key] = user;
+
+            SaveLocked();
+            return (true, null);
+        }
+    }
+
+    /// <summary>
+    ///     Sets a new password and signs every session out. The sign-out is not optional: each live
+    ///     token was issued against the old password, so leaving them alone locks nobody out.
+    /// </summary>
+    public (bool ok, string? error) AdminSetPassword(string username, string? password)
+    {
+        var invalid = ValidatePassword(password);
+        if (invalid is not null) return (false, invalid);
+
+        lock (gate)
+        {
+            if (!users.TryGetValue(User.Normalize(username), out var user)) return (false, "No such account.");
+
+            var salt = RandomNumberGenerator.GetBytes(16);
+            user.Salt = Convert.ToBase64String(salt);
+            user.Hash = Convert.ToBase64String(Derive(password!, salt, DefaultIterations));
+            user.Iterations = DefaultIterations;
+
+            RevokeLocked(user);
+
+            SaveLocked();
+            return (true, null);
+        }
+    }
+
+    /// <summary>Revokes every token an account holds. Returns how many sessions ended.</summary>
+    public (bool ok, int revoked) AdminSignOut(string username)
+    {
+        lock (gate)
+        {
+            if (!users.TryGetValue(User.Normalize(username), out var user)) return (false, 0);
+
+            var revoked = user.Tokens.Count;
+            RevokeLocked(user);
+
+            SaveLocked();
+            return (true, revoked);
+        }
+    }
+
+    /// <summary>
+    ///     Deletes an account and everything it owns. Returns the cover files left behind, which are
+    ///     the caller's to unlink — the store owns the accounts file and nothing else on disk.
+    /// </summary>
+    public (bool ok, List<string> covers, int playlists) AdminDeleteUser(string username)
+    {
+        lock (gate)
+        {
+            if (!users.TryGetValue(User.Normalize(username), out var user)) return (false, [], 0);
+
+            var owned = playlists.Values.Where(playlist => playlist.OwnerKey == user.Key).ToList();
+            foreach (var playlist in owned) playlists.Remove(playlist.Id);
+
+            RevokeLocked(user);
+            users.Remove(user.Key);
+
+            SaveLocked();
+            return (true, owned.Where(p => p.CoverFile is not null).Select(p => p.CoverFile!).ToList(), owned.Count);
+        }
+    }
+
+    /// <summary>
+    ///     Changes whichever of name, visibility and one track position were given. Mirrors
+    ///     <see cref="Update" /> without the ownership check.
+    /// </summary>
+    public (bool ok, string? error) AdminUpdatePlaylist(string id, string? name, bool? isPublic, int? removeTrack)
+    {
+        lock (gate)
+        {
+            if (!playlists.TryGetValue(id, out var playlist)) return (false, "No such playlist.");
+
+            if (name is not null)
+            {
+                var (error, message) = ValidatePlaylist(name, null);
+                if (error is not null) return (false, message);
+                playlist.Name = name.Trim();
+            }
+
+            if (isPublic is not null) playlist.IsPublic = isPublic.Value;
+
+            if (removeTrack is { } index)
+            {
+                if (index < 0 || index >= playlist.Tracks.Count) return (false, "No track at that position.");
+                playlist.Tracks.RemoveAt(index);
+            }
+
+            playlist.UpdatedUtc = DateTimeOffset.UtcNow;
+
+            SaveLocked();
+            return (true, null);
+        }
+    }
+
+    /// <summary>Deletes any playlist. Returns its cover file for the caller to unlink.</summary>
+    public (bool ok, string? cover) AdminDeletePlaylist(string id)
+    {
+        lock (gate)
+        {
+            if (!playlists.TryGetValue(id, out var playlist)) return (false, null);
+
+            playlists.Remove(id);
+
+            SaveLocked();
+            return (true, playlist.CoverFile);
+        }
+    }
+
+    /// <summary>Drops every token an account holds, from the account and from the lookup.</summary>
+    private void RevokeLocked(User user)
+    {
+        foreach (var token in user.Tokens) byToken.Remove(token.Value);
+        user.Tokens.Clear();
+    }
+
+    /// <summary>
+    ///     The operator's view of every account and playlist. Salt, hash and token values are never in
+    ///     here: an admin panel needs to know an account exists and how many live sessions it has, and
+    ///     nothing on this endpoint should be worth stealing.
+    /// </summary>
+    public object Snapshot()
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        lock (gate)
+        {
+            var counts = playlists.Values.GroupBy(playlist => playlist.OwnerKey)
+                .ToDictionary(group => group.Key, group => group.Count());
+
+            return new
+            {
+                users = users.Values.Select(user => new
+                {
+                    username = user.Username,
+                    createdUtc = user.CreatedUtc,
+                    activeTokens = user.Tokens.Count(token => token.ExpiresUtc > now),
+                    playlists = counts.GetValueOrDefault(user.Key, 0)
+                }).OrderBy(user => user.username).ToList(),
+                playlists = playlists.Values.Select(playlist => new
+                {
+                    id = playlist.Id,
+                    name = playlist.Name,
+                    owner = playlist.Owner,
+                    isPublic = playlist.IsPublic,
+                    tracks = playlist.Tracks.Count,
+                    duration = playlist.Duration.ToString(),
+                    hasCover = playlist.CoverFile is not null,
+                    createdUtc = playlist.CreatedUtc,
+                    updatedUtc = playlist.UpdatedUtc
+                }).OrderBy(playlist => playlist.owner).ToList()
+            };
+        }
+    }
+
     public Playlist? SetCover(User owner, string id, string? coverFile)
     {
         lock (gate)
@@ -315,15 +503,28 @@ public sealed class DomStore
     /// </summary>
     private static (string? error, string? message) Validate(string? username, string? password)
     {
+        var name = ValidateUsername(username);
+        if (name is not null) return ("invalid_request", name);
+
+        var secret = ValidatePassword(password);
+        return secret is not null ? ("invalid_request", secret) : (null, null);
+    }
+
+    /// <summary>The username half, on its own, because an admin rename changes one without the other.</summary>
+    private static string? ValidateUsername(string? username)
+    {
         var name = username?.Trim() ?? "";
 
-        if (name.Length is < 2 or > 32)
-            return ("invalid_request", "A username is between 2 and 32 characters.");
-        if (name.Any(c => char.IsWhiteSpace(c) || char.IsControl(c)))
-            return ("invalid_request", "A username cannot contain spaces.");
-        if ((password ?? "").Length < 8)
-            return ("invalid_request", "A password is at least 8 characters.");
-        return password!.Length > 256 ? ("invalid_request", "A password is at most 256 characters.") : (null, null);
+        if (name.Length is < 2 or > 32) return "A username is between 2 and 32 characters.";
+        return name.Any(c => char.IsWhiteSpace(c) || char.IsControl(c))
+            ? "A username cannot contain spaces."
+            : null;
+    }
+
+    private static string? ValidatePassword(string? password)
+    {
+        if ((password ?? "").Length < 8) return "A password is at least 8 characters.";
+        return password!.Length > 256 ? "A password is at most 256 characters." : null;
     }
 
     private static byte[] Derive(string password, byte[] salt, int iterations) =>

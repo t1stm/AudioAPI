@@ -95,6 +95,18 @@ public class MusicInfoFormatTests
         Assert.Contains(part, parts);
     }
 
+    [Fact]
+    public void FindsASongByItsFeaturedArtistAlone()
+    {
+        // The merged ARTISTS tag is one string on the entry; search splits it, so every performer in it
+        // — the featured one included — finds the song.
+        var song = new MusicInfo { Artists = ["Stiliyan, Jamaikata, Alex Toploto"] };
+
+        Assert.Contains("alextoploto", song.Search.Artists);
+        Assert.Contains("jamaikata", song.Search.Artists);
+        Assert.Contains("stiliyan", song.Search.Artists);
+    }
+
     [Theory]
     [InlineData("Rad&Co")]
     [InlineData("Sun with Rain")]
@@ -129,6 +141,18 @@ public class MediaInfoTests
         {
             File.Delete(path);
         }
+    }
+
+    [Theory]
+    [InlineData("DJ Damyan;Selina", "DJ Damyan, Selina")]
+    [InlineData("Stiliyan;Jamaikata;Alex Toploto", "Stiliyan, Jamaikata, Alex Toploto")]
+    [InlineData("Preslava", "Preslava")]
+    [InlineData(null, null)]
+    public void KeepsEveryValueOfARepeatedTag(string? probed, string? expected)
+    {
+        // A FLAC carries one ARTISTS comment per performer and ffprobe joins them with ";". Reading that
+        // as a single name left the library showing the last performer alone as the artist.
+        Assert.Equal(expected, MediaInfo.Merge(probed));
     }
 
     /// <returns><c>false</c> when ffmpeg is not installed, so the suite stays green without it.</returns>

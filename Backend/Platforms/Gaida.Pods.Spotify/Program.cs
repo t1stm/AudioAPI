@@ -1,3 +1,4 @@
+using Gaida.Admin;
 using System.Runtime.CompilerServices;
 using Gaida.Core.Platforms;
 using Gaida.Core.Utils;
@@ -26,6 +27,10 @@ foreach (var key in (string[])["SPOTIFY_ID", "SPOTIFY_SECRET"])
 builder.Services.AddSerilog();
 
 var app = builder.Build();
+
+// The request ring is this pod's whole admin payload -- it holds no state an operator edits.
+// No-op without ADMIN_TOKEN. See ADMIN_PLAN.md.
+app.MapAdmin(() => new { service = "gaida-spotify" });
 
 var spotify = new SpotifyPlatform(Log.Logger);
 spotify.Initialize();

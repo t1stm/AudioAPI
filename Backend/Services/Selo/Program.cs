@@ -1,3 +1,4 @@
+using Selo;
 using Selo.Multiplayer;
 using Serilog;
 using Serilog.Templates;
@@ -48,6 +49,9 @@ app.UseWebSockets(new WebSocketOptions
 
 // initialize required services here.
 app.Services.GetRequiredService<MultiplayerManager>();
+
+// Before MapControllers so the request ring wraps the whole pipeline. No-op without ADMIN_TOKEN.
+app.MapSeloAdmin();
 
 app.UseAuthorization();
 app.MapControllers();

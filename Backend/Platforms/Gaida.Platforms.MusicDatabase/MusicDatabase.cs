@@ -48,6 +48,19 @@ public sealed class MusicDatabase : Platform, ISupportsSearch, ISupportsRandomRe
         return _provider.Browse(path);
     }
 
+    /// <summary>The library scan, awaitable. <see cref="Platform.Initialize" /> starts it and returns.</summary>
+    public Task InitializeAsync() => _provider.InitializeAsync();
+
+    /// <returns>The library rows an operator is editing — see <see cref="Manager.MusicManager.Find" />.</returns>
+    public IReadOnlyList<MusicInfo> FindForAdmin(string? query, int take) => _provider.FindForAdmin(query, take);
+
+    /// <returns>Counts for the admin panel's overview.</returns>
+    public object Summary() => _provider.Summary();
+
+    /// <summary>Rewrites one song's names and album, and saves its folder's Info.json.</summary>
+    public Task<(MusicInfo? entry, string? error)> EditAsync(string id, IReadOnlyList<string>? titles,
+        IReadOnlyList<string>? artists, string? album) => _provider.EditAsync(id, titles, artists, album);
+
     /// <returns>The library's answer to a YouTube title, or <c>null</c> when it has none worth offering.</returns>
     public (LocalMatch Match, PlatformResult Result)? FindLocalVariant(string name, string? artist, TimeSpan duration)
     {

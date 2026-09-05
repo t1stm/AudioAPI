@@ -57,7 +57,41 @@ public class MusicInfo : IJsonOnDeserialized
     }
 
     public string? Album { get; set; }
+
+    /// <summary>
+    ///     The absolute cover URL, as everything downstream wants it. Not serialized — see
+    ///     <see cref="StoredCoverUrl" />.
+    /// </summary>
+    [JsonIgnore]
     public string? CoverUrl { get; set; }
+
+    /// <summary>
+    ///     What <c>CoverUrl</c> looks like on disk: the host is a <c>$[DOMAIN]</c> placeholder, which
+    ///     <see cref="MusicManager.Load" /> substitutes on the way in.
+    /// </summary>
+    /// <remarks>
+    ///     The substitution used to be one-way, which was harmless while only the loader wrote
+    ///     <c>Info.json</c> — it writes entries it has not substituted yet. An admin edit saves an entry
+    ///     that has been, and without this it would bake this host's domain into the library file, so
+    ///     the covers would break the next time <c>DOMAIN</c> changed. Round-tripping it here is one
+    ///     property instead of a rule every writer has to remember.
+    /// </remarks>
+    [JsonPropertyName("CoverUrl")]
+    public string? StoredCoverUrl
+    {
+        get
+        {
+            var host = MusicManager.AlbumCoverLocation;
+
+            // With DOMAIN unset that is a bare "/Album_Covers", which is a prefix of far too much to
+            // go substituting blindly.
+            return CoverUrl is null || MusicManager.Domain.Length == 0
+                ? CoverUrl
+                : CoverUrl.Replace(host, "$[DOMAIN]");
+        }
+        set => CoverUrl = value;
+    }
+
     public string? RelativeLocation { get; set; }
 
     // ponytail: read-only shim for the four-field format. Setter-only properties are never serialized by

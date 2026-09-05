@@ -6,9 +6,11 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY Services/Dom/Dom.csproj Services/Dom/
+COPY ["Gaida Library/Gaida.Admin/Gaida.Admin.csproj", "Gaida Library/Gaida.Admin/"]
 RUN dotnet restore Services/Dom/Dom.csproj
 
 COPY Services/Dom/ Services/Dom/
+COPY ["Gaida Library/Gaida.Admin/", "Gaida Library/Gaida.Admin/"]
 RUN dotnet publish Services/Dom/Dom.csproj -c Release -o /app
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime

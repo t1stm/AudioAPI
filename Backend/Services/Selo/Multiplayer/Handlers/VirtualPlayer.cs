@@ -357,6 +357,26 @@ public class VirtualPlayer(MessageQueue messageQueue)
         }
     }
 
+    /// <summary>
+    ///     What the room is playing, for the admin panel. Under <see cref="Sync" /> like every other read:
+    ///     <see cref="Items" /> is a plain <c>List&lt;T&gt;</c> and indexing it while another socket removes
+    ///     a track is how a monitoring endpoint takes a room down.
+    /// </summary>
+    public async Task<PlayerSnapshot> Snapshot()
+    {
+        await Sync.WaitAsync();
+
+        try
+        {
+            return new PlayerSnapshot(Playing, Loading, CurrentIndex, Items.Count, CurrentTimeCore(),
+                CurrentIndex >= 0 && CurrentIndex < Items.Count ? Items[CurrentIndex] : null);
+        }
+        finally
+        {
+            Sync.Release();
+        }
+    }
+
     /// <summary>The room position in seconds, read under the lock.</summary>
     public async Task<double> GetCurrentTime()
     {
@@ -488,3 +508,12 @@ public class VirtualPlayer(MessageQueue messageQueue)
         return (long)(timeSpan.TotalSeconds * Stopwatch.Frequency);
     }
 }
+
+/// <summary>The room clock and queue as an operator reads them.</summary>
+public sealed record PlayerSnapshot(
+    bool Playing,
+    bool Loading,
+    int CurrentIndex,
+    int QueueLength,
+    double PositionSeconds,
+    TrackDto? Current);

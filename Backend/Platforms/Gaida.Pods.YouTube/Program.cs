@@ -1,3 +1,4 @@
+using Gaida.Admin;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using Gaida.Core.Platforms;
@@ -28,6 +29,10 @@ foreach (var key in (string[])["YOUTUBE_CACHE_DB", "YOUTUBE_CACHE"])
 builder.Services.AddSerilog();
 
 var app = builder.Build();
+
+// The request ring is this pod's whole admin payload -- it holds no state an operator edits.
+// No-op without ADMIN_TOKEN. See ADMIN_PLAN.md.
+app.MapAdmin(() => new { service = "gaida-youtube" });
 
 // One instance for the process lifetime: this pod owns exactly one platform. Initialize() loads the
 // Info.json search cache (YouTubeSearchProviderCached.Initialize) and orders the content downloaders

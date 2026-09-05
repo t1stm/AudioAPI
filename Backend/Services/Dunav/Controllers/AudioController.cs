@@ -17,7 +17,7 @@ public class AudioController(ILogger<AudioController> logger, CacheService cache
         if (string.IsNullOrWhiteSpace(id)) return NotFound();
 
         var key = CacheService.RawKey(id);
-        var entry = await GetOrFetch(key, $"/Audio/DownloadRaw?id={Uri.EscapeDataString(id)}", out _);
+        var entry = await GetOrFetch(key, $"/Audio/DownloadRaw?id={Uri.EscapeDataString(id)}", out _, $"raw {id}");
         if (entry is null) return StatusCode(502);
 
         return await Respond(key, entry);
@@ -31,7 +31,7 @@ public class AudioController(ILogger<AudioController> logger, CacheService cache
         if (string.IsNullOrWhiteSpace(id)) return NotFound("No ID provided");
 
         var key = CacheService.EncodedKey(codec, bitrate, id);
-        var entry = await GetOrFetch(key, UpstreamDownloadPath(codec, bitrate, id), out _);
+        var entry = await GetOrFetch(key, UpstreamDownloadPath(codec, bitrate, id), out _, Label(codec, bitrate, id));
         if (entry is null) return StatusCode(502);
 
         return await Respond(key, entry);
@@ -55,7 +55,8 @@ public class AudioController(ILogger<AudioController> logger, CacheService cache
         if (cache.TryGet(key, out _)) return Ok();
 
         logger.LogInformation("Preloading '{Id}' {Codec} {Bitrate}", id, codec, bitrate);
-        var entry = await GetOrFetch(key, UpstreamDownloadPath(codec, bitrate, id), out var started);
+        var entry = await GetOrFetch(key, UpstreamDownloadPath(codec, bitrate, id), out var started,
+            Label(codec, bitrate, id));
         if (entry is null) return StatusCode(502);
 
         // Two callers can reach this together and both find TryGet empty; only one of them added the
@@ -68,10 +69,16 @@ public class AudioController(ILogger<AudioController> logger, CacheService cache
         return $"/Audio/Download/{codec}/{bitrate}?id={Uri.EscapeDataString(id)}";
     }
 
-    private Task<CacheEntry?> GetOrFetch(string key, string upstreamPath, out bool started)
+    /// <summary>What the cache key hashes away, kept beside it so /Admin/snapshot is readable.</summary>
+    private static string Label(string codec, int bitrate, string id)
+    {
+        return $"{codec} {bitrate}k {id}";
+    }
+
+    private Task<CacheEntry?> GetOrFetch(string key, string upstreamPath, out bool started, string? label = null)
     {
         return cache.GetOrStartAsync(key, entry => cache.FetchAsync(entry, upstreamPath, CancellationToken.None),
-            out started);
+            out started, label);
     }
 
     private async Task<IActionResult> Respond(string key, CacheEntry entry)

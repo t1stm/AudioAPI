@@ -6,11 +6,13 @@ WORKDIR /src
 COPY ["Platforms/Gaida.Pods.YouTube/Gaida.Pods.YouTube.csproj", "Platforms/Gaida.Pods.YouTube/"]
 COPY ["Platforms/Gaida.Platforms.YouTube/Gaida.Platforms.YouTube.csproj", "Platforms/Gaida.Platforms.YouTube/"]
 COPY ["Gaida Library/Gaida.Core/Gaida.Core.csproj", "Gaida Library/Gaida.Core/"]
+COPY ["Gaida Library/Gaida.Admin/Gaida.Admin.csproj", "Gaida Library/Gaida.Admin/"]
 RUN dotnet restore "Platforms/Gaida.Pods.YouTube/Gaida.Pods.YouTube.csproj"
 
 COPY ["Platforms/Gaida.Pods.YouTube/", "Platforms/Gaida.Pods.YouTube/"]
 COPY ["Platforms/Gaida.Platforms.YouTube/", "Platforms/Gaida.Platforms.YouTube/"]
 COPY ["Gaida Library/Gaida.Core/", "Gaida Library/Gaida.Core/"]
+COPY ["Gaida Library/Gaida.Admin/", "Gaida Library/Gaida.Admin/"]
 RUN dotnet publish "Platforms/Gaida.Pods.YouTube/Gaida.Pods.YouTube.csproj" -c Release -o /app
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime

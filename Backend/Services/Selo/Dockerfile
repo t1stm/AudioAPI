@@ -5,9 +5,11 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY Services/Selo/Selo.csproj Services/Selo/
+COPY ["Gaida Library/Gaida.Admin/Gaida.Admin.csproj", "Gaida Library/Gaida.Admin/"]
 RUN dotnet restore Services/Selo/Selo.csproj
 
 COPY Services/Selo/ Services/Selo/
+COPY ["Gaida Library/Gaida.Admin/", "Gaida Library/Gaida.Admin/"]
 RUN dotnet publish Services/Selo/Selo.csproj -c Release -o /app
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime

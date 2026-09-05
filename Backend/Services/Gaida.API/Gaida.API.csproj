@@ -18,4 +18,8 @@
     <ProjectReference Include="..\..\Gaida Library\Gaida.Core\Gaida.Core.csproj"/>
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\Gaida Library\Gaida.Admin\Gaida.Admin.csproj"/>
+  </ItemGroup>
+
 </Project>

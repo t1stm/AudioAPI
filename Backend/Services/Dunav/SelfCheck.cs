@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
+using Gaida.Admin;
 using Gaida.Core.Streams;
 using Serilog;
 
@@ -15,7 +16,34 @@ internal static class SelfCheck
 {
     public static async Task<bool> RunAsync()
     {
-        return await CoalescingAsync() & await FollowAsync();
+        return await CoalescingAsync() & await FollowAsync() & AdminRing();
+    }
+
+    /// <summary>
+    ///     The one thing in <see cref="AdminFeed" /> that can silently go wrong: the ring has to wrap in
+    ///     place rather than grow, or an unwatched service leaks a request log forever. Capacity is private,
+    ///     so this asserts the observable consequence — a flood leaves a bounded window holding the newest
+    ///     entries, not the oldest.
+    /// </summary>
+    private static bool AdminRing()
+    {
+        var feed = new AdminFeed();
+        const int flood = 5000;
+
+        for (var i = 0; i < flood; i++)
+            feed.Record(new RequestEntry(DateTimeOffset.UtcNow, "GET", $"/probe/{i}", 200, i));
+
+        var recent = feed.Recent();
+        var ok = recent.Length < flood
+                 && recent[^1].Path == $"/probe/{flood - 1}"
+                 && recent[0].Path == $"/probe/{flood - recent.Length}";
+
+        Console.WriteLine(ok
+            ? $"OK: {flood} requests recorded -> ring holds the newest {recent.Length}"
+            : $"FAIL: {flood} requests recorded -> ring holds {recent.Length}, " +
+              $"oldest {recent.FirstOrDefault()?.Path}, newest {recent.LastOrDefault()?.Path}");
+
+        return ok;
     }
 
     /// <summary>

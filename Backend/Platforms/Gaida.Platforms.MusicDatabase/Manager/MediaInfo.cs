@@ -1,10 +1,14 @@
 using System.Diagnostics;
 using System.Text.Json;
+using Gaida.Core.Utils;
 
 namespace Gaida.Platforms.MusicDatabase.Manager;
 
 public static class MediaInfo
 {
+    /// <summary>What repeated tag values are joined with: the separator matching already splits on.</summary>
+    public const string ArtistSeparator = ", ";
+
     public static async Task<MusicInfo> GetInformation(string location)
     {
         var musicInfo = new MusicInfo
@@ -47,9 +51,22 @@ public static class MediaInfo
         if (!format.TryGetProperty("tags", out var tags)) return musicInfo;
 
         musicInfo.Titles = MusicInfo.Variants(Tag(tags, "TITLE"));
-        musicInfo.Artists = MusicInfo.Variants(Tag(tags, "ARTISTS"), Tag(tags, "ARTIST"));
+        musicInfo.Artists = MusicInfo.Variants(Merge(Tag(tags, "ARTISTS")), Merge(Tag(tags, "ARTIST")));
 
         return musicInfo;
+    }
+
+    /// <summary>
+    ///     A file may carry the same tag more than once — a FLAC with an ARTISTS comment per performer is the
+    ///     common case — and ffprobe hands those back as one string joined with ";". Rejoined on the library
+    ///     separator so every name survives and <see cref="TitleNormalizer.SplitArtists" /> can split them.
+    /// </summary>
+    public static string? Merge(string? value)
+    {
+        return value?.Contains(';') != true
+            ? value
+            : string.Join(ArtistSeparator,
+                value.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
     }
 
     /// <summary>

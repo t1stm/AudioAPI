@@ -17,4 +17,8 @@
     <ProjectReference Include="..\Gaida.Platforms.Spotify\Gaida.Platforms.Spotify.csproj"/>
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\Gaida Library\Gaida.Admin\Gaida.Admin.csproj"/>
+  </ItemGroup>
+
 </Project>

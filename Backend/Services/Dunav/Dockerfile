@@ -4,10 +4,12 @@ WORKDIR /src
 
 COPY ["Services/Dunav/Dunav.csproj", "Services/Dunav/"]
 COPY ["Gaida Library/Gaida.Core/Gaida.Core.csproj", "Gaida Library/Gaida.Core/"]
+COPY ["Gaida Library/Gaida.Admin/Gaida.Admin.csproj", "Gaida Library/Gaida.Admin/"]
 RUN dotnet restore "Services/Dunav/Dunav.csproj"
 
 COPY ["Services/Dunav/", "Services/Dunav/"]
 COPY ["Gaida Library/Gaida.Core/", "Gaida Library/Gaida.Core/"]
+COPY ["Gaida Library/Gaida.Admin/", "Gaida Library/Gaida.Admin/"]
 RUN dotnet publish "Services/Dunav/Dunav.csproj" -c Release -o /app
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime

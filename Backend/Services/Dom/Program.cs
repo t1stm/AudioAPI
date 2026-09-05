@@ -42,6 +42,9 @@ app.UseCors("Frontend");
 // load the accounts file at boot, so a corrupt one fails the container rather than the first login
 app.Services.GetRequiredService<DomStore>();
 
+// Before MapControllers so the request ring wraps the whole pipeline. No-op without ADMIN_TOKEN.
+app.MapDomAdmin();
+
 app.MapControllers();
 app.Run();
 return 0;

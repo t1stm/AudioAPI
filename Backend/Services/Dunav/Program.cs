@@ -48,6 +48,9 @@ app.UseCors("Frontend");
 // initialize eagerly so the sweep timer starts at boot, not on first request.
 app.Services.GetRequiredService<CacheService>();
 
+// Before MapControllers so the request ring wraps the whole pipeline. No-op without ADMIN_TOKEN.
+app.MapDunavAdmin();
+
 app.MapControllers();
 app.Run();
 return 0;

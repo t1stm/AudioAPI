@@ -90,7 +90,9 @@ public class CacheService
     ///     <c>true</c> for the single caller whose call actually started the fetch; every racer that found the
     ///     key already there gets <c>false</c>. Preload answers 202 or 200 off this.
     /// </param>
-    public Task<CacheEntry?> GetOrStartAsync(string key, Func<CacheEntry, Task<bool>> start, out bool started)
+    /// <param name="label">Human-readable description of the entry, for <see cref="Snapshot" />. Never used for lookup.</param>
+    public Task<CacheEntry?> GetOrStartAsync(string key, Func<CacheEntry, Task<bool>> start, out bool started,
+        string? label = null)
     {
         // Built before the add so that the add is the only race: GetOrAdd's factory overload may run for more
         // than one caller, and then two of them would each believe they started the fetch. A Lazy that loses
@@ -100,7 +102,8 @@ public class CacheService
             var entry = new CacheEntry
             {
                 // Named for its key and kept until evicted, rather than a self-deleting scratch file.
-                Body = new StreamSpreader(Path.Combine(CacheDir, key), false)
+                Body = new StreamSpreader(Path.Combine(CacheDir, key), false),
+                Label = label
             };
             if (await start(entry)) return entry;
 
@@ -284,7 +287,7 @@ public class CacheService
         }
     }
 
-    private bool Evict(string key, string reason)
+    public bool Evict(string key, string reason)
     {
         ExpireTimes.TryRemove(key, out _);
         if (!CachedEntries.TryRemove(key, out var lazy)) return false;
@@ -299,4 +302,63 @@ public class CacheService
             Delete(entry);
         return true;
     }
+
+    /// <summary>
+    ///     What the cache holds right now, for the admin panel. Read straight off the live dictionaries and
+    ///     never cached: they are the only copy, and a second one would only ever be a staler one.
+    /// </summary>
+    public object Snapshot()
+    {
+        var entries = CachedEntries
+            .Select(kv =>
+            {
+                // A fetch whose task has not completed yet has no observable CacheEntry, so it shows as
+                // pending with no size or label. That window is the few hundred ms before upstream headers
+                // land, so it is nearly always empty.
+                // ponytail: no subscriber count -- StreamSpreader does not track readers, and adding a
+                // counter to it touches a primitive the pods depend on. Add it there if "who is streaming
+                // this" turns out to be a question anyone actually asks.
+                var entry = kv.Value is { IsValueCreated: true, Value.IsCompletedSuccessfully: true }
+                    ? kv.Value.Value.Result
+                    : null;
+
+                return new CacheEntrySnapshot(
+                    kv.Key,
+                    entry?.Label,
+                    entry?.Body.Length ?? 0,
+                    entry is null ? "pending" : entry.Body.Closed ? "complete" : "downloading",
+                    entry?.ContentType,
+                    ExpireTimes.TryGetValue(kv.Key, out var expires) ? expires : null);
+            })
+            .OrderByDescending(entry => entry.Bytes)
+            .ToList();
+
+        return new
+        {
+            count = entries.Count,
+            totalBytes = entries.Sum(entry => entry.Bytes),
+            maxBytes = MaxBytes,
+            retentionMinutes = Retention.TotalMinutes,
+            cacheDir = CacheDir,
+            entries
+        };
+    }
+
+    /// <summary>Evicts everything. Returns how many entries went.</summary>
+    public int EvictAll()
+    {
+        return CachedEntries.Keys.Count(key => Evict(key, "admin evict-all"));
+    }
 }
+
+/// <summary>One row of <see cref="CacheService.Snapshot" />.</summary>
+/// <param name="Key">The on-disk filename, and what <c>POST /Admin/evict</c> takes.</param>
+/// <param name="Label">The codec/bitrate/id this was cached for, or <c>null</c> while still pending.</param>
+/// <param name="State">One of <c>pending</c>, <c>downloading</c> or <c>complete</c>.</param>
+public sealed record CacheEntrySnapshot(
+    string Key,
+    string? Label,
+    long Bytes,
+    string State,
+    string? ContentType,
+    DateTime? ExpiresUtc);

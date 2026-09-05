@@ -5,10 +5,12 @@ WORKDIR /src
 
 COPY ["Services/Gaida.API/Gaida.API.csproj", "Services/Gaida.API/"]
 COPY ["Gaida Library/Gaida.Core/Gaida.Core.csproj", "Gaida Library/Gaida.Core/"]
+COPY ["Gaida Library/Gaida.Admin/Gaida.Admin.csproj", "Gaida Library/Gaida.Admin/"]
 RUN dotnet restore "Services/Gaida.API/Gaida.API.csproj"
 
 COPY ["Services/Gaida.API/", "Services/Gaida.API/"]
 COPY ["Gaida Library/Gaida.Core/", "Gaida Library/Gaida.Core/"]
+COPY ["Gaida Library/Gaida.Admin/", "Gaida Library/Gaida.Admin/"]
 RUN dotnet publish "Services/Gaida.API/Gaida.API.csproj" -c Release -o /app
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime

@@ -1,3 +1,4 @@
+using Gaida.Admin;
 using Gaida.API;
 using Gaida.Core;
 using Serilog;
@@ -47,6 +48,10 @@ app.UseCors("Frontend");
 
 // Builds the platform pod list from config; nothing to warm up otherwise, since Gaida.API holds no cache.
 app.Services.GetRequiredService<ManagerService>();
+
+// Gaida.API holds no cache of its own, so the request ring is the whole payload. No-op without
+// ADMIN_TOKEN. See ADMIN_PLAN.md.
+app.MapAdmin(() => new { service = "gaida-api" });
 
 app.UseAuthorization();
 app.MapControllers();

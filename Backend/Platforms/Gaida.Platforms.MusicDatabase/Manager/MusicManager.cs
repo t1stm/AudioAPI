@@ -9,6 +9,17 @@ namespace Gaida.Platforms.MusicDatabase.Manager;
 public partial class MusicManager(ILogger logger)
 {
     protected readonly CoverExtractor CoverExtractor = new();
+
+    /// <summary>
+    ///     Serialises admin edits against each other and against their own file writes.
+    /// </summary>
+    /// <remarks>
+    ///     ponytail: one gate for the whole library rather than one per folder. Edits arrive at the rate
+    ///     a person clicks Save, and the work under it is a dictionary lookup plus one small file write.
+    ///     Split it per folder if a bulk re-tagging tool ever shows up.
+    /// </remarks>
+    private readonly SemaphoreSlim editGate = new(1, 1);
+
     protected List<MusicInfo> Songs = [];
     public ILogger Logger { get; } = logger;
 
@@ -270,6 +281,156 @@ public partial class MusicManager(ILogger logger)
             [
                 .. files.OrderBy(song => song.DisplayTitle, StringComparer.OrdinalIgnoreCase)
             ]);
+    }
+
+    /// <summary>
+    ///     Plain substring matching over every variant, the album and the path, for the admin editor.
+    /// </summary>
+    /// <remarks>
+    ///     Deliberately not <see cref="SearchByTerm" />: that one is tuned for a listener who half
+    ///     remembers a title, and its fuzziness is wrong here. An operator fixing "Оркестър Имперал"
+    ///     needs to find that exact typo, and a search that helpfully also returns the correctly spelled
+    ///     song is a search that hides the thing being looked for.
+    /// </remarks>
+    public IReadOnlyList<MusicInfo> Find(string? query, int take)
+    {
+        var needle = query?.Trim() ?? string.Empty;
+        var songs = Songs;
+
+        var matched = needle.Length == 0
+            ? songs.AsEnumerable()
+            : songs.Where(song =>
+                song.Titles.Any(title => title.Contains(needle, StringComparison.OrdinalIgnoreCase))
+                || song.Artists.Any(artist => artist.Contains(needle, StringComparison.OrdinalIgnoreCase))
+                || song.Album?.Contains(needle, StringComparison.OrdinalIgnoreCase) == true
+                || song.RelativeLocation?.Contains(needle, StringComparison.OrdinalIgnoreCase) == true
+                || song.ID == needle);
+
+        return [.. matched
+            .OrderBy(song => song.Artist, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(song => song.Title, StringComparer.OrdinalIgnoreCase)
+            .Take(Math.Clamp(take, 1, 500))];
+    }
+
+    /// <summary>Counts for the admin panel's overview. One pass, no allocation per song.</summary>
+    public object Summary()
+    {
+        var songs = Songs;
+        var folders = new HashSet<string>(StringComparer.Ordinal);
+        var withoutAlbum = 0;
+        var withoutArtist = 0;
+
+        foreach (var song in songs)
+        {
+            if (song.RelativeLocation is { } location) folders.Add(FolderOf(location));
+            if (string.IsNullOrWhiteSpace(song.Album)) withoutAlbum++;
+            if (song.Artists.Count == 0) withoutArtist++;
+        }
+
+        return new
+        {
+            service = "gaida-local",
+            songs = songs.Count,
+            folders = folders.Count,
+            withoutAlbum,
+            withoutArtist,
+            storage = StorageDirectory
+        };
+    }
+
+    /// <summary>
+    ///     Rewrites one song's names and album, and saves the folder it lives in.
+    /// </summary>
+    /// <param name="titles">Replaces every title variant. <c>null</c> leaves them alone; empty is rejected.</param>
+    /// <param name="artists">Replaces every artist variant. <c>null</c> leaves them alone.</param>
+    /// <param name="album">Trimmed; the empty string clears it, <c>null</c> leaves it alone.</param>
+    /// <returns>The updated entry, or an error naming what was wrong with the request.</returns>
+    /// <remarks>
+    ///     What an operator types is taken literally: unlike the import path, this does not add
+    ///     romanizations of its own. They are welcome as extra variants, but a person editing a name is
+    ///     the authority on it and should not find a line they never wrote appearing underneath.
+    ///     <para>
+    ///         The ID is deliberately <b>not</b> regenerated, though it is derived from these very
+    ///         fields. It is the handle every playlist snapshot, every Dunav cache key and every link
+    ///         already holds; re-rolling it on a typo fix would orphan all of them. <c>RereadTags</c>
+    ///         regenerates because a bulk migration has no such links to keep.
+    ///     </para>
+    /// </remarks>
+    public async Task<(MusicInfo? entry, string? error)> EditAsync(string id, IReadOnlyList<string>? titles,
+        IReadOnlyList<string>? artists, string? album)
+    {
+        await editGate.WaitAsync();
+
+        try
+        {
+            var entry = SearchById(id);
+            if (entry is null) return (null, "No song with that ID.");
+            if (entry.RelativeLocation is null) return (null, "That entry has no file on disk.");
+
+            if (titles is not null)
+            {
+                var cleaned = Distinct(titles);
+                if (cleaned.Count == 0) return (null, "A song needs at least one title.");
+                entry.Titles = cleaned;
+            }
+
+            if (artists is not null) entry.Artists = Distinct(artists);
+            if (album is not null) entry.Album = album.Trim() is { Length: > 0 } name ? name : null;
+
+            await SaveFolderAsync(entry.RelativeLocation);
+            Logger.Information("Admin edited {Id}: {Title} — {Artist}", id, entry.Title, entry.Artist);
+
+            return (entry, null);
+        }
+        finally
+        {
+            editGate.Release();
+        }
+    }
+
+    /// <summary>Trimmed, blanks dropped, duplicates dropped, order preserved. Exactly what was typed.</summary>
+    private static List<string> Distinct(IReadOnlyList<string> values)
+    {
+        var result = new List<string>(values.Count);
+        foreach (var value in values)
+        {
+            var trimmed = value.Trim();
+            if (trimmed.Length > 0 && !result.Contains(trimmed, StringComparer.OrdinalIgnoreCase))
+                result.Add(trimmed);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    ///     Writes the <c>Info.json</c> for the folder holding <paramref name="relativeLocation" />, from
+    ///     the entries already in memory — they are the authority, the file is their projection.
+    /// </summary>
+    private async Task SaveFolderAsync(string relativeLocation)
+    {
+        var folder = FolderOf(relativeLocation);
+        var entries = Songs.Where(song => song.RelativeLocation is { } location && FolderOf(location) == folder)
+            .ToList();
+
+        var directory = Path.Combine(StorageDirectory, folder);
+        var target = Path.Combine(directory, "Info.json");
+
+        // Temp then move, like DomStore: the loader's answer to a torn Info.json is to rebuild the folder
+        // from its files, which would silently throw away exactly the hand edits this endpoint exists for.
+        var temporary = target + ".tmp";
+        await File.WriteAllBytesAsync(temporary,
+            JsonSerializer.SerializeToUtf8Bytes(entries, MusicInfo.SerializerOptions));
+        File.Move(temporary, target, true);
+
+        Logger.Debug("Wrote {Count} entries to {File}", entries.Count, target);
+    }
+
+    /// <summary>The folder part of a relative location, in the '/' form the rest of this file uses.</summary>
+    private static string FolderOf(string relativeLocation)
+    {
+        var normalized = relativeLocation.Replace('\\', '/');
+        var slash = normalized.LastIndexOf('/');
+        return slash < 0 ? string.Empty : normalized[..slash];
     }
 
     [GeneratedRegex(@"\(.*?\)")]

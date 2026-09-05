@@ -14,6 +14,13 @@ public class CacheEntry
 {
     public required StreamSpreader Body { get; init; }
 
+    /// <summary>
+    ///     What this entry is, in a form a human can read. The key is a SHA-256 of the id and nothing can
+    ///     turn it back, so an operator staring at <c>/Admin/snapshot</c> would otherwise see 64 hex
+    ///     characters and no way to tell which track they are about to evict.
+    /// </summary>
+    public string? Label { get; set; }
+
     public string ContentType { get; set; } = "application/octet-stream";
     public string? ContentDisposition { get; set; }
     public string? ETag { get; set; }

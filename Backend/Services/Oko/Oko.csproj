@@ -13,10 +13,7 @@
     <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1"/>
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- StreamSpreader only. Dunav never sees a Platform. -->
-    <ProjectReference Include="..\..\Gaida Library\Gaida.Core\Gaida.Core.csproj"/>
-    <ProjectReference Include="..\..\Gaida Library\Gaida.Admin\Gaida.Admin.csproj"/>
-  </ItemGroup>
+  <!-- No project reference to any service. Oko speaks to them over HTTP like any other client, and
+       knowing their types would make it a build-time dependency of the whole stack. -->
 
 </Project>
