@@ -1,9 +1,10 @@
 <script lang="ts">
+	import { browser } from '$app/environment';
 	import audio from '$states/audio.svelte';
 	import { Icon, SpeakerWave, SpeakerXMark } from 'svelte-hero-icons';
 	import { SliderInteractions } from '$lib/sliderInteractions.svelte.js';
 
-	const slider = new SliderInteractions(5, 50);
+	const slider = new SliderInteractions(5, browser && window.innerWidth < 640 ? 100 : 50);
 	let icon = $derived((slider.percentage > 0) ? SpeakerWave : SpeakerXMark);
 
 	$effect(() => {
