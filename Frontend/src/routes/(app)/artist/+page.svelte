@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import type { PageData } from './$types';
 	import type { SearchResult } from '$states/search.svelte';
 	import SearchRow from '$components/search/SearchRow.svelte';
@@ -31,22 +30,55 @@
 		return loading ? '…' : String(results.length);
 	}
 
-	async function fill(results: SearchResult[], stream: AsyncIterable<SearchResult>) {
-		for await (const result of stream) results.push(result);
+	// Takes a push rather than the list itself, so the effect below never reads the state it just
+	// reset — a synchronous read of that would make the effect its own dependency.
+	async function fill(
+		stream: AsyncIterable<SearchResult>,
+		alive: () => boolean,
+		push: (result: SearchResult) => void
+	) {
+		for await (const result of stream) {
+			if (!alive()) return;
+			push(result);
+		}
 	}
 
-	onMount(() => {
-		if (!data.localResults || !data.youtubeResults) return;
+	// An effect rather than onMount: opening another artist is a navigation to this same route, so
+	// this component is reused and only `data` changes. onMount would fire once and leave the
+	// previous artist's rows on screen under the new artist's name.
+	$effect(() => {
+		const local = data.localResults;
+		const youtube = data.youtubeResults;
 
-		fill(localResults, data.localResults)
+		// Back to what a fresh load of this page would show — including the tab, since the artist
+		// whose empty library tab was worth stepping around is no longer the one on screen.
+		localResults = [];
+		youtubeResults = [];
+		activeTab = 'library';
+		chosen = false;
+		localLoading = Boolean(local);
+		youtubeLoading = Boolean(youtube);
+		if (!local || !youtube) return;
+
+		// An artist abandoned mid-stream keeps arriving; `live` is what stops those results being
+		// pushed into the lists the next artist is filling.
+		let live = true;
+		const alive = () => live;
+
+		fill(local, alive, (result) => localResults.push(result))
 			.catch(() => {})
 			.finally(() => {
+				if (!live) return;
 				localLoading = false;
 				if (!chosen && localResults.length === 0) activeTab = 'youtube';
 			});
-		fill(youtubeResults, data.youtubeResults)
+		fill(youtube, alive, (result) => youtubeResults.push(result))
 			.catch(() => {})
-			.finally(() => (youtubeLoading = false));
+			.finally(() => {
+				if (live) youtubeLoading = false;
+			});
+
+		return () => (live = false);
 	});
 </script>
 

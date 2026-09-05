@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { type PageData } from './$types';
 	import type { SearchResult } from '$states/search.svelte';
 	import SearchRow from '$components/search/SearchRow.svelte';
@@ -15,13 +14,30 @@
 	let libraryResults = $derived(results.filter((result) => result.id.startsWith('audio://')));
 	let youtubeResults = $derived(results.filter((result) => !result.id.startsWith('audio://')));
 
-	onMount(async () => {
-		if (!data.results) return (searching = false);
-		try {
-			for await (const result of data.results) results.push(result);
-		} finally {
-			searching = false;
-		}
+	// An effect rather than onMount: searching again from the header is a navigation to this same
+	// route, so this component is reused and only `data` changes. onMount would fire once and leave
+	// the previous term's rows on screen under the new term's heading.
+	$effect(() => {
+		const stream = data.results;
+		results = [];
+		searching = Boolean(stream);
+		if (!stream) return;
+
+		// A term abandoned mid-stream keeps arriving; `live` is what stops its results being pushed
+		// into the list the next term is filling.
+		let live = true;
+		(async () => {
+			try {
+				for await (const result of stream) {
+					if (!live) return;
+					results.push(result);
+				}
+			} finally {
+				if (live) searching = false;
+			}
+		})();
+
+		return () => (live = false);
 	});
 </script>
 
