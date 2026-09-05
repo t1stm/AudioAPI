@@ -9,7 +9,6 @@ using Gaida.Bot;
 using Gaida.Bot.Players;
 using Gaida.Core;
 using Gaida.Platforms.MusicDatabase;
-using Gaida.Platforms.Spotify;
 using Gaida.Platforms.YouTube;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
@@ -44,7 +43,6 @@ serviceCollection.AddSingleton(serviceProvider =>
 
     manager.RegisterPlatform(new MusicDatabase(serviceLogger));
     manager.RegisterPlatform(new YouTube(serviceLogger));
-    manager.RegisterPlatform(new Spotify(serviceLogger));
 
     return manager;
 });

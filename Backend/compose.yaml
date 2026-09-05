@@ -73,8 +73,13 @@ services:
       - ${YOUTUBE_AUDIO_CACHE_PATH:-./data/youtube-audio}:/webm
     # Image needs yt-dlp on PATH for GetterYtDlp.
 
+  # The one pod that is not .NET: Python over SpotAPI, which reaches Spotify's own web endpoints and so
+  # needs no client ID, no secret and no premium account — there is nothing to put in .env for it.
   # Metadata only: Spotify hands over track names, and Gaida.API resolves each one against the library or
-  # YouTube (Platforms__2__Resolve below). Without credentials the pod still runs and simply finds nothing.
+  # YouTube (Platforms__2__Resolve below).
+  #
+  # SpotAPI is unofficial, so this is the pod most likely to start finding nothing after a change at
+  # Spotify's end, and the one whose egress IP matters — every request leaves from this host.
   gaida-spotify:
     <<: *service
     build:
@@ -82,8 +87,9 @@ services:
       dockerfile: Platforms/Gaida.Pods.Spotify/Dockerfile
     environment:
       <<: *env
-      SPOTIFY_ID: ${SPOTIFY_ID:-}
-      SPOTIFY_SECRET: ${SPOTIFY_SECRET:-}
+      # How many search hits to hand back. Each one costs Gaida.API a lookup against the library or
+      # YouTube, so it is a budget rather than a page size.
+      SPOTIFY_SEARCH_LIMIT: ${SPOTIFY_SEARCH_LIMIT:-15}
 
   # ── Proxy + encoder ────────────────────────────────────────────────────────────
   # The only stateless service, and so the only one worth scaling:

@@ -5,3 +5,6 @@ obj/
 .env.json
 *.user
 Services/Gaida.API/cache/
+
+# The Spotify pod and scripts/ are Python; running either leaves these behind.
+__pycache__/

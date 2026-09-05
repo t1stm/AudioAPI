@@ -225,6 +225,13 @@ it.
 
 ## Phase 5 — Spotify, the case this is for
 
+> **Since shipped.** The pod was rebuilt in Python on [SpotAPI](https://github.com/Aran404/SpotAPI),
+> which reaches Spotify's own web endpoints: `SPOTIFY_ID` / `SPOTIFY_SECRET` are gone, and so is
+> `Gaida.Platforms.Spotify` — the C# platform library and its `SpotifyAPI.Web` dependency were deleted
+> along with the Bot's in-process registration of it. `/search` is now implemented rather than `404`,
+> which is why `SelectParallel` no longer buffers a window for results that need no lookup and why
+> `/Audio/Search` deduplicates by ID. Everything below is the design as first shipped.
+
 Spotify is half-built: `Gaida.Platforms.Spotify` implements `ISupportsID` only, is not wired into any
 pod, and its `SpotifyResult.GetDownloadUrl()` returns `""`. That last one is the whole design
 constraint — **Spotify results are never playable**. They are names. The playable track has to come

@@ -1,24 +1,16 @@
-# Build context is the repo root (see compose.yaml) -- project-references the Spotify platform library
-# (Platforms/Gaida.Platforms.Spotify) and, transitively, Gaida.Core.
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
-WORKDIR /src
+# Build context is the repo root (see compose.yaml), matching the other pods' Dockerfiles.
+# ponytail: no build stage. There is nothing to compile -- the image is the interpreter, the
+# dependencies, and four modules.
+FROM python:3.12-slim
 
-COPY ["Platforms/Gaida.Pods.Spotify/Gaida.Pods.Spotify.csproj", "Platforms/Gaida.Pods.Spotify/"]
-COPY ["Platforms/Gaida.Platforms.Spotify/Gaida.Platforms.Spotify.csproj", "Platforms/Gaida.Platforms.Spotify/"]
-COPY ["Gaida Library/Gaida.Core/Gaida.Core.csproj", "Gaida Library/Gaida.Core/"]
-COPY ["Gaida Library/Gaida.Admin/Gaida.Admin.csproj", "Gaida Library/Gaida.Admin/"]
-RUN dotnet restore "Platforms/Gaida.Pods.Spotify/Gaida.Pods.Spotify.csproj"
-
-COPY ["Platforms/Gaida.Pods.Spotify/", "Platforms/Gaida.Pods.Spotify/"]
-COPY ["Platforms/Gaida.Platforms.Spotify/", "Platforms/Gaida.Platforms.Spotify/"]
-COPY ["Gaida Library/Gaida.Core/", "Gaida Library/Gaida.Core/"]
-COPY ["Gaida Library/Gaida.Admin/", "Gaida Library/Gaida.Admin/"]
-RUN dotnet publish "Platforms/Gaida.Pods.Spotify/Gaida.Pods.Spotify.csproj" -c Release -o /app
-
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
-COPY --from=build /app .
 
-ENV ASPNETCORE_URLS=http://+:8080
+COPY ["Platforms/Gaida.Pods.Spotify/requirements.txt", "./"]
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY ["Platforms/Gaida.Pods.Spotify/", "./"]
+
+# Unbuffered, or the log lines sit in a pipe buffer and `docker compose logs` shows nothing.
+ENV PYTHONUNBUFFERED=1
 EXPOSE 8080
-ENTRYPOINT ["dotnet", "Gaida.Pods.Spotify.dll"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]

@@ -23,10 +23,8 @@
   </Folder>
   <Folder Name="/Platforms/">
     <Project Path="Platforms/Gaida.Pods.MusicDatabase/Gaida.Pods.MusicDatabase.csproj" />
-    <Project Path="Platforms/Gaida.Pods.Spotify/Gaida.Pods.Spotify.csproj" />
     <Project Path="Platforms/Gaida.Pods.YouTube/Gaida.Pods.YouTube.csproj" />
     <Project Path="Platforms/Gaida.Platforms.MusicDatabase/Gaida.Platforms.MusicDatabase.csproj" />
-    <Project Path="Platforms/Gaida.Platforms.Spotify/Gaida.Platforms.Spotify.csproj" />
     <Project Path="Platforms/Gaida.Platforms.YouTube/Gaida.Platforms.YouTube.csproj" />
   </Folder>
   <Folder Name="/Services/">
