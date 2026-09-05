@@ -240,10 +240,6 @@ return;
 // ── Admin helpers ──────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
-///     The library extension for what the Deezer pod says it is sending, or <c>null</c> for anything this
-///     library does not index. Deezer only ever serves these two — see Gaida.Pods.Deezer/stream.py.
-/// </summary>
-/// <summary>
 ///     The cover image a pod's <c>thumbnailUrl</c> points at, or <c>null</c> for anything that does not
 ///     fetch. Never throws: artwork is the one part of an import worth losing rather than failing over.
 /// </summary>
@@ -263,6 +259,10 @@ static async Task<byte[]?> CoverBytesAsync(HttpClient http, string? url, Cancell
     }
 }
 
+/// <summary>
+///     The library extension for what the Deezer pod says it is sending, or <c>null</c> for anything this
+///     library does not index. Deezer only ever serves these two — see Gaida.Pods.Deezer/stream.py.
+/// </summary>
 static string? ExtensionFor(string? contentType) => contentType switch
 {
     "audio/flac" => ".flac",
