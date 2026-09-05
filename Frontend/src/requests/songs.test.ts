@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { dropPrefetch, findQueryType, isPlaylist, prefetchSong, takePrefetched } from './songs';
+import { dropPrefetch, findQueryType, isPlaylist, prefetchSong, streamResults, takePrefetched } from './songs';
 import quality from '$states/quality.svelte';
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -77,22 +77,16 @@ describe('prefetchSong', () => {
 
 describe('findQueryType', () => {
 	/** A Spotify playlist resolves to a playlist, not to a single track. Reading it as one put an
-	 *  `undefined` into the queue, because the resolution carries `results` and no `result`. */
+	 *  `undefined` into the queue. The resolution now carries no entries at all — `query` is what
+	 *  the caller streams from — so the kind is the only thing that says which branch to take. */
 	it('reads both playlist kinds as playlists', async () => {
 		for (const kind of ['youtubePlaylist', 'spotifyPlaylist'] as const) {
-			vi.stubGlobal(
-				'fetch',
-				vi.fn(() =>
-					Promise.resolve(
-						Response.json({ kind, query: 'q', playlistId: 'p', results: [{ id: 'yt://a' }] })
-					)
-				)
-			);
+			vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(Response.json({ kind, query: 'q', playlistId: 'p' }))));
 
 			const resolution = await findQueryType('anything');
 
 			expect(isPlaylist(resolution)).toBe(true);
-			expect(isPlaylist(resolution) && resolution.results).toHaveLength(1);
+			expect(isPlaylist(resolution) && resolution.playlistId).toBe('p');
 		}
 	});
 
@@ -105,5 +99,31 @@ describe('findQueryType', () => {
 		const resolution = await findQueryType('anything');
 
 		expect(isPlaylist(resolution)).toBe(false);
+	});
+});
+
+describe('streamResults', () => {
+	/** Cancelling the paste box aborts the stream mid-flight; the abort has to reach the caller as
+	 *  a throw, or a cancelled playlist would look exactly like one that ended. */
+	it('surfaces an abort rather than ending quietly', async () => {
+		const controller = new AbortController();
+		vi.stubGlobal('fetch', (_url: string, init?: RequestInit) =>
+			Promise.resolve(
+				new Response(
+					new ReadableStream({
+						start(stream) {
+							stream.enqueue(new TextEncoder().encode('[{"id":"yt://a"}'));
+							init?.signal?.addEventListener('abort', () => stream.error(new DOMException('Aborted', 'AbortError')));
+						}
+					})
+				)
+			)
+		);
+
+		const stream = streamResults((url, init) => fetch(url, { ...init, signal: controller.signal }), '/Search?query=q');
+		expect((await stream.next()).value).toMatchObject({ id: 'yt://a' });
+
+		controller.abort();
+		await expect(stream.next()).rejects.toThrow('Aborted');
 	});
 });

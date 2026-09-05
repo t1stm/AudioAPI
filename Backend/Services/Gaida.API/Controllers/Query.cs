@@ -33,7 +33,7 @@ public class Query(ILogger<Query> logger, IConfiguration configuration, IHostEnv
             return claim.Kind switch
             {
                 QueryType.ID => await ResolveOne(claim.Query, managerService, resolver),
-                QueryType.Playlist => await ResolvePlaylist(claim.Query, managerService, resolver),
+                QueryType.Playlist => Ok(PlaylistResolution(claim.Query)),
                 _ => Ok(new QueryResolutionDto { Kind = "search", Query = trimmed })
             };
         }
@@ -104,34 +104,22 @@ public class Query(ILogger<Query> logger, IConfiguration configuration, IHostEnv
     }
 
     /// <summary>
-    ///     The one discovery response still assembled whole: <c>results</c> lives inside an envelope, and a
-    ///     half-written envelope is not something a streaming client can read. Callers that want the entries as
-    ///     they arrive should send the canonical <c>query</c> back to <c>/Audio/Search</c>, which routes a
-    ///     playlist claim to the same lookup and streams it — see API.md.
+    ///     A playlist claim resolves to its identity only — <c>kind</c>, the canonical <c>query</c> and
+    ///     <c>playlistId</c> — all of which classify already produced. The entries are not looked up here:
+    ///     they live inside an envelope, and a half-written envelope is not something a streaming client can
+    ///     read. Send the canonical <c>query</c> to <c>/Audio/Search</c>, which routes a playlist claim to the
+    ///     same lookup and streams the entries as they resolve — see API.md.
     /// </summary>
-    private async Task<ActionResult<QueryResolutionDto>> ResolvePlaylist(string playlistUrl,
-        ManagerService managerService, PlayableResolver resolver)
+    private static QueryResolutionDto PlaylistResolution(string playlistUrl)
     {
-        var entries = managerService.Manager.SearchPlaylist(playlistUrl, HttpContext.RequestAborted);
-        if (managerService.NeedsResolving(playlistUrl))
-            entries = resolver.Resolve(entries, HttpContext.RequestAborted);
-
-        var results = new List<SearchResultDto>();
-        await foreach (var result in entries)
-        {
-            var mapped = DiscoveryResultMapper.Map(result, Request, configuration, environment);
-            if (mapped is not null) results.Add(mapped);
-        }
-
         var spotify = playlistUrl.StartsWith("spotify-playlist://", StringComparison.OrdinalIgnoreCase);
 
-        return Ok(new QueryResolutionDto
+        return new QueryResolutionDto
         {
             Kind = spotify ? "spotifyPlaylist" : "youtubePlaylist",
             Query = playlistUrl,
-            PlaylistId = spotify ? playlistUrl["spotify-playlist://".Length..] : ExtractPlaylistId(playlistUrl),
-            Results = results
-        });
+            PlaylistId = spotify ? playlistUrl["spotify-playlist://".Length..] : ExtractPlaylistId(playlistUrl)
+        };
     }
 
     private SearchResultDto? ToSearchResult(PodResultDto dto)
@@ -169,11 +157,15 @@ public class Query(ILogger<Query> logger, IConfiguration configuration, IHostEnv
 
     /// <summary>
     ///     Pulls a YouTube-style <c>list=</c> parameter off a normalized playlist URL, for the
-    ///     <c>playlistId</c> field the public contract documents. Best-effort: null when the pod's normalized
-    ///     form does not carry one.
+    ///     <c>playlistId</c> field the public contract documents. The pod normalizes to
+    ///     <c>yt-playlist://PL…</c>, which carries no <c>list=</c> — there the id is the whole tail, and
+    ///     without this the documented field came back missing on every YouTube playlist.
     /// </summary>
     private static string? ExtractPlaylistId(string url)
     {
+        const string scheme = "yt-playlist://";
+        if (url.StartsWith(scheme, StringComparison.OrdinalIgnoreCase)) return url[scheme.Length..];
+
         var index = url.IndexOf("list=", StringComparison.Ordinal);
         if (index < 0) return null;
 

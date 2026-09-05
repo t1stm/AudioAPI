@@ -55,7 +55,7 @@ Three ordering decisions fall out of it, and they are the only real design work 
 
 - `RandomResults` shuffles the finished list. A stream cannot be shuffled at the end.
 - `Artist.MapAndOrder` sorts by artist, then name, then id — documented in `API.md`.
-- `FindQueryType` wraps playlist entries in an envelope (`kind`, `playlistId`, `results`).
+- `FindQueryType` wrapped playlist entries in an envelope (`kind`, `playlistId`, `results`).
 
 Each is handled in its phase below.
 
@@ -215,13 +215,13 @@ The playlist branch (`Query.ResolvePlaylist`) drains the whole playlist into an 
 is the problem: `kind` and `playlistId` are known immediately, `results` is the slow part, and a
 half-written envelope is not something the client parser in `HOME_LOADING_PLAN.md` reads.
 
-**Changed:** the plan was to drop `results` from the envelope and let clients stream the entries from
-`/Audio/Search?query={canonical playlist url}` instead. `results` was kept. The frontend reads it
-today (`src/requests/songs.ts:92`), so dropping it would break the paste-a-link flow the moment this
-deployed, for a call that runs once per paste rather than on every page load. The streaming route
-exists and is documented in `API.md` as the one to prefer for long playlists — `Search` already
-routes a playlist claim to `SearchPlaylist` — so the field can go once the frontend has moved off
-it.
+**Done, one release late.** The plan was to drop `results` from the envelope and let clients stream
+the entries from `/Audio/Search?query={canonical playlist url}` instead. It was kept at first, because
+the frontend read it and dropping it would have broken the paste-a-link flow the moment this deployed.
+The frontend has since moved off it — the paste box streams the tracks into the queue one at a time
+and can be cancelled mid-playlist (`Frontend/PASTE_STREAM_PLAN.md`) — so `results` is gone, and
+`Query.ResolvePlaylist` with it: a playlist claim now answers with `kind`, `query` and `playlistId`,
+all of which classify already produced, and never enumerates the playlist.
 
 ## Phase 5 — Spotify, the case this is for
 

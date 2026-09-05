@@ -47,9 +47,9 @@ Two consequences for clients that do read it incrementally:
 | --- | --- | --- |
 | `audio://...` | `local` | `query` is the canonical local ID; `result` is one discovery result |
 | YouTube video URL, `yt://...`, or 11-character video ID | `youtubeVideo` | `query` is canonical `yt://...`; `result` is one discovery result |
-| YouTube playlist URL, `yt-playlist://...`, or recognised playlist ID | `youtubePlaylist` | `query` is a canonical playlist URL; `playlistId`; `results` discovery-result array |
+| YouTube playlist URL, `yt-playlist://...`, or recognised playlist ID | `youtubePlaylist` | `query` is a canonical playlist URL; `playlistId`. No entries — send `query` to `Search` |
 | Spotify track URL, `spotify:track:...`, or `spotify://...` | `local` or `youtubeVideo` | Spotify has no audio, so the track is looked up in the library, then on YouTube; `kind` and `result` describe whatever was found. `404 not_found` when nothing was |
-| Spotify playlist URL, `spotify:playlist:...`, or `spotify-playlist://...` | `spotifyPlaylist` | `query` is the canonical `spotify-playlist://...`; `playlistId`; `results` are the resolved, playable tracks, in the playlist's own order. Tracks nothing was found for are left out |
+| Spotify playlist URL, `spotify:playlist:...`, or `spotify-playlist://...` | `spotifyPlaylist` | `query` is the canonical `spotify-playlist://...`; `playlistId`. No entries — send `query` to `Search` |
 | Ordinary text | `search` | `query` is the trimmed text; call `Search` with it |
 
 Examples:
@@ -59,12 +59,12 @@ Examples:
 ```
 
 ```json
-{"kind":"youtubePlaylist","query":"https://www.youtube.com/playlist?list=PL...","playlistId":"PL...","results":[]}
+{"kind":"youtubePlaylist","query":"https://www.youtube.com/playlist?list=PL...","playlistId":"PL..."}
 ```
 
-`results` is assembled whole here — it lives inside an envelope, so there is nothing to stream into. For a long playlist, send the canonical `query` back to `Search`, which routes it to the same lookup and streams the entries as they resolve.
+A playlist resolution carries no entries. This endpoint answers what a pasted value *is*, and the answer for a playlist — `kind`, the canonical `query`, `playlistId` — is everything classify already knows, so it comes back in one fan-out. To get the tracks, send the canonical `query` back to `Search`, which routes a playlist claim to the same lookup and streams the entries as they resolve.
 
-A Spotify playlist costs one lookup per track (the library first, then YouTube), a few at a time, so it is the slowest resolution this endpoint does and the one that most repays going through `Search` instead.
+That is the only route to a playlist's tracks: `results` used to be assembled whole here and has been removed. It lived inside an envelope, so there was nothing to stream into, and a Spotify playlist costs one lookup per track (the library first, then YouTube) — the slowest thing the API does, behind a response that could not begin until the last one landed.
 
 Malformed `audio://`, `yt://`, `yt-playlist://`, or unsupported URLs return a JSON error such as:
 

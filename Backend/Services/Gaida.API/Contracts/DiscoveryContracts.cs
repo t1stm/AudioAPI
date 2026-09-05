@@ -52,9 +52,6 @@ public sealed record QueryResolutionDto
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public SearchResultDto? Result { get; init; }
-
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<SearchResultDto>? Results { get; init; }
 }
 
 /// <summary>The mapper's streaming twin: maps results as they arrive, without collecting them.</summary>

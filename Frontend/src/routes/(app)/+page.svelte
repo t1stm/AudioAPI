@@ -17,6 +17,7 @@
 		streamArtistLocal,
 		streamRandomSongs
 	} from '$requests/songs';
+	import { streamSearch } from '$requests/search';
 	import type { LocalVariant } from '$requests/songs';
 	import { convertTimeSpanStringToSeconds, getTimeString, heroArtist } from '$lib';
 	import { closeOnBack, pushPageState } from '$lib/backWatcher.svelte';
@@ -54,6 +55,11 @@
 	let resolving = $state(false);
 	let pasteMessage = $state('');
 	let pasteError = $state('');
+	// The tape: every track this paste has put in the queue, in the order it landed. It stays after
+	// the stream ends — it is the receipt for what was added, and cancelling keeps what it printed.
+	let pasteTracks = $state<SearchResult[]>([]);
+	let pasteAbort: AbortController | null = null;
+	let tape = $state<HTMLDivElement | null>(null);
 	// Counts come from the one 200-track sample the page already loads, so the
 	// heaviest names in the library surface first without a second request.
 	// ponytail: the sample is the heaviest request on the page and exists only for
@@ -312,32 +318,59 @@
 		resolving = true;
 		pasteError = '';
 		pasteMessage = '';
+		pasteTracks = [];
+
+		// Threaded through the fetcher both request helpers already take, so Cancel closes the
+		// response and the API stops looking the rest of the playlist up — see PASTE_STREAM_PLAN.md.
+		const controller = new AbortController();
+		pasteAbort = controller;
+		const signalled: typeof fetch = (input, init) => fetch(input, { ...init, signal: controller.signal });
+
 		try {
-			const resolved = await findQueryType(value);
+			const resolved = await findQueryType(value, signalled);
 			if (resolved.kind === 'search') {
 				const searchUrl = `${resolve('/search')}?term=${encodeURIComponent(resolved.query)}`;
 				await goto(searchUrl);
 				return;
 			}
-			if (isPlaylist(resolved)) {
-				if (resolved.results.length === 0) {
-					pasteMessage = 'That playlist did not contain any playable tracks.';
-					return;
-				}
-				queue.playNow(resolved.results[0]);
-				for (const track of resolved.results.slice(1)) queue.add(track);
-				pasteMessage = `Playing the first of ${resolved.results.length} playlist tracks.`;
-			} else {
-				queue.playNow(resolved.result);
+			if (!isPlaylist(resolved)) {
+				play(resolved.result);
 				pasteMessage = `Playing ${resolved.result.name}.`;
+			} else {
+				// A playlist resolution carries no tracks: the canonical query goes back to Search,
+				// which runs the same lookup and yields each track as it resolves. One at a time is
+				// the point — a Spotify playlist is a library-then-YouTube lookup per track.
+				for await (const track of streamSearch(resolved.query, signalled)) play(track);
+				pasteMessage =
+					pasteTracks.length === 0
+						? 'That playlist did not contain any playable tracks.'
+						: `Added ${pasteTracks.length} tracks.`;
 			}
 			pastedQuery = '';
 		} catch (error) {
-			pasteError = error instanceof AudioApiError ? error.message : 'Could not resolve that link. Please try again.';
+			// Cancelling is not a failure. What already landed stays in the queue — pulling a track
+			// out from under the one now playing is the worse surprise.
+			if (controller.signal.aborted) pasteMessage = `Stopped. ${pasteTracks.length} tracks added.`;
+			else pasteError = error instanceof AudioApiError ? error.message : 'Could not resolve that link. Please try again.';
 		} finally {
 			resolving = false;
+			pasteAbort = null;
 		}
 	}
+
+	/** The first track of a paste starts playing; the rest queue behind it. Both land on the tape. */
+	function play(song: SearchResult) {
+		if (pasteTracks.length === 0) queue.playNow(song);
+		else queue.add(song);
+		pasteTracks.push(song);
+	}
+
+	// The newest row is the one worth seeing, and the tape is shorter than a playlist. An effect, not
+	// a line in `play`: the row has to exist before it can be scrolled to.
+	$effect(() => {
+		if (pasteTracks.length) tape?.scrollTo({ top: tape.scrollHeight });
+	});
+
 </script>
 
 <svelte:head><title>musicrain</title></svelte:head>
@@ -523,7 +556,13 @@
 
 	<section class="rounded-panel border border-haze bg-surface-0/50 p-4 sm:p-5">
 		<h2 class="eyebrow mb-3 flex items-center gap-2">
-			<Icon src={Link} mini size="14" class="text-gold" /> Paste a link or ID
+			<Icon src={Link} mini size="14" class="text-gold" />
+			{#if resolving || pasteTracks.length > 0}
+				Adding to the queue
+				<span class="font-mono text-primary-400" aria-live="polite">{pasteTracks.length}</span>
+			{:else}
+				Paste a link or ID
+			{/if}
 		</h2>
 		<form
 			class="flex flex-col gap-2 sm:flex-row"
@@ -538,12 +577,48 @@
 				placeholder="YouTube link, playlist, or audio:// ID"
 				aria-label="Paste a link or audio ID"
 			/>
-			<button
-				type="submit"
-				class="min-h-11 rounded-row bg-primary-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-				disabled={resolving}>{resolving ? 'Resolving…' : 'Play'}</button
-			>
+			<!-- One action slot, one action: the label always names what pressing it does. Stopping is
+			     the interrupting side of the fork, so it takes ember and a hairline, never the fill. -->
+			{#if resolving}
+				<button
+					type="button"
+					class="min-h-11 rounded-row border border-ember px-4 py-2 text-sm font-semibold text-ember"
+					onclick={() => pasteAbort?.abort()}>Cancel</button
+				>
+			{:else}
+				<button type="submit" class="min-h-11 rounded-row bg-primary-600 px-4 py-2 text-sm font-semibold text-white"
+					>Play</button
+				>
+			{/if}
 		</form>
+		{#if pasteTracks.length > 0}
+			<!-- The tape. A playlist is an ordered sequence, so the number is information: it is the
+			     position the track just took in the queue. The gutter rains while the stream is open —
+			     the app's own "this is still filling" element, from the seek bar's buffer gauge. -->
+			<div class="relative mt-3 pl-4">
+				<span class="absolute inset-y-0 left-0 w-px overflow-hidden bg-haze">
+					{#if resolving}<span class="rain-streak"></span>{/if}
+				</span>
+				<div bind:this={tape} class="max-h-56 overflow-y-auto pr-1">
+					{#each pasteTracks as track, index (track.id + index)}
+						<div class="tape-row flex min-w-0 items-baseline gap-2.5 py-1 text-sm">
+							<span class="font-mono text-[0.68rem] text-surface-400">{String(index + 1).padStart(2, '0')}</span>
+							<span class="min-w-0 flex-1 truncate">
+								<span class="text-chalk">{track.name}</span>
+								<span class="text-fog"> — {track.artist}</span>
+							</span>
+							{#if index === 0}
+								<span class="eyebrow shrink-0 text-gold">now</span>
+							{:else}
+								<span class="shrink-0 font-mono text-[0.68rem] text-surface-400"
+									>{getTimeString(convertTimeSpanStringToSeconds(track.duration))}</span
+								>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			</div>
+		{/if}
 		{#if pasteError}<p class="mt-2 text-sm text-gold">{pasteError}</p>{/if}
 		{#if pasteMessage}<p class="mt-2 text-sm text-fog">{pasteMessage}</p>{/if}
 	</section>
@@ -625,9 +700,12 @@
 <style>
 	/* The row's own hover timing. ponytail: opacity only — the prompt replaces a
 	   button row of near-identical height, so an animated height buys nothing. The
-	   water/ripple idea belongs to landing in the queue and is not spent twice. */
+	   water/ripple idea belongs to landing in the queue and is not spent twice.
+	   A tape row lands on the same reveal: one entrance for the whole page, and the
+	   stagger between rows is the network's, which is the only honest one. */
 	.prompt,
-	.tag {
+	.tag,
+	.tape-row {
 		animation: reveal 150ms ease-out;
 	}
 
@@ -640,7 +718,8 @@
 
 	@media (prefers-reduced-motion: reduce) {
 		.prompt,
-		.tag {
+		.tag,
+		.tape-row {
 			animation: none;
 		}
 	}
