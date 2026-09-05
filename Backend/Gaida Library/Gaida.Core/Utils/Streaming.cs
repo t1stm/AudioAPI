@@ -58,6 +58,13 @@ public static class Streaming
     ///     in flight, yielding in source order. For turning a list of names into playable results: the searches
     ///     overlap, but a playlist still arrives in the order it was written. Nulls (nothing found) are dropped.
     /// </summary>
+    /// <remarks>
+    ///     A selector that answers without going anywhere — the resolver handing back a result that is already
+    ///     playable — completes synchronously, and the window stops filling the moment one does. That is what
+    ///     lets an ordinary keyword search go through the resolver at all: its first hit leaves immediately
+    ///     instead of waiting for <paramref name="concurrency" /> results to be pulled behind it, while a
+    ///     playlist of names still resolves as many at a time as it is allowed.
+    /// </remarks>
     public static async IAsyncEnumerable<TOut> SelectParallel<TIn, TOut>(this IAsyncEnumerable<TIn> source,
         int concurrency, Func<TIn, CancellationToken, Task<TOut?>> selector,
         [EnumeratorCancellation] CancellationToken cancellationToken = default) where TOut : class
@@ -65,18 +72,20 @@ public static class Streaming
         var pending = new Queue<Task<TOut?>>(concurrency);
         await using var enumerator = source.GetAsyncEnumerator(cancellationToken);
 
-        while (pending.Count < concurrency && await enumerator.MoveNextAsync())
-            pending.Enqueue(selector(enumerator.Current, cancellationToken));
-
-        while (pending.Count > 0)
+        while (true)
         {
+            // Never past `concurrency`, so the window stays a window rather than racing ahead of what the
+            // caller is consuming.
+            while (pending.Count < concurrency && await enumerator.MoveNextAsync())
+            {
+                var lookup = selector(enumerator.Current, cancellationToken);
+                pending.Enqueue(lookup);
+                if (lookup.IsCompleted) break;
+            }
+
+            if (pending.Count == 0) yield break;
+
             var result = await pending.Dequeue();
-
-            // Topped up only after the head completes, so the window stays at `concurrency` rather than
-            // racing ahead of what the caller is consuming.
-            if (await enumerator.MoveNextAsync())
-                pending.Enqueue(selector(enumerator.Current, cancellationToken));
-
             if (result is not null) yield return result;
         }
     }

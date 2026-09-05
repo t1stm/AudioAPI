@@ -75,9 +75,14 @@ public class Content(ILogger<Content> logger, IConfiguration configuration, IHos
             ? manager.SearchPlaylist(claim.Query, cancellationToken)
             : manager.SearchKeywords(claim.Query, cancellationToken);
 
-        // Only a metadata-only playlist pays for the resolver: its window would otherwise hold back the
-        // first result of an ordinary search until four had arrived.
-        if (managerService.NeedsResolving(claim.Query)) results = resolver.Resolve(results, cancellationToken);
+        // Every stream goes through the resolver, not just a metadata-only playlist: the Spotify pod answers
+        // keyword searches too, so a name can now arrive in the middle of an ordinary search rather than only
+        // from a playlist. Results that are already playable pass straight through without holding the stream
+        // up — see SelectParallel — so an ordinary search pays nothing for this.
+        results = resolver.Resolve(results, cancellationToken)
+            // A Spotify hit resolved against YouTube lands on the video YouTube itself just returned, one
+            // entry earlier in this same stream. Without this the client renders it twice.
+            .DistinctBy(result => result.ID);
 
         return Ok(this.Mapped(results, configuration, environment));
     }
