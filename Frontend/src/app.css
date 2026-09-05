@@ -228,10 +228,6 @@
 	margin: 0;
 	width: auto;
 	min-height: 0;
-	/* Tailwind v4 centres the bar with the `translate` property, not `transform` —
-	   leaving that set shifted this whole fixed layer half a screen to the left. */
-	translate: none;
-	transform: none;
 	border: 0;
 	border-radius: 0;
 	background: var(--color-dark-0);
@@ -451,11 +447,6 @@
 		border-radius: 0;
 		background: var(--color-dark-0);
 		backdrop-filter: none;
-		/* Tailwind v4 centres the bar with `translate`, not `transform`, so cancelling
-		   only the transform left this fixed layer half a screen to the left in any
-		   micro window wide enough for `sm:` — a popped-out window, a phone on its side. */
-		translate: none;
-		transform: none;
 		width: auto;
 		min-height: 0;
 	}

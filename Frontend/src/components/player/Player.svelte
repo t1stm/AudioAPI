@@ -61,7 +61,7 @@
 	id="player"
 	data-shape={full ? 'full' : 'bar'}
 	data-hold={holdState}
-	class="static z-10 mx-2 mb-2 flex w-auto shrink-0 flex-col items-center gap-2 rounded-panel border border-haze bg-surface-100/85 px-3 py-2 backdrop-blur-xl sm:absolute sm:bottom-4 sm:left-1/2 sm:mx-0 sm:mb-0 sm:min-h-[53px] sm:w-[min(100%-2rem,80rem)] sm:-translate-x-1/2 sm:flex-row sm:justify-between sm:gap-0 sm:px-4 sm:py-1"
+	class="static z-10 mx-2 mb-2 flex w-auto shrink-0 flex-col items-center gap-2 rounded-panel border border-haze bg-surface-100/85 px-3 py-2 backdrop-blur-xl sm:absolute sm:inset-x-0 sm:bottom-4 sm:mx-auto sm:mb-0 sm:min-h-[53px] sm:w-[min(100%-2rem,80rem)] sm:flex-row sm:justify-between sm:gap-0 sm:px-4 sm:py-1"
 >
 	<!-- micro only: the cover is the ground, and the top edge is the room -->
 	{#if cover}
