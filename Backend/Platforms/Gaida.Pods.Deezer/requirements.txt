@@ -1,0 +1,11 @@
+# deezer-py is Deezer's public REST API and its internal gateway in one client. Pinned because the
+# gateway half is unofficial -- an upgrade is a change to test, not to take. streamrip pins 1.3.6 too,
+# which matters: the download logic in stream.py is vendored from streamrip and calls into this.
+deezer-py==1.3.6
+
+# Blowfish for the audio stream and AES for the legacy CDN URL. pycryptodomex rather than pycryptodome
+# because the import is `Cryptodome.*` -- the same package and the same import path streamrip uses.
+pycryptodomex==3.23.0
+
+fastapi==0.141.1
+uvicorn==0.52.4

@@ -6,7 +6,7 @@ feed. A port of Gaida.Admin/AdminApi.cs, kept field-for-field so Oko cannot tell
 Everything here is pull: the pod answers when asked and pushes nothing. Nothing in this module knows the
 admin panel's address, or that it exists.
 
-Byte-for-byte the same file as Gaida.Pods.Deezer/admin.py. Two copies rather than a shared package:
+Byte-for-byte the same file as Gaida.Pods.Spotify/admin.py. Two copies rather than a shared package:
 Python has no project reference, so sharing it would mean a package installed into both images for the
 sake of one module. Change one, change the other.
 """

@@ -47,6 +47,11 @@ services:
       # the value becomes an absolute thumbnailUrl that Cover.cs fetches with HttpClient, and a
       # bare "example.com/" is not a URL it can resolve.
       DOMAIN: ${PUBLIC_DOMAIN:-http://localhost}
+      # Only the admin surface uses this: Oko's "To library" button on the Deezer cache posts to this
+      # pod's /Admin/import-deezer, which pulls the track's metadata and bytes from there and writes
+      # them into the library's Deezer/ folder. Unset, that one route answers 400 and nothing else
+      # changes — this is the library pod's only outbound call.
+      DEEZER_URL: http://gaida-deezer:8080
     volumes:
       # Read-write, not :ro — MusicManager.cs:77 opens Info.json OpenOrCreate/ReadWrite,
       # CoverExtractor.cs:25,50 rewrites it and writes extracted covers, and the tag
@@ -91,6 +96,34 @@ services:
       # YouTube, so it is a budget rather than a page size.
       SPOTIFY_SEARCH_LIMIT: ${SPOTIFY_SEARCH_LIMIT:-15}
 
+  # The other Python pod, and the only one that both finds tracks and owns their audio. Metadata comes
+  # from Deezer's public REST API and needs nothing; the audio needs DEEZER_ARL, an account cookie —
+  # see https://github.com/nathom/streamrip/wiki/Finding-Your-Deezer-ARL-Cookie, which is also where
+  # the download and decrypt logic in this pod comes from.
+  #
+  # Without an ARL the pod is metadata-only like the Spotify one, and DEEZER_RESOLVE below is what
+  # tells Gaida.API to treat it that way. With one, it downloads MP3 320 by default and FLAC only when
+  # the listener has picked the FLAC codec or an operator promotes a track in Oko.
+  gaida-deezer:
+    <<: *service
+    build:
+      context: .
+      dockerfile: Platforms/Gaida.Pods.Deezer/Dockerfile
+    environment:
+      <<: *env
+      DEEZER_ARL: ${DEEZER_ARL:-}
+      DEEZER_SEARCH_LIMIT: ${DEEZER_SEARCH_LIMIT:-15}
+      DEEZER_PLAYLIST_LIMIT: ${DEEZER_PLAYLIST_LIMIT:-1000}
+      DEEZER_CACHE: /cache
+      # A disk budget, like Dunav's, sized against free space on the volume below. 20 GiB is roughly
+      # 2000 tracks at MP3 320 or 500 at FLAC; the oldest go first when it is reached.
+      DEEZER_CACHE_MAX_BYTES: ${DEEZER_CACHE_MAX_BYTES:-21474836480}
+      DEEZER_ADMIN_ROWS: ${DEEZER_ADMIN_ROWS:-200}
+    volumes:
+      # A real cache: losing it costs re-downloads, nothing else. Tracks promoted into the music
+      # library live under MUSIC_LIBRARY_PATH instead and are not affected by anything here.
+      - ${DEEZER_CACHE_PATH:-./data/deezer-audio}:/cache
+
   # ── Proxy + encoder ────────────────────────────────────────────────────────────
   # The only stateless service, and so the only one worth scaling:
   #   docker compose up -d --scale gaida-api=4
@@ -111,6 +144,14 @@ services:
       Platforms__2__Ids: spotify://,spotify-playlist://
       # Its results are names, not playable IDs -- see Gaida.API/PlayableResolver.cs.
       Platforms__2__Resolve: "true"
+      Platforms__3__Url: http://gaida-deezer:8080
+      Platforms__3__Ids: deezer://,deezer-playlist://
+      # The one knob to turn after putting DEEZER_ARL in .env: set it to false, and Deezer results are
+      # played from Deezer instead of being looked up again on the library or YouTube. Left true, the
+      # pod is metadata-only and the stack behaves as it did before it existed — which is also what a
+      # fresh checkout with no ARL needs. Deliberately not derived from ${DEEZER_ARL:+…}: an empty
+      # value here makes ManagerService.cs's GetValue<bool> throw rather than fall back to the default.
+      Platforms__3__Resolve: ${DEEZER_RESOLVE:-true}
       Resolve__Concurrency: ${RESOLVE_CONCURRENCY:-4}
       PublicApiBaseUrl: ${PUBLIC_API_BASE_URL:-http://localhost:5340}
       THUMBNAIL_CACHE: /thumbnails
@@ -218,6 +259,8 @@ services:
       Targets__5__Url: http://gaida-youtube:8080
       Targets__6__Name: gaida-spotify
       Targets__6__Url: http://gaida-spotify:8080
+      Targets__7__Name: gaida-deezer
+      Targets__7__Url: http://gaida-deezer:8080
     ports:
       # The one port in this file NOT bound to 127.0.0.1: published on every interface so the host
       # firewall decides who reaches it, as asked. That makes the firewall the only thing between
