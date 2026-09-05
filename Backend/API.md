@@ -20,12 +20,13 @@ The example production base URL is `https://api.example.com`. All endpoints belo
 }
 ```
 
-`id`, `name`, `artist`, `contentUrl`, and `duration` are always non-null. Local-library IDs always begin with `audio://`; YouTube IDs use `yt://`. `album`, `thumbnailUrl`, `originalTitle` and `originalArtist` may be `null`. `contentUrl` is an absolute downloadable raw-audio URL.
+`id`, `name`, `artist`, `contentUrl`, and `duration` are always non-null. Local-library IDs always begin with `audio://`; YouTube IDs use `yt://`, and Deezer IDs `deezer://`. `album`, `thumbnailUrl`, `originalTitle` and `originalArtist` may be `null`. `contentUrl` is an absolute downloadable raw-audio URL.
 
 `originalTitle` and `originalArtist` carry the untransliterated title and artist as the source tagged them. **`name` and `artist` are sourced from them when present**, falling back to the romanized form, so a track tagged in Cyrillic or Japanese renders in its own script by default and `name` will usually equal `originalTitle`. The romanized form is not on the wire — it is used server-side for search and matching only. Clients that want the romanized string should not expect it here.
 
-- `Search` accepts normal text (including Cyrillic), local IDs, the server's `yt://` IDs, and playlist URLs (YouTube and Spotify).
-- A text search also asks Spotify's catalogue, which has no audio of its own, so each hit it contributes is looked up in the library and then on YouTube before it reaches the response. Those entries are ordinary results with `audio://` or `yt://` IDs — a `spotify://` ID never reaches a client — and a hit that was already returned by the platform it resolved to is not repeated. Hits nothing playable was found for are left out.
+- `Search` accepts normal text (including Cyrillic), local IDs, the server's `yt://` and `deezer://` IDs, and playlist URLs (YouTube, Spotify and Deezer).
+- A text search also asks Spotify's catalogue, which has no audio of its own, so each hit it contributes is looked up in the library, then on Deezer, then on YouTube before it reaches the response. Those entries are ordinary results with `audio://`, `deezer://` or `yt://` IDs — a `spotify://` ID never reaches a client — and a hit that was already returned by the platform it resolved to is not repeated. Hits nothing playable was found for are left out.
+- Deezer results are *not* resolved away: that platform has its own audio, so a `deezer://` ID reaches the client and plays from Deezer. A deployment without Deezer credentials runs its pod in metadata-only mode, where Deezer hits are resolved to `audio://` or `yt://` exactly like Spotify's and no `deezer://` ID is ever returned.
 - `RandomResults` accepts `count` from 1 through 200, inclusive. An invalid count returns `400 {"error":{"code":"invalid_count","message":"..."}}`.
 - `RandomResults` also accepts `youTubeShare` from 0 through 1 (default `0.4`): the share of results drawn from YouTube, with the local library supplying the rest and backfilling anything YouTube is short of. Out of range returns `400 {"error":{"code":"invalid_share","message":"..."}}`.
 - `Artist/Local` returns `200 []` when the artist is empty or unmatched, and uses `artist`, then `name`, then `id` as its stable sort order. `Artist/YouTube` is a keyword search and comes back in YouTube's relevance order.
@@ -50,6 +51,8 @@ Two consequences for clients that do read it incrementally:
 | YouTube playlist URL, `yt-playlist://...`, or recognised playlist ID | `youtubePlaylist` | `query` is a canonical playlist URL; `playlistId`. No entries — send `query` to `Search` |
 | Spotify track URL, `spotify:track:...`, or `spotify://...` | `local` or `youtubeVideo` | Spotify has no audio, so the track is looked up in the library, then on YouTube; `kind` and `result` describe whatever was found. `404 not_found` when nothing was |
 | Spotify playlist URL, `spotify:playlist:...`, or `spotify-playlist://...` | `spotifyPlaylist` | `query` is the canonical `spotify-playlist://...`; `playlistId`. No entries — send `query` to `Search` |
+| Deezer track URL or `deezer://...` | `deezerTrack` | `query` is the canonical `deezer://...`; `result` is one discovery result. In metadata-only mode this comes back as `local` or `youtubeVideo` instead, like a Spotify track |
+| Deezer playlist URL or `deezer-playlist://...` | `deezerPlaylist` | `query` is the canonical `deezer-playlist://...`; `playlistId`. No entries — send `query` to `Search` |
 | Ordinary text | `search` | `query` is the trimmed text; call `Search` with it |
 
 Examples:
@@ -64,7 +67,7 @@ Examples:
 
 A playlist resolution carries no entries. This endpoint answers what a pasted value *is*, and the answer for a playlist — `kind`, the canonical `query`, `playlistId` — is everything classify already knows, so it comes back in one fan-out. To get the tracks, send the canonical `query` back to `Search`, which routes a playlist claim to the same lookup and streams the entries as they resolve.
 
-That is the only route to a playlist's tracks: `results` used to be assembled whole here and has been removed. It lived inside an envelope, so there was nothing to stream into, and a Spotify playlist costs one lookup per track (the library first, then YouTube) — the slowest thing the API does, behind a response that could not begin until the last one landed.
+That is the only route to a playlist's tracks: `results` used to be assembled whole here and has been removed. It lived inside an envelope, so there was nothing to stream into, and a Spotify playlist costs one lookup per track (the library first, then Deezer, then YouTube) — the slowest thing the API does, behind a response that could not begin until the last one landed.
 
 Malformed `audio://`, `yt://`, `yt-playlist://`, or unsupported URLs return a JSON error such as:
 
@@ -246,7 +249,7 @@ which rule; a missing or dead token answers `401 unauthorized`.
 
 ## Audio downloads and CORS
 
-`GET /Audio/Download/{codec}/{bitrate}?id={id}` streams `Opus`, `Vorbis`, `FLAC`, `MP3`, or `AAC`; the frontend default is `/Audio/Download/Opus/112`. The stream advertises and supports standard HTTP `Range` requests; a seek request waits for the first cached encode to finish, then receives a normal `206` byte-range response. `DownloadRaw` is used by `contentUrl` and sends an attachment filename.
+`GET /Audio/Download/{codec}/{bitrate}?id={id}` streams `Opus`, `Vorbis`, `FLAC`, `MP3`, or `AAC`; the frontend default is `/Audio/Download/Opus/112`. Asking for `FLAC` also changes what is fetched upstream: a platform with a choice of source qualities (Deezer, which otherwise downloads MP3 320) is told to fetch its lossless copy, since encoding FLAC out of a lossy source is a bigger file that sounds no better. `DownloadRaw` names no codec and takes whatever that platform already holds. The stream advertises and supports standard HTTP `Range` requests; a seek request waits for the first cached encode to finish, then receives a normal `206` byte-range response. `DownloadRaw` is used by `contentUrl` and sends an attachment filename.
 
 `GET /Audio/Preload/{codec}/{bitrate}?id={id}` starts that same encode without a body, so a Download that follows finds it already running. `202` means this call started it, `200` that it was already under way — repeats are cheap and only push the cache entry's expiry back. The frontend calls it 20 s before a track ends and when the skip button is hovered.
 
