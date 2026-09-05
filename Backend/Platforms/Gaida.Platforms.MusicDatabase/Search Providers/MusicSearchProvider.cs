@@ -56,6 +56,10 @@ public class MusicSearchProvider(ILogger logger) : SearchProvider(logger),
     public Task<(MusicInfo? entry, string? error)> EditAsync(string id, IReadOnlyList<string>? titles,
         IReadOnlyList<string>? artists, string? album) => MusicManager.EditAsync(id, titles, artists, album);
 
+    public Task<(MusicInfo? entry, string? error)> ImportAsync(string artist, string title, string? album,
+        string extension, Stream content, byte[]? cover = null, CancellationToken cancellationToken = default) =>
+        MusicManager.ImportAsync(artist, title, album, extension, content, cover, cancellationToken);
+
     public (LocalMatch Match, PlatformResult Result)? FindLocalVariant(string name, string? artist, TimeSpan duration)
     {
         var match = MusicManager.FindLocalVariant(name, artist, duration);

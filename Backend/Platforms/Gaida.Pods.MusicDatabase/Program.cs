@@ -1,6 +1,7 @@
 using Gaida.Admin;
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using Gaida.Core.Platforms;
 using Gaida.Core.Streams;
@@ -31,6 +32,12 @@ foreach (var key in (string[])["DOMAIN", "STORAGE", "ALBUM_COVERS"])
 
 builder.Services.AddSingleton(Log.Logger);
 
+// The one service this pod talks to, and only from the admin surface: /Admin/import-deezer pulls a
+// track's metadata and bytes out of the Deezer pod. Unset, that route answers 400 and nothing else
+// here notices — the library pod has no other reason to make an outbound request.
+var deezerUrl = builder.Configuration["DEEZER_URL"]?.TrimEnd('/');
+builder.Services.AddHttpClient("deezer", http => http.Timeout = TimeSpan.FromMinutes(5));
+
 var platform = new MusicDatabase(Log.Logger);
 platform.Initialize(); // kicks off MusicManager.Initialize() (library scan) in the background
 builder.Services.AddSingleton(platform);
@@ -60,6 +67,60 @@ admin?.MapPost("/edit-song", async Task<IResult> (string id, HttpRequest request
         return error == "No song with that ID." ? Results.NotFound() : Results.BadRequest(new ErrorDto(error));
 
     return Results.Ok(LibraryRow(entry!));
+});
+
+// Pulls one Deezer track into the library. The Deezer pod owns the download and its cache; this end
+// owns the storage, so the bytes come over the wire rather than the volume being shared. The entry is
+// left exactly as its tags describe it -- the Library tab above is where an operator fixes it up.
+admin?.MapPost("/import-deezer", async Task<IResult> (string? id, MusicDatabase db,
+    IHttpClientFactory factory, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(id)) return Results.BadRequest(new ErrorDto("A Deezer track ID is required."));
+    if (string.IsNullOrWhiteSpace(deezerUrl))
+        return Results.BadRequest(new ErrorDto("DEEZER_URL is not configured on this pod."));
+
+    var http = factory.CreateClient("deezer");
+    var query = $"?id={Uri.EscapeDataString(id)}";
+
+    PodResultDto? metadata;
+    try
+    {
+        metadata = await http.GetFromJsonAsync<PodResultDto>($"{deezerUrl}/resolve{query}", ct);
+    }
+    catch (Exception exception) when (exception is not OperationCanceledException)
+    {
+        Log.Warning(exception, "Deezer would not describe {Id}", id);
+        return Results.BadRequest(new ErrorDto("The Deezer pod does not know that track."));
+    }
+
+    if (metadata is null) return Results.BadRequest(new ErrorDto("The Deezer pod does not know that track."));
+
+    // ResponseHeadersRead, so the body streams into the library file instead of through a byte array
+    // the size of a FLAC first.
+    using var audio = await http.GetAsync($"{deezerUrl}/content{query}", HttpCompletionOption.ResponseHeadersRead, ct);
+    if (!audio.IsSuccessStatusCode)
+        return Results.BadRequest(new ErrorDto(
+            "The Deezer pod has no audio for that track — it needs a working DEEZER_ARL."));
+
+    // The content type, not the filename: the pod sets both, and only one of them is a contract
+    // Gaida.API already relies on (Content.cs relays it verbatim).
+    var extension = ExtensionFor(audio.Content.Headers.ContentType?.MediaType);
+    if (extension is null)
+        return Results.BadRequest(new ErrorDto(
+            $"The Deezer pod sent {audio.Content.Headers.ContentType?.MediaType ?? "no content type"}."));
+
+    // Deezer's own artwork, for the usual case of a download with no embedded picture. Fetched before
+    // the body so a cover that will not load costs nothing — a track is worth importing without one.
+    var cover = await CoverBytesAsync(http, metadata.ThumbnailUrl, ct);
+
+    await using var body = await audio.Content.ReadAsStreamAsync(ct);
+    var (entry, error) = await db.ImportAsync(metadata.Artist ?? "", metadata.Name ?? "", metadata.Album,
+        extension, body, cover, ct);
+
+    if (error is not null) return Results.BadRequest(new ErrorDto(error));
+
+    Log.Information("Imported Deezer track {Id} as {Entry}", id, entry!.ID);
+    return Results.Ok(LibraryRow(entry));
 });
 
 app.MapGet("/classify", IResult (string? query) =>
@@ -177,6 +238,37 @@ app.Run();
 return;
 
 // ── Admin helpers ──────────────────────────────────────────────────────────────────────────────
+
+/// <summary>
+///     The library extension for what the Deezer pod says it is sending, or <c>null</c> for anything this
+///     library does not index. Deezer only ever serves these two — see Gaida.Pods.Deezer/stream.py.
+/// </summary>
+/// <summary>
+///     The cover image a pod's <c>thumbnailUrl</c> points at, or <c>null</c> for anything that does not
+///     fetch. Never throws: artwork is the one part of an import worth losing rather than failing over.
+/// </summary>
+static async Task<byte[]?> CoverBytesAsync(HttpClient http, string? url, CancellationToken ct)
+{
+    if (string.IsNullOrWhiteSpace(url)) return null;
+
+    try
+    {
+        var bytes = await http.GetByteArrayAsync(url, ct);
+        return bytes.Length > 0 ? bytes : null;
+    }
+    catch (Exception exception) when (exception is not OperationCanceledException)
+    {
+        Log.Warning(exception, "Could not fetch the cover at {Url}", url);
+        return null;
+    }
+}
+
+static string? ExtensionFor(string? contentType) => contentType switch
+{
+    "audio/flac" => ".flac",
+    "audio/mpeg" => ".mp3",
+    _ => null
+};
 
 static List<string>? Variants(HttpRequest request, string name)
 {
@@ -327,6 +419,7 @@ static async Task RunSelfCheck()
 
     await EditCheck(Assert);
     await BackfillCheck(Assert);
+    await ImportCheck(Assert);
 
     Console.WriteLine("selftest OK");
     return;
@@ -334,6 +427,86 @@ static async Task RunSelfCheck()
     void Assert(bool condition, string message)
     {
         if (!condition) throw new Exception($"selftest failed: {message}");
+    }
+}
+
+/// <summary>
+///     The Deezer import, against a throwaway library. Four things would go wrong quietly: the file has to
+///     land where the rest of the library lives (Deezer/&lt;artist&gt;/&lt;artist&gt; - &lt;title&gt;), the
+///     artist folder is what keeps "Deezer" out of the entry's own artist list, the entry has to reach
+///     Info.json (otherwise it is gone on the next restart), and a second import of the same track must be
+///     refused rather than overwrite a file whose entry someone may already have renamed.
+/// </summary>
+/// <remarks>
+///     The bytes are not real audio, which is the point: ffprobe reads no tags out of them, so what is under
+///     test is the filename-and-folder path every import falls back to rather than one particular encoder.
+/// </remarks>
+static async Task ImportCheck(Action<bool, string> assert)
+{
+    var root = Path.Combine(Path.GetTempPath(), "gaida-local-import-" + Guid.NewGuid().ToString("n"));
+    Directory.CreateDirectory(root);
+
+    Environment.SetEnvironmentVariable("STORAGE", root, EnvironmentVariableTarget.Process);
+    Environment.SetEnvironmentVariable("DOMAIN", "https://music.example.com", EnvironmentVariableTarget.Process);
+
+    try
+    {
+        var database = new MusicDatabase(Serilog.Core.Logger.None);
+        await database.InitializeAsync();
+
+        var (entry, error) = await database.ImportAsync("Daft Punk", "Harder, Better, Faster, Stronger",
+            "Discovery", ".mp3", new MemoryStream("not really audio"u8.ToArray()));
+
+        assert(error is null && entry is not null, $"import: the import succeeded ({error})");
+        assert(entry!.RelativeLocation == "Deezer/Daft Punk/Daft Punk - Harder, Better, Faster, Stronger.mp3",
+            $"import: the library's own layout, one artist folder deep ({entry.RelativeLocation})");
+        assert(File.Exists(Path.Combine(root, entry.RelativeLocation!)), "import: the file is on disk");
+        assert(!File.Exists(Path.Combine(root, entry.RelativeLocation! + ".part")),
+            "import: no half-written .part is left behind");
+        assert(entry.Album == "Discovery", "import: the album Deezer supplied fills in for the missing tag");
+        assert(entry.ID is { Length: > 0 }, "import: the entry got an ID, so it is addressable as audio://");
+
+        // ParseFile reads the containing folder as an artist variant, so a file sitting directly in
+        // Deezer/ would be indexed with "Deezer" as one of its artists -- and answer a search for it.
+        assert(!entry.Artists.Contains("Deezer"), "import: the source folder is not one of the artists");
+        assert(entry.Artists.Contains("Daft Punk"), "import: the artist folder is the artist");
+
+        var saved = await File.ReadAllTextAsync(Path.Combine(root, "Deezer", "Daft Punk", "Info.json"));
+        assert(saved.Contains("Harder"), "import: the entry reached Info.json, so it survives a restart");
+
+        var found = database.FindForAdmin("Harder", 10);
+        assert(found.Count == 1, "import: the entry is in the in-memory library straight away");
+
+        var (duplicate, refused) = await database.ImportAsync("Daft Punk", "Harder, Better, Faster, Stronger",
+            "Discovery", ".mp3", new MemoryStream("different bytes"u8.ToArray()));
+        assert(duplicate is null && refused is not null && refused.Contains("already"),
+            "import: a second import of the same name is refused, not silently overwritten");
+
+        var (_, badExtension) = await database.ImportAsync("A", "B", null, ".txt", new MemoryStream([1]));
+        assert(badExtension is not null, "import: an extension the library cannot play is refused");
+
+        // "/" would make ParseFile read a folder that is not there; " - " would make it read the wrong artist.
+        var (slashed, slashError) = await database.ImportAsync("AC/DC", "Back - In Black", null, ".mp3",
+            new MemoryStream([1, 2, 3]));
+        assert(slashError is null && slashed?.RelativeLocation == "Deezer/AC_DC/AC_DC - Back In Black.mp3",
+            $"import: a separator in the name is cleaned out of the path ({slashed?.RelativeLocation})");
+
+        // The cover a source supplied, for a file carrying none of its own. Content-addressed, so the
+        // name is the hash and importing the same artwork twice writes one file.
+        var covers = Path.Combine(root, "covers");
+        Environment.SetEnvironmentVariable("ALBUM_COVERS", covers, EnvironmentVariableTarget.Process);
+
+        var (art, artError) = await database.ImportAsync("Daft Punk", "Aerodynamic", null, ".mp3",
+            new MemoryStream([4, 5, 6]), "not really a jpeg"u8.ToArray());
+        assert(artError is null && art?.CoverUrl is { Length: > 0 },
+            $"import: the supplied cover became this entry's artwork ({artError})");
+        assert(art!.CoverUrl!.StartsWith("https://music.example.com/Album_Covers/"),
+            $"import: the entry holds the substituted URL, not the placeholder ({art.CoverUrl})");
+        assert(Directory.GetFiles(covers).Length == 1, "import: the cover file was written once");
+    }
+    finally
+    {
+        try { Directory.Delete(root, true); } catch (IOException) { /* temp dir */ }
     }
 }
 

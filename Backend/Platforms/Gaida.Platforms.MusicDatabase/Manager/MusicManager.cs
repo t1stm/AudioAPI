@@ -422,6 +422,114 @@ public partial class MusicManager(ILogger logger)
         }
     }
 
+    /// <summary>The top-level folder every imported track lands under, relative to the storage root.</summary>
+    /// <remarks>
+    ///     It sits where a genre sits in the rest of the tree — <c>Eurobeat/Lou Grant/Lou Grant - ....wv</c>
+    ///     — because that is what the library is organised by and "where it came from" is the only honest
+    ///     answer available at import time. An operator moving the artist folder under a real genre is a
+    ///     move, not a re-import.
+    /// </remarks>
+    public const string ImportFolder = "Deezer";
+
+    /// <summary>The name an artist folder gets when the source gave no usable artist at all.</summary>
+    private const string UnknownArtistFolder = "Unknown artist";
+
+    /// <summary>
+    ///     Writes one downloaded track under <see cref="ImportFolder" /> and indexes it, so it becomes an
+    ///     ordinary <c>audio://</c> library song.
+    /// </summary>
+    /// <remarks>
+    ///     The layout is the library's own, one level shallower: <c>Deezer/&lt;artist&gt;/&lt;artist&gt; -
+    ///     &lt;title&gt;.&lt;ext&gt;</c>. No album folder, because nothing in this tree has one — the level
+    ///     between genre and artist that some entries carry is a sub-genre, and the album lives in the tags.
+    ///     Putting the artist in its own folder is not cosmetic: <see cref="ParseFile" /> reads the
+    ///     containing folder as an artist variant, so a file sitting directly in <c>Deezer/</c> is indexed
+    ///     with "Deezer" as one of its artists.
+    ///     <para>
+    ///         Nothing else is guessed: the file is parsed by exactly the code a scan would have used, so an
+    ///         import and a file dropped in by hand produce the same entry. The names the source supplied
+    ///         are only the fallback, for a download whose tags say nothing.
+    ///     </para>
+    ///     <para>
+    ///         An existing file of the same name is refused rather than overwritten. The admin is meant to
+    ///         tidy these entries afterwards, and silently replacing a file underneath an entry someone had
+    ///         already renamed is the one outcome that cannot be undone from the editor.
+    ///     </para>
+    /// </remarks>
+    /// <param name="extension">Including the dot; must be one this library plays.</param>
+    /// <param name="cover">
+    ///     Artwork to fall back on when the file carries none embedded — a Deezer FLAC usually does not.
+    ///     Stored and hashed exactly like an extracted cover, so the library holds its own copy.
+    /// </param>
+    /// <returns>The indexed entry, or an error naming what stopped it.</returns>
+    public async Task<(MusicInfo? entry, string? error)> ImportAsync(string artist, string title, string? album,
+        string extension, Stream content, byte[]? cover = null, CancellationToken cancellationToken = default)
+    {
+        var cleanArtist = CleanForFilename(artist);
+        var cleanTitle = CleanForFilename(title);
+        if (cleanTitle.Length == 0) return (null, "The track has no usable title.");
+        if (!IsAudioBasedOnFileExtension(extension)) return (null, $"'{extension}' is not a playable extension.");
+
+        var folder = cleanArtist.Length == 0 ? UnknownArtistFolder : cleanArtist;
+        var directory = Path.Combine(StorageDirectory, ImportFolder, folder);
+        var filename = $"{folder} - {cleanTitle}{extension}";
+        var location = $"{directory}/{filename}";
+
+        await editGate.WaitAsync(cancellationToken);
+
+        try
+        {
+            Directory.CreateDirectory(directory);
+            if (File.Exists(location))
+                return (null, $"'{filename}' is already in the {ImportFolder} folder.");
+
+            // Temp then move, like SaveFolderAsync: a download that dies halfway must not leave a truncated
+            // file behind, because the next scan would index it as a whole song.
+            var temporary = location + ".part";
+            await using (var file = File.Create(temporary))
+            {
+                await content.CopyToAsync(file, cancellationToken);
+            }
+
+            File.Move(temporary, location);
+
+            var entry = await ParseFile(location);
+            entry.Album ??= album?.Trim() is { Length: > 0 } named ? named : null;
+
+            // The file's own artwork first, the source's only when it has none. The substituted form,
+            // not the $[DOMAIN] placeholder: this entry is going straight into the in-memory library,
+            // and MusicInfo.StoredCoverUrl puts the placeholder back on the way to disk.
+            var artwork = CoverExtractor.ExportCover(location) ??
+                          (cover is { Length: > 0 } ? CoverExtractor.StoreCover(cover) : null);
+            if (artwork is not null) entry.CoverUrl = $"{AlbumCoverLocation}/{artwork}";
+
+            // Copy-on-write rather than Add: SearchById and Browse read this list from other threads and
+            // from AsParallel, and growing it underneath them is the classic torn-enumeration crash.
+            Songs = [.. Songs, entry];
+            await SaveFolderAsync(entry.RelativeLocation!);
+
+            Logger.Information("Imported {Title} - {Artist} as {Location}", entry.Title, entry.Artist, location);
+            return (entry, null);
+        }
+        finally
+        {
+            editGate.Release();
+        }
+    }
+
+    /// <summary>
+    ///     A name that is safe as a filename and still round-trips through <see cref="ParseFile" />: it splits
+    ///     on '/' for the folder and on " - " for the artist, so neither may survive into the name.
+    /// </summary>
+    private static string CleanForFilename(string? value)
+    {
+        var cleaned = new string((value ?? string.Empty)
+            .Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character)
+            .ToArray());
+
+        return cleaned.Replace(" - ", " ").Replace('/', '_').Replace('\\', '_').Trim().Trim('.');
+    }
+
     /// <summary>Trimmed, blanks dropped, duplicates dropped, order preserved. Exactly what was typed.</summary>
     private static List<string> Distinct(IReadOnlyList<string> values)
     {

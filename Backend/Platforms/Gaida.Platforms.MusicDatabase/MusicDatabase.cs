@@ -61,6 +61,15 @@ public sealed class MusicDatabase : Platform, ISupportsSearch, ISupportsRandomRe
     public Task<(MusicInfo? entry, string? error)> EditAsync(string id, IReadOnlyList<string>? titles,
         IReadOnlyList<string>? artists, string? album) => _provider.EditAsync(id, titles, artists, album);
 
+    /// <summary>
+    ///     Writes one downloaded track into the library's import folder and indexes it — see
+    ///     <see cref="Manager.MusicManager.ImportAsync" />. The pod's /Admin/import-deezer route is the only
+    ///     caller: this is how a Deezer track becomes an ordinary audio:// song.
+    /// </summary>
+    public Task<(MusicInfo? entry, string? error)> ImportAsync(string artist, string title, string? album,
+        string extension, Stream content, byte[]? cover = null, CancellationToken cancellationToken = default) =>
+        _provider.ImportAsync(artist, title, album, extension, content, cover, cancellationToken);
+
     /// <returns>The library's answer to a YouTube title, or <c>null</c> when it has none worth offering.</returns>
     public (LocalMatch Match, PlatformResult Result)? FindLocalVariant(string name, string? artist, TimeSpan duration)
     {
