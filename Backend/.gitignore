@@ -8,3 +8,9 @@ Services/Gaida.API/cache/
 
 # The Spotify pod and scripts/ are Python; running either leaves these behind.
 __pycache__/
+
+# pytest, from running the pods' own tests outside their image.
+.pytest_cache/
+
+# Bind-mounted volumes: the library, the covers and every cache compose.yaml points at ./data.
+data/

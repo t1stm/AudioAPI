@@ -1,0 +1,9 @@
+# JetBrains, at the repository root — Backend/.gitignore already covers its own.
+.idea/
+
+# A stray full clone of the library that Backend/DSharpPlus already tracks as a submodule.
+/DSharpPlus/
+
+# Kate leaves these beside the file it is editing, and one of them sits next to Backend/.env.
+*.kate-swp
+.*.kate-swp

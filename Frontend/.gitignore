@@ -31,3 +31,6 @@ dist-ssr
 .svelte-kit
 build
 .env
+
+
+BUGS.md
