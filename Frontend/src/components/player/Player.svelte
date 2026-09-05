@@ -4,17 +4,29 @@
 	import Volume from './layers/volume/Volume.svelte';
 	import Quality from './layers/quality/Quality.svelte';
 	import SeekBar from './layers/seek-bar/SeekBar.svelte';
-	import { ChatBubbleOvalLeft, Icon, QueueList } from 'svelte-hero-icons';
+	import { ArrowsRightLeft, ChatBubbleOvalLeft, ChevronDown, ChevronUp, Icon, QueueList } from 'svelte-hero-icons';
 	import Audio from '$components/player/layers/audio/Audio.svelte';
 	import current from '$states/current.svelte';
 	import queue from '$states/queue.svelte';
 	import session from '$states/session.svelte';
+	import { closeOnBack } from '$lib/backWatcher.svelte';
 
 	type Dock = 'queue' | 'chat' | null;
 	let { dock = $bindable<Dock>(null) }: { dock?: Dock } = $props();
 
+	// The full player: the same element, a different shape. A separate component would
+	// mount a second <audio> or unmount this one, and both stop the music.
+	let full = $state(false);
+	closeOnBack(
+		() => full,
+		() => (full = false)
+	);
+
 	function toggle(tab: Exclude<Dock, null>) {
 		dock = dock === tab ? null : tab;
+		// The sheet lives in the layout, below this element's stacking context. A queue you
+		// cannot see is worse than a cover you briefly cannot.
+		if (dock) full = false;
 	}
 
 	// micro paints the artwork behind everything instead of beside it. No track,
@@ -47,6 +59,7 @@
 -->
 <div
 	id="player"
+	data-shape={full ? 'full' : 'bar'}
 	data-hold={holdState}
 	class="static z-10 mx-2 mb-2 flex w-auto shrink-0 flex-col items-center gap-2 rounded-panel border border-haze bg-surface-100/85 px-3 py-2 backdrop-blur-xl sm:absolute sm:bottom-4 sm:left-1/2 sm:mx-0 sm:mb-0 sm:min-h-[53px] sm:w-[min(100%-2rem,80rem)] sm:-translate-x-1/2 sm:flex-row sm:justify-between sm:gap-0 sm:px-4 sm:py-1"
 >
@@ -64,6 +77,18 @@
 		<div id="player-docks" class="ml-auto flex shrink-0 items-center gap-1 sm:order-4 sm:ml-0 sm:gap-2">
 			<!-- chat is reachable on every route, in a room or not: outside one its
 			     empty state is the feature's front door -->
+			<!-- Shuffle only in the full shape: the bar has no room for it, and the queue
+			     sheet — one tap away in either shape — carries the same button. -->
+			{#if full}
+				<button
+					type="button"
+					aria-label="Shuffle what is coming up"
+					class="flex size-11 items-center justify-center rounded-art text-fog hover:text-chalk focus-visible:outline-2 focus-visible:outline-primary-200 sm:size-7"
+					onclick={() => queue.shuffle()}
+				>
+					<Icon src={ArrowsRightLeft} mini size="16" />
+				</button>
+			{/if}
 			<button
 				type="button"
 				aria-label="Open chat"
@@ -96,6 +121,18 @@
 					>
 				{/key}
 			</button>
+			{#if current.name}
+				<button
+					type="button"
+					id="player-shape"
+					aria-label={full ? 'Close the full player' : 'Open the full player'}
+					aria-expanded={full}
+					class="flex size-11 items-center justify-center rounded-art text-fog hover:text-chalk focus-visible:outline-2 focus-visible:outline-primary-200 sm:size-7"
+					onclick={() => (full = !full)}
+				>
+					<Icon src={full ? ChevronDown : ChevronUp} mini size="16" />
+				</button>
+			{/if}
 			<Quality />
 			<!-- ponytail: the slider is mouse-and-keyboard only by choice — on a phone
 			     the hardware keys own volume and this costs 96px of a 350px row. -->

@@ -33,6 +33,11 @@ public class CoverExtractor
         foreach (var info in items.Where(m => string.IsNullOrWhiteSpace(m.CoverUrl)))
         {
             var location = info.ToMusicResult([]).Path;
+            // A file that has been deleted since the last scan is not an error worth a crash: Flac and
+            // WavPack answer null for a missing path, but Id3V2 throws, and that took the whole library
+            // load down with it.
+            if (!File.Exists(location)) continue;
+
             var image = Flac.GetImageFromFile(location) ?? WavPack.GetImageFromFile(location) ??
                 Id3V2.GetImageFromTag(location);
             if (image is null) continue;

@@ -52,6 +52,7 @@ public static class MediaInfo
 
         musicInfo.Titles = MusicInfo.Variants(Tag(tags, "TITLE"));
         musicInfo.Artists = MusicInfo.Variants(Merge(Tag(tags, "ARTISTS")), Merge(Tag(tags, "ARTIST")));
+        musicInfo.Album = Tag(tags, "ALBUM")?.Trim() is { Length: > 0 } album ? album : null;
 
         return musicInfo;
     }

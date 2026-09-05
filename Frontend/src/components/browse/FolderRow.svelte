@@ -3,6 +3,7 @@
 	import Self from './FolderRow.svelte';
 	import SearchRow from '$components/search/SearchRow.svelte';
 	import { getBrowse, type BrowseFolder, type BrowseLevel } from '$requests/songs';
+	import { closeOnBack } from '$lib/backWatcher.svelte';
 
 	const { folder }: { folder: BrowseFolder } = $props();
 	const contents = $props.id();
@@ -11,6 +12,13 @@
 	let level = $state<BrowseLevel | null>(null);
 	let loading = $state(false);
 	let failed = $state(false);
+
+	// Every open folder is a layer, so back walks back out of the tree one level at a
+	// time — deepest first — and only leaves the page once the tree is closed.
+	closeOnBack(
+		() => open,
+		() => (open = false)
+	);
 
 	/**
 	 * One request per folder for the life of the page: a folder that has been opened keeps

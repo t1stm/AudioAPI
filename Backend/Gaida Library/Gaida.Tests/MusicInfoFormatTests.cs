@@ -60,6 +60,38 @@ public class MusicInfoFormatTests
     }
 
     [Fact]
+    public void ReadsAnEntryWrittenBeforeScanWasStampedAsPassZero()
+    {
+        // What every Info.json on disk looks like today: no Scan, and no Album, because the tag reader
+        // never asked ffprobe for one. Pass 0 is what puts it in front of the backfill.
+        const string unstamped = """
+                                 [{"ID":"quyoure-ab","Titles":["You're My Best Friend"],"Artists":["Queen"],
+                                   "RelativeLocation":"Queen/x.mp3","Length":175000}]
+                                 """;
+
+        var song = JsonSerializer.Deserialize<List<MusicInfo>>(unstamped, MusicInfo.SerializerOptions)![0];
+
+        Assert.Equal(0, song.Scan);
+        Assert.Null(song.Album);
+        Assert.True(song.Scan < MusicManager.ScanVersion);
+    }
+
+    [Fact]
+    public void WritesTheScanStampAndTheAlbumBackToTheFile()
+    {
+        var song = new MusicInfo
+        {
+            ID = "id", Titles = ["Come Undone"], Artists = ["Duran Duran"],
+            Album = "Duran Duran", Scan = MusicManager.ScanVersion
+        };
+
+        var json = JsonSerializer.Serialize(song, MusicInfo.SerializerOptions);
+
+        Assert.Contains("\"Scan\": 1", json);
+        Assert.Contains("\"Album\": \"Duran Duran\"", json);
+    }
+
+    [Fact]
     public void KeepsTheTagSpellingAheadOfThePathSpelling()
     {
         var song = new MusicInfo { Titles = ["You're My Best Friend"] };

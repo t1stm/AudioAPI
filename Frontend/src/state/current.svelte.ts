@@ -6,6 +6,7 @@ import { downloadUrl, takePrefetched } from '$requests/songs';
 class Current {
 	name: string = $state('');
 	artist: string = $state('');
+	album: string = $state('');
 	url: string = $state('');
 	lengthSeconds: number = $state(0);
 	thumbnail: string = $state('');
@@ -23,6 +24,7 @@ class Current {
 
 		this.name = now.name;
 		this.artist = now.artist;
+		this.album = now.album ?? '';
 		this.url = prefetched ?? downloadUrl(now.id);
 		this.lengthSeconds = convertTimeSpanStringToSeconds(now.duration);
 		this.thumbnail = now.thumbnailUrl ?? '/empty.png';
@@ -39,6 +41,7 @@ class Current {
 		this.#release();
 		this.name = '';
 		this.artist = '';
+		this.album = '';
 		this.url = '';
 		this.lengthSeconds = 0;
 		this.thumbnail = '/empty.png';

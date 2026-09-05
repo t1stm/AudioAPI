@@ -34,6 +34,13 @@ public partial class MusicManager(ILogger logger)
     // renders in a browser but that Cover.cs's HttpClient fetch and any strict client both choke on.
     public static string AlbumCoverLocation => Domain.TrimEnd('/') + "/Album_Covers";
 
+    /// <summary>
+    ///     The current tag-reading pass. Bump it when the scanner learns to read a tag it did not before:
+    ///     every entry stamped below this is re-read once on the next load, and stamped. Pass 1 is the
+    ///     album, which <see cref="MediaInfo" /> never asked ffprobe for.
+    /// </summary>
+    public const int ScanVersion = 1;
+
     public async Task Initialize()
     {
         Logger.Information("Initializing MusicManager");
@@ -115,8 +122,21 @@ public partial class MusicManager(ILogger logger)
         if (legacy.Count > 0)
             Logger.Information("Re-read tags for {Count} entries of '{Artist}'", legacy.Count, artist);
 
+        // Tags the scanner did not read when these entries were indexed. Unlike the legacy re-read this
+        // must not re-roll the ID, so it goes through BackfillAlbum rather than RereadTags.
+        var behind = existing.Where(entry => entry.Scan < ScanVersion).ToList();
+        foreach (var entry in behind)
+        {
+            await BackfillAlbum(entry);
+            entry.Scan = ScanVersion;
+        }
+
+        if (behind.Count > 0)
+            Logger.Information("Backfilled {Count} entries of '{Artist}' to scan {Version}", behind.Count, artist,
+                ScanVersion);
+
         var newFiles = NewFiles(existing, songs).ToList();
-        if (stale == 0 && newFiles.Count == 0 && legacy.Count == 0) return existing;
+        if (stale == 0 && newFiles.Count == 0 && legacy.Count == 0 && behind.Count == 0) return existing;
 
         foreach (var file in newFiles)
             existing.Add(await ParseFile(file));
@@ -140,6 +160,19 @@ public partial class MusicManager(ILogger logger)
         // The pipe deadlock in MediaInfo left a couple of entries with no duration at all, and the weak
         // match gates on it. The re-read is the one place that can repair them.
         if (entry.Duration == TimeSpan.Zero) entry.Duration = tagged.Duration;
+    }
+
+    /// <summary>
+    ///     Fills the album on an entry indexed before the tag was read. Never touches the ID: playlists,
+    ///     cache keys and recently-played lists hold it, and <see cref="MusicInfo.UpdateRandomId" /> ends in
+    ///     a random suffix. An album an admin typed outranks the file, so this only fills a missing one.
+    /// </summary>
+    private static async Task BackfillAlbum(MusicInfo entry)
+    {
+        var path = StorageDirectory + "/" + entry.RelativeLocation;
+        if (entry.Album is not null || !File.Exists(path)) return;
+
+        entry.Album = (await MediaInfo.GetInformation(path)).Album;
     }
 
     private static IEnumerable<string> NewFiles(List<MusicInfo> existing, List<string> files)
@@ -170,6 +203,7 @@ public partial class MusicManager(ILogger logger)
         entry.AddNames(title, author, folder);
         entry.RelativeLocation ??= RelativeLocation(location);
         entry.ID = entry.UpdateRandomId();
+        entry.Scan = ScanVersion;
 
         return entry;
     }

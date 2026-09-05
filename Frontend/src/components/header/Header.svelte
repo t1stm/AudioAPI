@@ -5,6 +5,7 @@
 	import account from '$states/account.svelte';
 	import session from '$states/session.svelte';
 	import user from '$states/user.svelte';
+	import { closeOnBack } from '$lib/backWatcher.svelte';
 
 	const isAlpha = true;
 	let searchTerm = $derived(page.url.searchParams.get('term') ?? '');
@@ -12,6 +13,11 @@
 	let draftName = $state('');
 	let accountName = $state('');
 	let accountPassword = $state('');
+
+	closeOnBack(
+		() => editingName,
+		() => (editingName = false)
+	);
 
 	function openName() {
 		draftName = user.username ?? '';

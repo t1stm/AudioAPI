@@ -11,6 +11,7 @@
     navigator.mediaSession.metadata = new MediaMetadata({
       title: current.name,
       artist: current.artist,
+      album: current.album,
       artwork: [{ src: thumbnail }]
     })
   })
@@ -37,6 +38,12 @@
 			<span class="truncate text-xs text-fog sm:text-right"
 				><ArtistLink artist={current.artist} /></span
 			>
+			<!-- The tag, or nothing: an "Unknown album" line is a row of dead pixels in a
+			     53px bar. Only the full player and micro have the room to show it — see
+			     `#track-album` in app.css. -->
+			{#if current.album}
+				<span id="track-album" class="eyebrow truncate">{current.album}</span>
+			{/if}
 		</div>
 	</div>
 {/if}

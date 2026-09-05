@@ -9,6 +9,7 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { discordIds, discordUser, initDiscord } from '$lib/discord';
+	import { closeOnBack, watchBackNavigation } from '$lib/backWatcher.svelte';
 	import Header from '$components/header/Header.svelte';
 	import Player from '$components/player/Player.svelte';
 	import Queue from '$components/queue/Queue.svelte';
@@ -22,6 +23,11 @@
 
 	let { children } = $props();
 	let dock = $state<'queue' | 'chat' | null>(null);
+
+	// The app's one back handler: everything opened on top of the page closes before back
+	// leaves it. The sheet is a layer like any other — on a phone it is most of the screen.
+	watchBackNavigation();
+	closeOnBack(() => dock !== null, () => (dock = null));
 
 	$effect(() => {
 		session.chatOpen = dock === 'chat';

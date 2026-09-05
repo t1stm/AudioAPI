@@ -160,6 +160,12 @@
 	}
 }
 
+/* The album is the full player's third line and nothing else's — the bar is 53px
+   tall and micro is 320px. `#track-album` turns it back on where there is room. */
+#track-album {
+	display: none;
+}
+
 /* Every structural label in the app: group heads, zone names, hero eyebrows. */
 @utility eyebrow {
 	font-family: var(--font-mono);
@@ -207,6 +213,218 @@
 	display: none;
 }
 
+/* ── Full: the cover is the thing you are looking at ─────────────────────────
+   A third shape of the same element, reached by `data-shape="full"`. Nothing
+   remounts: the <audio> element and its graph live inside this div, so a
+   component swap would stop the music. Written like the micro block below —
+   plain CSS anchored on ids (1,0,0), outside `@layer`, so it outranks the
+   utilities whatever order Tailwind emits them in. Micro comes after this on
+   purpose: a 300px-tall window is a player-only frame whatever this says. */
+#player[data-shape='full'] {
+	position: fixed;
+	inset: 0;
+	z-index: 40;
+	isolation: isolate;
+	margin: 0;
+	width: auto;
+	min-height: 0;
+	/* Tailwind v4 centres the bar with the `translate` property, not `transform` —
+	   leaving that set shifted this whole fixed layer half a screen to the left. */
+	translate: none;
+	transform: none;
+	border: 0;
+	border-radius: 0;
+	background: var(--color-dark-0);
+	backdrop-filter: none;
+
+	display: grid;
+	align-content: center;
+	justify-items: center;
+	gap: 1.25rem;
+	padding: 1.5rem;
+	/* One property sizes the artwork, so the lyrics pane can shrink it later
+	   without a second layout. */
+	--cover: min(78vw, 44vh);
+	grid-template-areas:
+		'cover'
+		'meta'
+		'actions'
+		'seek'
+		'transport';
+}
+
+/* the row wrappers dissolve, exactly as they do at `sm` and in micro, so
+   `grid-area` can deal the children into the layout */
+#player[data-shape='full'] .player-row,
+#player[data-shape='full'] #track-info {
+	display: contents;
+}
+
+/* the ground: the same treatment micro paints, and the playlist hero after it */
+#player[data-shape='full'] #player-cover {
+	display: block;
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	overflow: hidden;
+}
+#player[data-shape='full'] #player-cover img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	/* the blur samples past the edges; the overscan keeps them from washing out */
+	scale: 1.1;
+}
+#player[data-shape='full'] #player-cover span {
+	position: absolute;
+	inset: 0;
+	background: color-mix(in srgb, var(--color-dark-0) 74%, transparent);
+	/* micro blurs by 2px because its ground is 300px tall. At full size that reads
+	   as a second sharp copy of the artwork competing with the real one. */
+	backdrop-filter: blur(24px);
+}
+
+#player[data-shape='full'] #track-info img {
+	display: block;
+	grid-area: cover;
+	width: var(--cover);
+	height: var(--cover);
+	max-width: none;
+	border-radius: var(--radius-panel);
+	object-fit: cover;
+	/* the lyrics pane's room, built now because retrofitting a size change onto a
+	   fixed cover is the expensive version of this */
+	transition:
+		width 320ms cubic-bezier(0.2, 0.7, 0.3, 1),
+		height 320ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* nothing sets this yet — the lyrics feature adds the attribute and a row */
+#player[data-shape='full'][data-lyrics='on'] {
+	--cover: min(38vw, 20vh);
+}
+
+#player[data-shape='full'] #track-info > div {
+	grid-area: meta;
+	align-items: center;
+	gap: 0.15rem;
+	max-width: min(100%, 34rem);
+	text-align: center;
+}
+
+/* Three faces, three kinds of fact: the name someone chose to play, the person
+   who made it, and what the file was tagged with. Unbounded is too wide for the
+   bar and for micro; at this size there is room for it. */
+#player[data-shape='full'] #track-info > div > span:first-child {
+	font-family: var(--font-display);
+	font-weight: 300;
+	font-size: clamp(1.35rem, 5vw, 2rem);
+	line-height: 1.15;
+	letter-spacing: -0.02em;
+	white-space: normal;
+	text-wrap: balance;
+}
+#player[data-shape='full'] #track-info > div > span:nth-child(2) {
+	font-size: 1rem;
+	color: var(--color-chalk);
+}
+#player[data-shape='full'] #track-album {
+	display: block;
+	max-width: 100%;
+}
+
+#player[data-shape='full'] #player-docks {
+	grid-area: actions;
+	margin: 0;
+	gap: 0.75rem;
+}
+
+#player[data-shape='full'] #seekbar {
+	grid-area: seek;
+	width: 100%;
+	max-width: 34rem;
+}
+
+#player[data-shape='full'] #controls {
+	grid-area: transport;
+	gap: 1.75rem;
+}
+#player[data-shape='full'] #controls button {
+	width: 3.5rem;
+	height: 3.5rem;
+}
+#player[data-shape='full'] #controls button:nth-child(2) svg {
+	width: 34px;
+	height: 34px;
+}
+
+/* The collapse button leaves the action row for the corner: it is the way out of
+   the shape, not one of the things you do inside it. */
+#player[data-shape='full'] #player-shape {
+	position: absolute;
+	top: 0.75rem;
+	right: 0.75rem;
+}
+
+/* The signature. The buffer gauge is 14x28px beside the seek bar — at this size
+   nobody sees it, and this app names a wait rather than hiding it. So it becomes
+   the screen's left edge, filling toward the same three-second runway, with the
+   same rain falling through it. */
+#player[data-shape='full'] #seekbar [role='img'] {
+	position: fixed;
+	inset: 0 auto 0 0;
+	width: 2px;
+	height: 100%;
+	border: 0;
+	border-radius: 0;
+}
+
+/* Two columns from `sm` up: the artwork owns the left half and every word and
+   control lines up on one axis in the right. A phone layout stretched to 1400px
+   is the thing to avoid. */
+@media (min-width: 640px) {
+	#player[data-shape='full'] {
+		--cover: min(46vh, 40vw);
+		justify-items: start;
+		align-content: center;
+		justify-content: center;
+		column-gap: 3rem;
+		row-gap: 1rem;
+		grid-template-columns: auto minmax(0, 26rem);
+		grid-template-areas:
+			'cover meta'
+			'cover actions'
+			'cover seek'
+			'cover transport';
+	}
+	#player[data-shape='full'][data-lyrics='on'] {
+		--cover: min(28vh, 24vw);
+	}
+	#player[data-shape='full'] #track-info img {
+		align-self: center;
+	}
+	#player[data-shape='full'] #track-info > div {
+		align-items: start;
+		text-align: left;
+	}
+	#player[data-shape='full'] #controls {
+		/* the glyphs sit inside their targets; pulling the row back by that padding
+		   puts the first one on the same axis as the title and the clock */
+		margin-left: -0.85rem;
+	}
+	#player[data-shape='full'] #controls button {
+		width: 3rem;
+		height: 3rem;
+	}
+}
+
+/* the shape is an attribute, so there is nothing to still except the cover */
+@media (prefers-reduced-motion: reduce) {
+	#player[data-shape='full'] #track-info img {
+		transition: none;
+	}
+}
+
 /* ── Micro: the player is the whole interface ────────────────────────────────
    A Discord picture-in-picture frame, a popped-out window, a phone on its side.
    Deliberately plain CSS rather than `micro:` utilities: a 700×300 window
@@ -233,6 +451,10 @@
 		border-radius: 0;
 		background: var(--color-dark-0);
 		backdrop-filter: none;
+		/* Tailwind v4 centres the bar with `translate`, not `transform`, so cancelling
+		   only the transform left this fixed layer half a screen to the left in any
+		   micro window wide enough for `sm:` — a popped-out window, a phone on its side. */
+		translate: none;
 		transform: none;
 		width: auto;
 		min-height: 0;

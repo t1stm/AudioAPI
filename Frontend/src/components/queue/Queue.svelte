@@ -9,6 +9,7 @@
 	import session from '$states/session.svelte';
 	import type { SearchResult } from '$states/search.svelte';
 	import ArtistLink from '$components/ArtistLink.svelte';
+	import { closeOnBack } from '$lib/backWatcher.svelte';
 
 
 	let items = $derived(queue.items);
@@ -67,6 +68,11 @@
 	let naming = $state(false);
 	let draftName = $state('');
 	let saved = $state<{ id: string; name: string } | null>(null);
+
+	closeOnBack(
+		() => naming,
+		() => (naming = false)
+	);
 
 	function openSave() {
 		saved = null;
@@ -181,9 +187,6 @@
 					autofocus
 					aria-label="Playlist name"
 					class="rounded-row border border-haze bg-dark-0 min-w-0 flex-1 py-1 text-xs text-chalk ring-primary-0 focus:border-primary-0 focus-visible:ring-2"
-					onkeydown={(event) => {
-						if (event.key === 'Escape') naming = false;
-					}}
 				/>
 				<button
 					type="submit"

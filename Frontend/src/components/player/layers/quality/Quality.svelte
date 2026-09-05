@@ -1,8 +1,14 @@
 <script lang="ts">
 	import quality, { bitrates, codecs, type Bitrate, type Codec } from '$states/quality.svelte';
+	import { closeOnBack } from '$lib/backWatcher.svelte';
 
 	let open = $state(false);
 	let label = $derived(quality.codec === 'FLAC' ? 'FLAC' : `${quality.codec} · ${quality.bitrate}`);
+
+	closeOnBack(
+		() => open,
+		() => (open = false)
+	);
 
 	function selectCodec(codec: Codec) {
 		quality.codec = codec;

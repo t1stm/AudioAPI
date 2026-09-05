@@ -4,6 +4,7 @@
 	import { ArrowPath, Icon, PencilSquare } from 'svelte-hero-icons';
 	import session from '$states/session.svelte';
 	import audio from '$states/audio.svelte';
+	import { closeOnBack } from '$lib/backWatcher.svelte';
 
 	// decorative only — the state word and the rail carry the meaning
 	const drops = Array.from({ length: 48 }, (_, index) => index);
@@ -13,6 +14,12 @@
 	let title = $derived(session.name || 'Untitled room');
 	let holdState = $derived(
 		session.status === 'holding' ? 'holding' : session.status === 'synced' ? 'playing' : 'idle'
+	);
+
+	// Escape and back both leave the name alone — the field is dismissed, not committed.
+	closeOnBack(
+		() => renaming,
+		() => (renaming = false)
 	);
 
 	// The honest version of what the state word claims, in the order the loop
@@ -72,7 +79,6 @@
 				onblur={commitRename}
 				onkeydown={(event) => {
 					if (event.key === 'Enter') commitRename();
-					if (event.key === 'Escape') renaming = false;
 				}}
 				aria-label="Room name"
 				class="rounded-row border border-haze bg-dark-0 px-2 py-0.5 text-sm text-chalk"

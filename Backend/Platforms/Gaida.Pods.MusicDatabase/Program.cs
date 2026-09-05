@@ -326,6 +326,7 @@ static async Task RunSelfCheck()
            badError == "The duration must look like 00:04:32.", "variant: bad duration keeps the exact message");
 
     await EditCheck(Assert);
+    await BackfillCheck(Assert);
 
     Console.WriteLine("selftest OK");
     return;
@@ -333,6 +334,47 @@ static async Task RunSelfCheck()
     void Assert(bool condition, string message)
     {
         if (!condition) throw new Exception($"selftest failed: {message}");
+    }
+}
+
+/// <summary>
+///     The album backfill, against a throwaway library whose one entry predates the tag being read.
+///     The thing that would go wrong quietly is the ID: <c>RereadTags</c> re-rolls it, and re-rolling
+///     every ID in the library to fill an album would orphan every playlist, cache key and
+///     recently-played entry that holds one. The media file does not exist here, so the ffprobe read is
+///     skipped and only the bookkeeping is under test.
+/// </summary>
+static async Task BackfillCheck(Action<bool, string> assert)
+{
+    var root = Path.Combine(Path.GetTempPath(), "gaida-local-backfill-" + Guid.NewGuid().ToString("n"));
+    var folder = Path.Combine(root, "Duran Duran");
+    Directory.CreateDirectory(folder);
+
+    var info = Path.Combine(folder, "Info.json");
+    await File.WriteAllTextAsync(info, """
+        [{"ID":"ducome-un","Titles":["Come Undone"],"Artists":["Duran Duran"],
+          "RelativeLocation":"Duran Duran/Duran Duran - Come Undone.mp3","Length":256000}]
+        """);
+
+    Environment.SetEnvironmentVariable("STORAGE", root, EnvironmentVariableTarget.Process);
+
+    try
+    {
+        var database = new MusicDatabase(Serilog.Core.Logger.None);
+        await database.InitializeAsync();
+
+        var songs = database.FindForAdmin("Duran Duran", 10);
+        assert(songs.Count == 1, "backfill: the throwaway library loaded one song");
+        assert(songs[0].ID == "ducome-un", "backfill: the ID survives it -- playlists and cache keys hold it");
+        assert(songs[0].Scan == MusicManager.ScanVersion, "backfill: the entry is stamped with the pass that read it");
+
+        var saved = await File.ReadAllTextAsync(info);
+        assert(saved.Contains("\"Scan\": 1"), "backfill: the stamp reached the file, so it runs once");
+        assert(saved.Contains("ducome-un"), "backfill: the saved entry kept its ID");
+    }
+    finally
+    {
+        try { Directory.Delete(root, true); } catch (IOException) { /* temp dir */ }
     }
 }
 

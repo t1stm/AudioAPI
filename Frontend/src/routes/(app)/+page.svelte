@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, replaceState } from '$app/navigation';
+	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import type { PageData } from './$types';
@@ -18,6 +19,8 @@
 	} from '$requests/songs';
 	import type { LocalVariant } from '$requests/songs';
 	import { convertTimeSpanStringToSeconds, getTimeString, heroArtist } from '$lib';
+	import { closeOnBack, pushPageState } from '$lib/backWatcher.svelte';
+	import { at, record, type Roll } from '$lib/rollHistory';
 	import { SliderInteractions } from '$lib/sliderInteractions.svelte.js';
 	import Song from '$components/home/song/Song.svelte';
 	import SongSkeleton from '$components/home/song/SongSkeleton.svelte';
@@ -72,9 +75,12 @@
 	// Nothing is shown until a press: the hero looks exactly as it did.
 	let variant = $state<LocalVariant | null>(null);
 	let pending = $state<'play' | 'queue' | null>(null);
-	// A fast second roll must not have the first roll's suggestion land on it. The
-	// lookup is not awaited by rollAgain, so the roll stays as quick as it was.
-	let rollToken = 0;
+	// Which roll is on screen. A roll is kept rather than overwritten, so back is an undo
+	// of the button; history carries the index and the tracks stay here. It is also what
+	// keeps a suggestion from a roll the user has since backed out of off the hero.
+	let shown: Roll | null = null;
+	// The roll the page loaded with, until the first roll is pushed on top of it.
+	let landed: Roll | null = null;
 	let promptFirst = $state<HTMLButtonElement | null>(null);
 	let pressed: HTMLElement | null = null;
 
@@ -107,6 +113,46 @@
 	$effect(() => {
 		if (pending && promptFirst) promptFirst.focus();
 	});
+
+	// The fork is a layer over the hero: back dismisses it and leaves the roll alone.
+	closeOnBack(() => pending !== null, close);
+
+	/**
+	 * Puts a roll on screen. The page's arrays are reactive proxies of the roll's, so the
+	 * roll is pointed back at them — a stream still filling this roll then writes where the
+	 * page reads, whether or not the roll was on screen when it started.
+	 */
+	function show(roll: Roll) {
+		shown = roll;
+		hero = roll.hero;
+		artistSongs = roll.artistSongs;
+		curated = roll.picks;
+		variant = roll.variant;
+		pending = null;
+		heroLoading = false;
+		roll.artistSongs = artistSongs;
+		roll.picks = curated;
+	}
+
+	// Back and forward through the rolls. `at` returns null for an index this page load
+	// never drew — a reload — and the page then keeps the roll it loaded with.
+	$effect(() => {
+		const roll = at(page.state.home ?? -1);
+		if (roll && roll !== shown) show(roll);
+	});
+
+	/**
+	 * Puts a roll on screen with a history entry of its own, so back brings back the one it
+	 * displaced. The roll the page landed on gets its index here rather than at mount: the
+	 * router is not initialized yet when `onMount` runs, and `replaceState` throws.
+	 */
+	function pushRoll(roll: Roll) {
+		if (landed && page.state.home === undefined) {
+			replaceState('', { ...page.state, home: record(landed) });
+		}
+		show(roll);
+		pushPageState({ home: record(roll) });
+	}
 
 	/**
 	 * Each track lands in its own slot as the response produces it. The slots the
@@ -144,23 +190,43 @@
 	// slot arrays are read when they are handed over rather than captured at init.
 	onMount(() => {
 		recentlyPlayed = getRecentlyPlayed();
+		countArtists();
+
+		// Coming back to this page lands on the history entry it left on, and that entry's
+		// roll is still here. Put it back rather than replacing it with the load's fresh one.
+		const previous = at(page.state.home ?? -1);
+		if (previous) {
+			show(previous);
+			return;
+		}
+
+		// The page arrives as its first roll, on the entry that brought it here — so back
+		// from the first roll leaves the page, as it always did.
+		const first: Roll = { hero: null, artistSongs, picks: curated, variant: null };
+		shown = first;
+		landed = first;
 
 		data.hero.then((song) => {
-			hero = song;
-			heroLoading = false;
-			if (song) lookUpVariant(song, rollToken);
+			first.hero = song;
+			if (shown === first) {
+				hero = song;
+				heroLoading = false;
+			}
+			if (song) lookUpVariant(song, first);
 		});
 		fill(curated, data.picks).catch(() => {});
 		data.artistSongs
 			.then((stream) => (stream ? fill(artistSongs, stream) : (artistSongs.length = 0)))
 			.catch(() => {});
-		countArtists();
 	});
 
-	async function lookUpVariant(song: SearchResult, token: number) {
+	async function lookUpVariant(song: SearchResult, roll: Roll) {
 		// A suggestion that fails to load is a hero with no prompt, never an error.
 		const found = await getLocalVariant(song, fetch).catch(() => null);
-		if (token === rollToken) variant = found;
+		roll.variant = found;
+		// A fast second roll must not have the first roll's suggestion land on it. The
+		// lookup is not awaited by rollAgain, so the roll stays as quick as it was.
+		if (shown === roll) variant = found;
 	}
 
 	function imageFallback(event: Event) {
@@ -171,20 +237,22 @@
 	async function rollAgain() {
 		if (rolling) return;
 		rolling = true;
-		variant = null;
-		pending = null;
-		const token = ++rollToken;
 		try {
 			const nextHero = (await getRandomSongs(fetch, 1, youTubePercent / 100))[0] ?? null;
-			hero = nextHero;
-			// fresh slots: the row shows placeholders again and fills from the new
-			// artist. A fill still running from the last roll writes into the array it
-			// was handed, which nothing renders any more.
-			artistSongs = Array(6).fill(null);
+			// A roll of its own: a new hero over fresh slots, the same picks below it, and a
+			// history entry, so back puts the roll this one displaced back on screen. A fill
+			// still running from the last roll writes into that roll's own array.
+			const roll: Roll = {
+				hero: nextHero,
+				artistSongs: Array(6).fill(null),
+				picks: curated,
+				variant: null
+			};
+			pushRoll(roll);
 			if (nextHero) {
-				lookUpVariant(nextHero, token);
-				fill(artistSongs, streamArtistLocal(heroArtist(nextHero.artist), fetch)).catch(() => {});
-			} else artistSongs.length = 0;
+				lookUpVariant(nextHero, roll);
+				fill(roll.artistSongs, streamArtistLocal(heroArtist(nextHero.artist), fetch)).catch(() => {});
+			} else roll.artistSongs.length = 0;
 		} finally {
 			rolling = false;
 		}
@@ -193,9 +261,12 @@
 	async function rollPicks() {
 		if (rollingPicks) return;
 		rollingPicks = true;
-		curated = Array(30).fill(null);
+		// The same roll's hero over a new set of picks, and its own entry: back brings the
+		// set this one threw away back.
+		const roll: Roll = { hero, artistSongs, picks: Array(30).fill(null), variant };
+		pushRoll(roll);
 		try {
-			await fill(curated, streamRandomSongs(fetch, 30, youTubePercent / 100));
+			await fill(roll.picks, streamRandomSongs(fetch, 30, youTubePercent / 100));
 		} catch {
 			// fill's own end has already trimmed the row to what arrived
 		} finally {
@@ -227,11 +298,7 @@
 		else queue.add(song);
 	}
 
-	/** Escape restores the original row and the focus to the button that was pressed. */
-	function escapeCloses(event: KeyboardEvent) {
-		if (event.key === 'Escape') close();
-	}
-
+	/** Back and Escape both restore the row, and the focus to the button that was pressed. */
 	function close() {
 		pending = null;
 		pressed?.focus();
@@ -328,14 +395,12 @@
 									bind:this={promptFirst}
 									type="button"
 									class="min-h-11 rounded-row bg-primary-600 px-3 py-2 text-sm font-semibold text-white"
-									onkeydown={escapeCloses}
 									onclick={() => choose(true)}
 									>{verb} the {variant.match === 'variant' ? 'original' : 'library copy'}</button
 								>
 								<button
 									type="button"
 									class="min-h-11 rounded-row border border-haze px-3 py-2 text-sm font-semibold text-chalk hover:bg-surface-200"
-									onkeydown={escapeCloses}
 									onclick={() => choose(false)}
 									>{verb} the {variant.match === 'variant' && rendition ? rendition : 'YouTube'} one</button
 								>

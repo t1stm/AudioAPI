@@ -6,6 +6,7 @@
 	import PlaylistCover from '$components/playlist/PlaylistCover.svelte';
 	import { convertTimeSpanStringToSeconds, getTimeString } from '$lib';
 	import { getPlaylist, type Playlist } from '$requests/playlists';
+	import { closeOnBack } from '$lib/backWatcher.svelte';
 	import account from '$states/account.svelte';
 	import playlists from '$states/playlists.svelte';
 	import queue from '$states/queue.svelte';
@@ -20,6 +21,17 @@
 	let confirmingDelete = $state(false);
 	let draftName = $state('');
 	let dragIndex = $state<number | null>(null);
+
+	// Two separate layers: back gets out of the delete confirmation without also
+	// throwing away the rename that was open behind it.
+	closeOnBack(
+		() => renaming,
+		() => (renaming = false)
+	);
+	closeOnBack(
+		() => confirmingDelete,
+		() => (confirmingDelete = false)
+	);
 
 	let tracks = $derived(playlist?.tracks ?? []);
 	let mine = $derived(!!playlist && playlist.owner === account.username);

@@ -59,6 +59,13 @@ public class MusicInfo : IJsonOnDeserialized
     public string? Album { get; set; }
 
     /// <summary>
+    ///     Which tag-reading pass produced this entry. Entries below <see cref="MusicManager.ScanVersion" />
+    ///     are re-read once and then stamped, so a tag the scanner learns to read later reaches the songs
+    ///     that were indexed before it. Absent from an older file, which deserializes as 0.
+    /// </summary>
+    public int Scan { get; set; }
+
+    /// <summary>
     ///     The absolute cover URL, as everything downstream wants it. Not serialized — see
     ///     <see cref="StoredCoverUrl" />.
     /// </summary>
