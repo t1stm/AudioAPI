@@ -192,6 +192,10 @@
     if (tab !== "state") render();
   }
 
+  // What the Deezer cache table is filtered by. Module state rather than the input's own value: the
+  // State tab is re-rendered on every poll, so anything living only in the DOM is gone in two seconds.
+  let deezerFilter = "";
+
   // ── the library editor (gaida-local only) ───────────────────────────────────
   // Its own submit path rather than `run`: the variant lists are repeated query parameters
   // (title=A&title=B), which a flat params object cannot express.
@@ -531,6 +535,53 @@
           `<td>${act("Close room", name, "close-room", { room: r.roomId },
             { confirm: `Close "${r.name}" and disconnect its ${r.users.length} listener(s)?`, danger: true })}</td>`
         ]));
+    },
+
+    // The downloaded-song cache. Everything Deezer hands over is MP3 320 unless someone asked for
+    // lossless, so promoting is how a track worth keeping becomes a FLAC and demoting is how the
+    // space comes back. "To library" is the one button here that acts on another service.
+    deezer(s, name) {
+      const pct = s.maxBytes ? Math.min(100, (s.totalBytes / s.maxBytes) * 100) : 0;
+      const needle = deezerFilter.trim().toLowerCase();
+      const rows = (s.entries ?? []).filter((e) => !needle ||
+        `${e.name} ${e.artist} ${e.album ?? ""} ${e.id}`.toLowerCase().includes(needle));
+
+      // Keyed on what the pod reports about itself, like the Library tab — not on what the target
+      // happens to be called in this deployment's config.
+      const library = (latest?.services ?? []).find((x) => x.snapshot?.service === "gaida-local")?.name;
+
+      return `<div class="cards">
+          <div class="card"><b>${s.count}</b><span>cached tracks</span></div>
+          <div class="card"><b>${bytes(s.totalBytes)}</b><span>of ${bytes(s.maxBytes)}</span>
+            <div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div></div>
+          <div class="card"><b>${s.canDownload ? "yes" : "no"}</b><span>can download</span></div>
+        </div>` +
+        (s.canDownload ? "" : `<div class="scroll"><div class="error">No DEEZER_ARL — this pod is
+          metadata only. Deezer results still show up, but Gaida resolves them against the library or
+          YouTube, and nothing here can be promoted.</div></div>`) +
+        `<div class="rowbar">
+          <input type="search" id="dzq" placeholder="Filter cached tracks…" value="${esc(deezerFilter)}">
+          ${act("Evict everything", name, "evict-all", {},
+            { confirm: `Delete all ${s.count} cached track(s)?\n\nEach one is downloaded again the next time it is played.`,
+              danger: true })}
+          <span class="hint">${rows.length} of ${s.count}${s.rowLimit ? `, newest ${s.rowLimit} shown` : ""}</span>
+        </div>` +
+        table(["Track", "Artist", "Format", "Size", "Cached", ""], rows.map((e) => [
+          cell(e.name, "wrap"), cell(e.artist, "wrap"),
+          `<td><span class="pill">${esc(e.format)}</span></td>`,
+          cell(bytes(e.bytes), "mono"), cell(ago(new Date(e.at * 1000).toISOString()) + " ago"),
+          `<td>` +
+            (e.format === "flac"
+              ? act("Demote to 320", name, "demote", { id: e.id },
+                  { confirm: `Replace the FLAC of "${e.name}" with MP3 320?` })
+              : act("Promote to FLAC", name, "promote", { id: e.id })) +
+            (library
+              ? act("To library", library, "import-deezer", { id: e.id },
+                  { confirm: `Copy "${e.name}" into the library's Deezer folder?\n\nIt becomes an ordinary audio:// song, for you to tidy up on the Library tab.` })
+              : "") +
+            act("Evict", name, "evict", { id: e.id }) +
+          `</td>`
+        ]));
     }
   };
 
@@ -538,7 +589,10 @@
     if (!service.up) return `<div class="scroll"><div class="error">Not answering — ${esc(service.error)}</div></div>`;
     const view = views[service.name] || views[service.name.replace(/^gaida-/, "")];
     if (view) {
-      try { return view(service.snapshot); } catch (e) { return `<div class="scroll"><div class="error">${esc(e.message)}</div></div>`; } }
+      // The name is not optional: every action button a view renders carries it as its target, and
+      // without it they all post to /api/action//<action>, which matches no route and 404s.
+      try { return view(service.snapshot, service.name); }
+      catch (e) { return `<div class="scroll"><div class="error">${esc(e.message)}</div></div>`; } }
     return `<div class="scroll"><div class="empty">No state of its own — see the Requests tab.</div></div>`;
   }
 
@@ -603,7 +657,9 @@
     document.querySelector('[data-tab="library"]').hidden = !editable;
     if (!editable && tab === "library") { tab = "state"; syncTabs(); }
 
-    if (tab === "state") el("body").innerHTML = renderState(service);
+    // Not while the Deezer filter is being typed into: the State tab is redrawn on every poll, and
+    // replacing the body under a focused input takes the caret with it.
+    if (tab === "state" && document.activeElement?.id !== "dzq") el("body").innerHTML = renderState(service);
   }
 
   function syncTabs() {
@@ -685,6 +741,25 @@
 
   el("body").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && e.target.id === "libq") { e.preventDefault(); loadLibrary(); }
+  });
+
+  // The Deezer cache filter runs over rows the snapshot already carries, so it never leaves the page.
+  // It redraws the body itself rather than through draw(), which deliberately holds off while this
+  // input has focus — and then puts the caret back, the same trick the row checkboxes use above.
+  el("body").addEventListener("input", (e) => {
+    if (e.target.id !== "dzq") return;
+
+    deezerFilter = e.target.value;
+    const caret = e.target.selectionStart;
+    const service = (latest?.services ?? []).find((s) => s.name === selected);
+    if (!service) return;
+
+    el("body").innerHTML = renderState(service);
+    const box = el("dzq");
+    if (!box) return;
+
+    box.focus();
+    box.setSelectionRange(caret, caret);
   });
 
   document.querySelector(".tabs").addEventListener("click", (e) => {
