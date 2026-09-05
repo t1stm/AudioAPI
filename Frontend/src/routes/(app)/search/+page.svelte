@@ -3,6 +3,7 @@
 	import type { SearchResult } from '$states/search.svelte';
 	import SearchRow from '$components/search/SearchRow.svelte';
 	import RowSkeleton from '$components/RowSkeleton.svelte';
+	import { sourceOf, type SourceName } from '$lib/source';
 
 	const { data }: { data: PageData } = $props();
 
@@ -11,8 +12,26 @@
 	// A result's section is only known once it is here, so the ones still coming wait
 	// in a block of their own below rather than in a section that may not be theirs.
 	let waiting = $derived(searching ? Math.max(0, 8 - results.length) : 0);
-	let libraryResults = $derived(results.filter((result) => result.id.startsWith('audio://')));
-	let youtubeResults = $derived(results.filter((result) => !result.id.startsWith('audio://')));
+
+	// Grouped by where each row came from rather than by "library or not": everything that was not
+	// the library used to land under the YouTube heading, which stopped being true once Deezer
+	// answered searches too. The order is the order the sections are worth reading in — a local copy
+	// beats a Deezer stream beats somebody's upload — and a section with nothing in it is not drawn.
+	const sections: { source: SourceName; heading: string; rule: string }[] = [
+		{ source: 'Local', heading: 'In the library', rule: 'text-gold' },
+		{ source: 'Deezer', heading: 'From Deezer', rule: 'text-deezer' },
+		{ source: 'YouTube', heading: 'From YouTube', rule: '' },
+		{ source: 'Unknown', heading: 'From somewhere else', rule: '' }
+	];
+
+	let grouped = $derived(
+		sections
+			.map((section) => ({
+				...section,
+				rows: results.filter((result) => sourceOf(result.id).name === section.source)
+			}))
+			.filter((section) => section.rows.length > 0)
+	);
 
 	// An effect rather than onMount: searching again from the header is a navigation to this same
 	// route, so this component is reused and only `data` changes. onMount would fire once and leave
@@ -58,33 +77,21 @@
 			name, or paste a YouTube link.
 		</p>
 	{:else}
-		{#if libraryResults.length > 0}
+		{#each grouped as section (section.source)}
 			<section class="flex flex-col gap-2">
-				<h2 class="eyebrow flex items-center gap-3 text-gold">
-					In the library · {libraryResults.length}
-					<span class="h-px flex-1 bg-gold/35"></span>
+				<h2 class="eyebrow flex items-center gap-3 {section.rule}">
+					{section.heading} · {section.rows.length}
+					<span
+						class="h-px flex-1 {section.rule ? 'bg-current opacity-35' : 'bg-haze'}"
+					></span>
 				</h2>
 				<div class="flex flex-col">
-					{#each libraryResults as result (result.id)}
+					{#each section.rows as result (result.id)}
 						<SearchRow {result} />
 					{/each}
 				</div>
 			</section>
-		{/if}
-
-		{#if youtubeResults.length > 0}
-			<section class="flex flex-col gap-2">
-				<h2 class="eyebrow flex items-center gap-3">
-					From YouTube · {youtubeResults.length}
-					<span class="h-px flex-1 bg-haze"></span>
-				</h2>
-				<div class="flex flex-col">
-					{#each youtubeResults as result (result.id)}
-						<SearchRow {result} />
-					{/each}
-				</div>
-			</section>
-		{/if}
+		{/each}
 
 		{#if waiting > 0}
 			<div class="flex flex-col" aria-busy="true">

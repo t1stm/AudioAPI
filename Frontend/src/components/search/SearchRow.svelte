@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { ArrowDownTray, ClipboardDocument, EllipsisHorizontal, Icon, Play } from 'svelte-hero-icons';
 	import { resolve } from '$app/paths';
-	import { convertTimeSpanStringToSeconds, getTimeString, heroArtist } from '$lib';
+	import { convertTimeSpanStringToSeconds, getTimeString, heroArtist, sourceOf } from '$lib';
 	import type { SearchResult } from '$states/search.svelte';
 	import queue from '$states/queue.svelte';
 	import session from '$states/session.svelte';
@@ -11,6 +11,7 @@
 	const { result }: { result: SearchResult } = $props();
 	let duration = $derived(getTimeString(convertTimeSpanStringToSeconds(result.duration)));
 	let isLong = $derived(convertTimeSpanStringToSeconds(result.duration) > 15 * 60);
+	let source = $derived(sourceOf(result.id));
 	// The menu has room for one artist, so it takes the first of a joined credit — the rest are
 	// each their own link on the row itself.
 	let artistUrl = $derived(
@@ -100,13 +101,19 @@
 		<p class="line-clamp-2 text-sm font-medium leading-snug text-chalk">{result.name}</p>
 		<p class="truncate text-[0.79rem] text-fog">
 			<ArtistLink artist={result.artist} />{#if result.album} · {result.album}{/if}<!--
-			--><span class="font-mono sm:hidden"> · {duration}{isLong ? ' · long' : ''}</span>
+			--><span class="font-mono sm:hidden"> · {source.name} · {duration}{isLong ? ' · long' : ''}</span>
 		</p>
 	</div>
 
 	<!-- its own column is a luxury a 320px row cannot afford; the artist line
 	     carries the same two facts instead -->
 	<div class="hidden items-center gap-2.5 sm:flex">
+		<!-- Solid, unlike the outlined "long" beside it: this one is the row's identity rather than a
+		     remark about it, and it is the same fill the home page's cards wear. -->
+		<span
+			class="rounded-full px-1.5 py-px font-mono text-[0.6rem] uppercase tracking-[0.09em] {source.badge}"
+			>{source.name}</span
+		>
 		{#if isLong}
 			<span
 				class="rounded-full border border-gold/45 px-1.5 py-px font-mono text-[0.6rem] uppercase tracking-[0.09em] text-gold"

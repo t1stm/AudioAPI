@@ -79,8 +79,8 @@ describe('findQueryType', () => {
 	/** A Spotify playlist resolves to a playlist, not to a single track. Reading it as one put an
 	 *  `undefined` into the queue. The resolution now carries no entries at all — `query` is what
 	 *  the caller streams from — so the kind is the only thing that says which branch to take. */
-	it('reads both playlist kinds as playlists', async () => {
-		for (const kind of ['youtubePlaylist', 'spotifyPlaylist'] as const) {
+	it('reads every playlist kind as a playlist', async () => {
+		for (const kind of ['youtubePlaylist', 'spotifyPlaylist', 'deezerPlaylist'] as const) {
 			vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(Response.json({ kind, query: 'q', playlistId: 'p' }))));
 
 			const resolution = await findQueryType('anything');

@@ -9,6 +9,7 @@
 	import session from '$states/session.svelte';
 	import type { SearchResult } from '$states/search.svelte';
 	import ArtistLink from '$components/ArtistLink.svelte';
+	import { sourceOf } from '$lib/source';
 	import { closeOnBack } from '$lib/backWatcher.svelte';
 
 
@@ -109,7 +110,9 @@
 				<img src={currentItem.thumbnailUrl ?? '/empty.png'} alt="" class="size-14 rounded-art object-cover" onerror={imageFallback} />
 				<div class="min-w-0 flex-1">
 					<p class="truncate text-sm font-semibold">{currentItem.name}</p>
-					<p class="truncate text-xs text-fog"><ArtistLink artist={currentItem.artist} /></p>
+					<p class="truncate text-xs text-fog">
+						<ArtistLink artist={currentItem.artist} /> · {sourceOf(currentItem.id).name}
+					</p>
 					<div class="mt-2 h-px overflow-hidden bg-haze">
 						<div class="h-full bg-primary-500" style:width={progress + '%'}></div>
 					</div>
@@ -137,7 +140,9 @@
 						<img src={item.thumbnailUrl ?? '/empty.png'} alt="" class="size-9 rounded-art object-cover" onerror={imageFallback} />
 						<div class="min-w-0 flex-1">
 							<p class="truncate text-sm">{item.name}</p>
-							<p class="truncate text-xs text-fog"><ArtistLink artist={item.artist} /></p>
+							<p class="truncate text-xs text-fog">
+								<ArtistLink artist={item.artist} /> · {sourceOf(item.id).name}
+							</p>
 						</div>
 						<button
 							type="button"

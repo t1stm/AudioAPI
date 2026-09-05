@@ -1,11 +1,13 @@
 <script lang="ts">
 	import current from '$states/current.svelte';
 	import ArtistLink from '$components/ArtistLink.svelte';
+	import { sourceOf } from '$lib/source';
 
 
 	// static/ is served at the root; '/static/empty.png' 404s.
 	const empty = '/empty.png';
 	let thumbnail = $derived(current.thumbnail?.length > 0 ? current.thumbnail : empty);
+	let source = $derived(sourceOf(current.id));
 
   $effect(() => {
     navigator.mediaSession.metadata = new MediaMetadata({
@@ -26,15 +28,20 @@
 			src={thumbnail}
 			alt=""
 			class="size-10 shrink-0 rounded-art object-cover"
+			title={`From ${source.name}`}
 			onerror={(event: Event) => {
 				const image = event.currentTarget as HTMLImageElement;
 				if (!image.src.endsWith(empty)) image.src = empty;
 			}}
 		/>
 		<div class="flex min-w-0 flex-col">
-			<span class="truncate text-xs font-semibold text-chalk select-none sm:text-right"
-				>{current.name}</span
-			>
+			<div class="flex min-w-0 items-center gap-1.5 sm:flex-row-reverse">
+				<span class="truncate text-xs font-semibold text-chalk select-none">{current.name}</span>
+				<span
+					class="shrink-0 rounded-art px-1 font-mono text-[0.5rem] font-bold uppercase leading-[1.6] tracking-tight {source.badge}"
+					>{source.name}</span
+				>
+			</div>
 			<span class="truncate text-xs text-fog sm:text-right"
 				><ArtistLink artist={current.artist} /></span
 			>

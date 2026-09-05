@@ -4,6 +4,8 @@ import { rememberRecentlyPlayed } from '$lib/recentlyPlayed';
 import { downloadUrl, takePrefetched } from '$requests/songs';
 
 class Current {
+	/** The platform ID, kept only so the player can say which service the track came from. */
+	id: string = $state('');
 	name: string = $state('');
 	artist: string = $state('');
 	album: string = $state('');
@@ -22,6 +24,7 @@ class Current {
 		const prefetched = takePrefetched(now.id);
 		this.#objectUrl = prefetched ?? '';
 
+		this.id = now.id;
 		this.name = now.name;
 		this.artist = now.artist;
 		this.album = now.album ?? '';
@@ -39,6 +42,7 @@ class Current {
 
 	clear() {
 		this.#release();
+		this.id = '';
 		this.name = '';
 		this.artist = '';
 		this.album = '';

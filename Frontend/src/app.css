@@ -20,6 +20,9 @@
 	--color-light-0: #ffffff;
 	--color-gold: #e8b04b;
 	--color-ember: #e85a4b;
+	/* Deezer's own purple. Close to --color-primary-0 by hue and deliberately not it: a source badge
+	   is never the app speaking, so it wears the service's colour rather than ours. */
+	--color-deezer: #a238ff;
 	--color-haze: #2a2638;
 	--color-fog: #9b96ad;
 	--color-chalk: #e9e6f2;

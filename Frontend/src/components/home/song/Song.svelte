@@ -4,8 +4,9 @@
 	const { song }: { song: SearchResult } = $props();
 	import queue from '$states/queue.svelte';
 	import ArtistLink from '$components/ArtistLink.svelte';
+	import { sourceOf } from '$lib/source';
 
-	let inLibrary = $derived(song.id.startsWith('audio://'));
+	let source = $derived(sourceOf(song.id));
 
 	// The queue is a dock away and the badge that counts it is at the foot of the
 	// screen — on a phone the thumb needs to hear it here, where it tapped.
@@ -34,9 +35,8 @@
 	<!-- Solid fill, not an outline: it is the only thing that stays legible over
 	     arbitrary artwork, so the label can stay small and still read. -->
 	<span
-		class="absolute left-1.5 top-1.5 rounded-art px-1 font-mono text-[0.55rem] font-bold leading-[1.5] tracking-tight text-dark-0 {inLibrary
-			? 'bg-gold'
-			: 'bg-ember'}">{inLibrary ? 'Local' : 'YouTube'}</span
+		class="absolute left-1.5 top-1.5 rounded-art px-1 font-mono text-[0.55rem] font-bold leading-[1.5] tracking-tight {source.badge}"
+		>{source.name}</span
 	>
 
 	<div class="flex min-w-0 flex-col">

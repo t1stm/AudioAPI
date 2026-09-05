@@ -4,24 +4,26 @@ import { streamJson } from '$lib/streamJson';
 import quality from '$states/quality.svelte';
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+const playlistKinds = ['youtubePlaylist', 'spotifyPlaylist', 'deezerPlaylist'] as const;
+
 export type QueryResolution =
-	| { kind: 'local' | 'youtubeVideo'; query: string; result: SearchResult }
+	| { kind: 'local' | 'youtubeVideo' | 'deezerTrack'; query: string; result: SearchResult }
 	| {
 			/** A playlist resolves to its identity and nothing else. The tracks come from
 			 *  `streamSearch(query)`, which routes the same claim to the same lookup and yields them
-			 *  as the API resolves them — a Spotify playlist is one library-then-YouTube lookup per
+			 *  as the API resolves them — a Spotify playlist is one Deezer-or-YouTube lookup per
 			 *  track, so waiting for the last one is the whole problem this avoids. */
-			kind: 'youtubePlaylist' | 'spotifyPlaylist';
+			kind: (typeof playlistKinds)[number];
 			query: string;
 			playlistId: string;
 	  }
 	| { kind: 'search'; query: string };
 
-/** Both playlist kinds carry a `playlistId`; every other resolution carries at most one `result`. */
+/** Every playlist kind carries a `playlistId`; every other resolution carries at most one `result`. */
 export function isPlaylist(
 	resolution: QueryResolution
 ): resolution is Extract<QueryResolution, { playlistId: string }> {
-	return resolution.kind === 'youtubePlaylist' || resolution.kind === 'spotifyPlaylist';
+	return (playlistKinds as readonly string[]).includes(resolution.kind);
 }
 
 export class AudioApiError extends Error {
