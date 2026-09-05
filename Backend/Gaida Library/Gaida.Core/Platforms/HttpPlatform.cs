@@ -96,13 +96,22 @@ public sealed class HttpPlatform : Platform, ISupportsSearch, ISupportsPlaylist,
     ///     is deliberately not routed through <see cref="HttpGetter" />'s <see cref="StreamSpreader" />, since a
     ///     spreader cannot be read from and Gaida.API never fans this out to more than one consumer.
     /// </summary>
-    public async Task<HttpResponseMessage?> GetContentResponseAsync(string id,
+    /// <param name="format">
+    ///     What the caller intends to do with the bytes, when that changes what is worth fetching — today only
+    ///     <c>"flac"</c>, which asks a pod that has a choice of source qualities for its lossless one. A hint,
+    ///     not a demand: a pod that does not know the parameter ignores it and answers as it always did, so
+    ///     nothing downstream may assume the response is in the format it asked for.
+    /// </param>
+    public async Task<HttpResponseMessage?> GetContentResponseAsync(string id, string? format = null,
         CancellationToken cancellationToken = default)
     {
+        var query = $"/content?id={Uri.EscapeDataString(id)}";
+        if (!string.IsNullOrEmpty(format)) query += $"&format={Uri.EscapeDataString(format)}";
+
         try
         {
-            var response = await _http.GetAsync($"/content?id={Uri.EscapeDataString(id)}",
-                HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            var response = await _http.GetAsync(query, HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
             if (response.IsSuccessStatusCode) return response;
 
             response.Dispose();

@@ -6,7 +6,8 @@ namespace Gaida.API;
 /// <summary>
 ///     Turns results that are only names — a Spotify track has no audio and no downloader — into results that
 ///     can be played, by searching the platforms that do have content. The library first, since a local copy
-///     beats an upload of the same track, then YouTube's first hit.
+///     beats an upload of the same track; then Deezer, whose catalogue is the studio recording rather than
+///     somebody's upload of it; then YouTube's first hit, which is the only source that has everything.
 /// </summary>
 /// <remarks>
 ///     One lookup per track, so a playlist is as many round trips as it has tracks. They overlap
@@ -51,11 +52,19 @@ public sealed class PlayableResolver(
                 return local.ToResult(variant.Result);
         }
 
+        var term = string.IsNullOrWhiteSpace(artist) ? name : $"{artist} {name}";
+
+        // Deezer before YouTube: its first hit for "artist title" is the release itself, where YouTube's is
+        // whatever was uploaded under that name. Skipped when Deezer is metadata-only in this deployment
+        // (no ARL, so Platforms__N__Resolve is on) — resolving one name into another resolves nothing.
+        if (!managerService.NeedsResolving("deezer://") &&
+            manager.PlatformFor("deezer://") is HttpPlatform deezer)
+            await foreach (var hit in deezer.SearchKeywords(term, cancellationToken))
+                return hit;
+
         if (manager.PlatformFor("yt://") is HttpPlatform youTube)
-        {
-            var term = string.IsNullOrWhiteSpace(artist) ? name : $"{artist} {name}";
-            await foreach (var hit in youTube.SearchKeywords(term, cancellationToken)) return hit;
-        }
+            await foreach (var hit in youTube.SearchKeywords(term, cancellationToken))
+                return hit;
 
         logger.LogDebug("Nothing playable for {Id} ({Artist} — {Name})", result.ID, artist, name);
         return null;

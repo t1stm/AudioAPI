@@ -93,7 +93,8 @@ public class Query(ILogger<Query> logger, IConfiguration configuration, IHostEnv
         var result = await managerService.Manager.SearchID(id, HttpContext.RequestAborted);
 
         // A Spotify link resolves to a name; what the client gets back is whatever platform actually has the
-        // track, which is also what `kind` then reports.
+        // track, which is also what `kind` then reports. A Deezer link normally passes straight through —
+        // that pod has the audio — unless it is running without an ARL, when it resolves like Spotify does.
         if (result is not null) result = await resolver.ResolveOne(result, HttpContext.RequestAborted);
         if (result is null) return NotFound(Error("not_found", "No result was found for this ID."));
 
@@ -104,6 +105,17 @@ public class Query(ILogger<Query> logger, IConfiguration configuration, IHostEnv
     }
 
     /// <summary>
+    ///     The playlist schemes whose ID is simply the rest of the string, and the <c>kind</c> each reports.
+    ///     YouTube is deliberately absent: its normalized form is not the only shape a claim arrives in, so it
+    ///     goes through <see cref="ExtractPlaylistId" /> instead.
+    /// </summary>
+    private static readonly (string Scheme, string Kind)[] playlistSchemes =
+    [
+        ("spotify-playlist://", "spotifyPlaylist"),
+        ("deezer-playlist://", "deezerPlaylist")
+    ];
+
+    /// <summary>
     ///     A playlist claim resolves to its identity only — <c>kind</c>, the canonical <c>query</c> and
     ///     <c>playlistId</c> — all of which classify already produced. The entries are not looked up here:
     ///     they live inside an envelope, and a half-written envelope is not something a streaming client can
@@ -112,13 +124,20 @@ public class Query(ILogger<Query> logger, IConfiguration configuration, IHostEnv
     /// </summary>
     private static QueryResolutionDto PlaylistResolution(string playlistUrl)
     {
-        var spotify = playlistUrl.StartsWith("spotify-playlist://", StringComparison.OrdinalIgnoreCase);
+        foreach (var (scheme, kind) in playlistSchemes)
+            if (playlistUrl.StartsWith(scheme, StringComparison.OrdinalIgnoreCase))
+                return new QueryResolutionDto
+                {
+                    Kind = kind,
+                    Query = playlistUrl,
+                    PlaylistId = playlistUrl[scheme.Length..]
+                };
 
         return new QueryResolutionDto
         {
-            Kind = spotify ? "spotifyPlaylist" : "youtubePlaylist",
+            Kind = "youtubePlaylist",
             Query = playlistUrl,
-            PlaylistId = spotify ? playlistUrl["spotify-playlist://".Length..] : ExtractPlaylistId(playlistUrl)
+            PlaylistId = ExtractPlaylistId(playlistUrl)
         };
     }
 
@@ -151,6 +170,7 @@ public class Query(ILogger<Query> logger, IConfiguration configuration, IHostEnv
             _ when id.StartsWith("audio://", StringComparison.Ordinal) => "local",
             _ when id.StartsWith("yt://", StringComparison.Ordinal) => "youtubeVideo",
             _ when id.StartsWith("spotify://", StringComparison.Ordinal) => "spotifyTrack",
+            _ when id.StartsWith("deezer://", StringComparison.Ordinal) => "deezerTrack",
             _ => "id"
         };
     }

@@ -140,7 +140,9 @@ public class Content(ILogger<Content> logger, IConfiguration configuration, IHos
         var platform = PlatformFor(managerService.Manager, id);
         if (platform is null) return NotFound();
 
-        using var upstream = await platform.GetContentResponseAsync(id, HttpContext.RequestAborted);
+        // No format hint: a raw request names no codec, so a pod with a choice serves whatever it
+        // already has rather than fetching a bigger copy nobody asked for.
+        using var upstream = await platform.GetContentResponseAsync(id, cancellationToken: HttpContext.RequestAborted);
         if (upstream is null) return NotFound();
 
         RelayContentHeaders(upstream);
@@ -167,7 +169,12 @@ public class Content(ILogger<Content> logger, IConfiguration configuration, IHos
         var platform = PlatformFor(managerService.Manager, id);
         if (platform is null) return NotFound("Search resulted in error");
 
-        using var upstream = await platform.GetContentResponseAsync(id, HttpContext.RequestAborted);
+        // Encoding FLAC out of a lossy source is a bigger file that sounds no better, so a pod that can
+        // choose (the Deezer one, which otherwise downloads MP3 320) is told to fetch its lossless copy.
+        // Every other codec here is lossy anyway and takes whatever the pod already has.
+        var sourceFormat = string.Equals(codec, "FLAC", StringComparison.OrdinalIgnoreCase) ? "flac" : null;
+
+        using var upstream = await platform.GetContentResponseAsync(id, sourceFormat, HttpContext.RequestAborted);
         if (upstream is null) return NotFound("Search resulted in error");
 
         var fileId = FileId(id);
