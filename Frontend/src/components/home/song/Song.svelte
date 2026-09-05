@@ -20,7 +20,7 @@
 	};
 </script>
 
-<div class="group relative flex min-w-36 flex-col gap-2 sm:min-w-48">
+<div class="group relative flex w-36 shrink-0 flex-col gap-2 sm:w-48">
 	<img
 		src={song.thumbnailUrl ?? '/empty.png'}
 		alt=""
@@ -39,7 +39,7 @@
 			: 'bg-ember'}">{inLibrary ? 'Local' : 'YouTube'}</span
 	>
 
-	<div class="grid">
+	<div class="flex min-w-0 flex-col">
 		<span class="truncate text-sm font-medium text-chalk">{song.name}</span>
 		<span class="truncate text-sm text-fog"><ArtistLink artist={song.artist} /></span>
 	</div>
