@@ -90,6 +90,51 @@ public static class Streaming
         }
     }
 
+    /// <summary>
+    ///     Draws from every source at once, yielding each item as it lands rather than one source at a time.
+    ///     A source's own items keep their relative order; across sources the output is mixed, which is what
+    ///     lets a search show the fastest pod's hits while the slower ones are still being asked. The whole
+    ///     thing costs the slowest source, not the sum of them.
+    /// </summary>
+    /// <remarks>
+    ///     A source that throws ends the merge — wrap each one in <see cref="Guarded{T}" /> first, which is
+    ///     what every caller here does, and one dead pod just drops out of the mix.
+    /// </remarks>
+    public static async IAsyncEnumerable<T> Merge<T>(this IEnumerable<IAsyncEnumerable<T>> sources,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var enumerators = sources.Select(source => source.GetAsyncEnumerator(cancellationToken)).ToList();
+
+        // The fan-out itself: every source is asked for its first item before any of them is awaited.
+        var pending = enumerators.Select(enumerator => enumerator.MoveNextAsync().AsTask()).ToList();
+
+        try
+        {
+            while (pending.Count > 0)
+            {
+                var ready = await Task.WhenAny(pending);
+                var index = pending.IndexOf(ready);
+
+                if (!await ready)
+                {
+                    pending.RemoveAt(index);
+                    var finished = enumerators[index];
+                    enumerators.RemoveAt(index);
+                    await finished.DisposeAsync();
+                    continue;
+                }
+
+                var current = enumerators[index].Current;
+                pending[index] = enumerators[index].MoveNextAsync().AsTask();
+                yield return current;
+            }
+        }
+        finally
+        {
+            foreach (var enumerator in enumerators) await enumerator.DisposeAsync();
+        }
+    }
+
     /// <summary>Adapts an already-materialised sequence to the streaming interfaces.</summary>
 #pragma warning disable CS1998 // sequence is already in memory, there is nothing to await
     public static async IAsyncEnumerable<T> AsAsync<T>(this IEnumerable<T> source)

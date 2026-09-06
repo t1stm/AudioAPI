@@ -111,7 +111,7 @@
 		<!-- Solid, unlike the outlined "long" beside it: this one is the row's identity rather than a
 		     remark about it, and it is the same fill the home page's cards wear. -->
 		<span
-			class="rounded-full px-1.5 py-px font-mono text-[0.6rem] uppercase tracking-[0.09em] {source.badge}"
+			class="rounded-full px-1.5 py-px font-mono text-[0.6rem] tracking-[0.09em] {source.badge}"
 			>{source.name}</span
 		>
 		{#if isLong}

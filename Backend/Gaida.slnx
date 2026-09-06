@@ -19,7 +19,10 @@
     <Project Path="Gaida Library/Gaida.CLI/Gaida.CLI.csproj" />
     <Project Path="Gaida Library/Gaida.Admin/Gaida.Admin.csproj" />
     <Project Path="Gaida Library/Gaida.Core/Gaida.Core.csproj" />
-    <Project Path="Gaida Library/Gaida.Tests/Gaida.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="Tests/Gaida.Tests/Gaida.Tests.csproj" />
+    <Project Path="Tests/Pods.Tests/Pods.Tests.csproj" />
   </Folder>
   <Folder Name="/Platforms/">
     <Project Path="Platforms/Gaida.Pods.MusicDatabase/Gaida.Pods.MusicDatabase.csproj" />

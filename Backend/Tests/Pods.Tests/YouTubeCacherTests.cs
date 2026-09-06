@@ -1,7 +1,7 @@
 using Gaida.Platforms.YouTube;
 using Gaida.Platforms.YouTube.Cache;
 
-namespace Gaida.Tests;
+namespace Pods.Tests;
 
 public class YouTubeCacherTests
 {

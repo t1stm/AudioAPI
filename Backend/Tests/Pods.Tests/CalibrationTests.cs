@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Gaida.Platforms.MusicDatabase.Manager;
 
-namespace Gaida.Tests;
+namespace Pods.Tests;
 
 /// <summary>
 ///     Not a test — the calibration pass. The thresholds in <see cref="MusicManager" /> are made up until this

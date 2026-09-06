@@ -38,7 +38,7 @@ These four endpoints write their array element by element (`Transfer-Encoding: c
 Two consequences for clients that do read it incrementally:
 
 - The status code is decided before the first element. Once the array has started, an upstream failure can only end it early, so a truncated result set is short, never an error body. Every validation error (`invalid_count`, `invalid_share`) still arrives as a normal `400` with nothing written.
-- Ordering is the producer's. `RandomResults` interleaves its YouTube and library picks as they arrive rather than shuffling a finished list; the requested `youTubeShare` still holds, and the library still backfills whatever YouTube is short of.
+- Ordering is the producer's, and it is not grouped by service. `Search` asks every platform at once and writes each hit the moment it lands, so a library track, a YouTube video and a Deezer track can arrive in any order — relevance, service and everything else is the client's to sort. `RandomResults` interleaves its YouTube and library picks as they arrive rather than shuffling a finished list; the requested `youTubeShare` still holds, and the library still backfills whatever YouTube is short of.
 
 ## Mixed query resolver
 

@@ -4,7 +4,7 @@ using Gaida.Core.Utils;
 using Gaida.Platforms.MusicDatabase;
 using Gaida.Platforms.MusicDatabase.Manager;
 
-namespace Gaida.Tests;
+namespace Pods.Tests;
 
 public class MusicInfoFormatTests
 {

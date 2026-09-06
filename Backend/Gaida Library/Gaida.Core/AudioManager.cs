@@ -51,15 +51,21 @@ public class AudioManager(ILogger logger)
         return Task.FromResult<PlatformResult?>(null);
     }
 
+    /// <summary>
+    ///     Asks every searchable platform at once and yields hits as they land, so the results arrive mixed
+    ///     rather than one platform's block after another's, and the search costs the slowest pod instead of
+    ///     all of them added up. Ordering is the consumer's job.
+    /// </summary>
     public async IAsyncEnumerable<PlatformResult> SearchKeywords(string query,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         Logger.Information("Searching for keywords: {Query}", query);
         var totalResults = 0;
 
-        foreach (var platform in Platforms.OfType<ISupportsSearch>())
-        await foreach (var result in platform.SearchKeywords(query, cancellationToken)
-                           .Guarded(Logger, platform.GetType().Name, cancellationToken))
+        await foreach (var result in Platforms.OfType<ISupportsSearch>()
+                           .Select(platform => platform.SearchKeywords(query, cancellationToken)
+                               .Guarded(Logger, platform.GetType().Name, cancellationToken))
+                           .Merge(cancellationToken))
         {
             totalResults++;
             yield return result;
@@ -74,9 +80,10 @@ public class AudioManager(ILogger logger)
         Logger.Information("Searching for playlist: {Query}", query);
         var totalResults = 0;
 
-        foreach (var platform in Platforms.OfType<ISupportsPlaylist>())
-        await foreach (var result in platform.SearchPlaylist(query, cancellationToken)
-                           .Guarded(Logger, platform.GetType().Name, cancellationToken))
+        await foreach (var result in Platforms.OfType<ISupportsPlaylist>()
+                           .Select(platform => platform.SearchPlaylist(query, cancellationToken)
+                               .Guarded(Logger, platform.GetType().Name, cancellationToken))
+                           .Merge(cancellationToken))
         {
             totalResults++;
             yield return result;
