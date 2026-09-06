@@ -244,10 +244,12 @@
 	/* One property sizes the artwork, so the lyrics pane can shrink it later
 	   without a second layout. */
 	--cover: min(78vw, 44vh);
+	/* Three blocks, not five rows: the sleeve and the words, the line they both
+	   stand on, and the transport under it. The utilities left this stack for the
+	   top rail — they are the room's light switches, not part of the record. */
 	grid-template-areas:
 		'cover'
 		'meta'
-		'actions'
 		'seek'
 		'transport';
 }
@@ -327,13 +329,23 @@
 	font-size: 1rem;
 	color: var(--color-chalk);
 }
+/* Context, then the thing, then who made it. The tag names the record the track
+   was lifted from, so it reads as the line above the title rather than a footnote
+   under the artist. */
 #player[data-shape='full'] #track-album {
 	display: block;
+	order: -1;
+	margin-bottom: 0.4rem;
 	max-width: 100%;
 }
 
+/* The rail. Chrome belongs at the edge of the frame: from the middle of the
+   column it read as a fourth line of metadata, and it pushed the title away from
+   the artwork it names. */
 #player[data-shape='full'] #player-docks {
-	grid-area: actions;
+	position: absolute;
+	top: 0.75rem;
+	right: 0.75rem;
 	margin: 0;
 	gap: 0.75rem;
 }
@@ -357,12 +369,9 @@
 	height: 34px;
 }
 
-/* The collapse button leaves the action row for the corner: it is the way out of
-   the shape, not one of the things you do inside it. */
+/* The way out sits at the end of the rail, where a window's close control lives. */
 #player[data-shape='full'] #player-shape {
-	position: absolute;
-	top: 0.75rem;
-	right: 0.75rem;
+	order: 9;
 }
 
 /* The signature. The buffer gauge is 14x28px beside the seek bar — at this size
@@ -378,9 +387,11 @@
 	border-radius: 0;
 }
 
-/* Two columns from `sm` up: the artwork owns the left half and every word and
-   control lines up on one axis in the right. A phone layout stretched to 1400px
-   is the thing to avoid. */
+/* Two columns from `sm` up, on one baseline: the sleeve and the words end at the
+   same line, and that line is the seek bar — it runs the full width of both, so
+   the thing you scrub is the thing the layout is built on. The old version dealt
+   four rows down the side of the cover and let the grid space them out; the words
+   drifted away from the artwork and the utilities landed in the middle of them. */
 @media (min-width: 640px) {
 	#player[data-shape='full'] {
 		--cover: min(46vh, 40vw);
@@ -388,13 +399,26 @@
 		align-content: center;
 		justify-content: center;
 		column-gap: 3rem;
-		row-gap: 1rem;
+		row-gap: 1.5rem;
 		grid-template-columns: auto minmax(0, 26rem);
 		grid-template-areas:
 			'cover meta'
-			'cover actions'
-			'cover seek'
-			'cover transport';
+			'seek seek'
+			'transport transport';
+	}
+
+	/* the words rest on the sleeve's bottom edge instead of floating beside it */
+	#player[data-shape='full'] #track-info > div {
+		align-self: end;
+		padding-bottom: 0.35rem;
+	}
+
+	#player[data-shape='full'] #seekbar {
+		max-width: none;
+	}
+
+	#player[data-shape='full'] #controls {
+		justify-self: center;
 	}
 	#player[data-shape='full'][data-lyrics='on'] {
 		--cover: min(28vh, 24vw);
@@ -406,14 +430,23 @@
 		align-items: start;
 		text-align: left;
 	}
-	#player[data-shape='full'] #controls {
-		/* the glyphs sit inside their targets; pulling the row back by that padding
-		   puts the first one on the same axis as the title and the clock */
-		margin-left: -0.85rem;
-	}
 	#player[data-shape='full'] #controls button {
 		width: 3rem;
 		height: 3rem;
+	}
+}
+
+/* The queue and the chat stay reachable from inside the shape on a screen wide
+   enough to hold both: the sheet keeps its edge and the record moves over to make
+   room for it. A phone leaves the shape instead — see `toggle` in Player.svelte. */
+@media (min-width: 640px) {
+	#player[data-shape='full'][data-dock='queue'],
+	#player[data-shape='full'][data-dock='chat'] {
+		padding-right: calc(380px + 1.5rem);
+		/* the sleeve gives up the width the sheet takes, so the title keeps its own
+		   and the two columns stay two columns */
+		--cover: min(40vh, 26vw);
+		column-gap: 2rem;
 	}
 }
 

@@ -24,9 +24,9 @@
 
 	function toggle(tab: Exclude<Dock, null>) {
 		dock = dock === tab ? null : tab;
-		// The sheet lives in the layout, below this element's stacking context. A queue you
-		// cannot see is worse than a cover you briefly cannot.
-		if (dock) full = false;
+		// A wide screen holds both — the full player makes room for the sheet beside it.
+		// A phone cannot: the sheet is 70dvh of it, so opening one leaves the other.
+		if (dock && !window.matchMedia('(min-width: 640px)').matches) full = false;
 	}
 
 	// micro paints the artwork behind everything instead of beside it. No track,
@@ -60,6 +60,7 @@
 <div
 	id="player"
 	data-shape={full ? 'full' : 'bar'}
+	data-dock={dock ?? 'none'}
 	data-hold={holdState}
 	class="static z-10 mx-2 mb-2 flex w-auto shrink-0 flex-col items-center gap-2 rounded-panel border border-haze bg-surface-100/85 px-3 py-2 backdrop-blur-xl sm:absolute sm:inset-x-0 sm:bottom-4 sm:mx-auto sm:mb-0 sm:min-h-[53px] sm:w-[min(100%-2rem,80rem)] sm:flex-row sm:justify-between sm:gap-0 sm:px-4 sm:py-1"
 >

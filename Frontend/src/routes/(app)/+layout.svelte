@@ -94,8 +94,10 @@
 			<!-- a bottom sheet on narrow screens, a dock that narrows the page from lg
 			     up. One surface, two tabs — chat and queue never compete for the right
 			     edge. -->
+			<!-- above the full player (z-40), which is fixed over the whole app: the sheet
+			     is reachable from inside that shape, not buried by it -->
 			<aside
-				class="absolute inset-x-0 bottom-0 z-20 flex h-[70dvh] max-h-full flex-col overflow-hidden rounded-panel rounded-b-none border border-haze bg-surface-100/95 backdrop-blur-xl sm:inset-x-auto sm:bottom-20 sm:right-2 sm:top-2 sm:h-auto sm:w-[380px] sm:rounded-b-panel"
+				class="absolute inset-x-0 bottom-0 z-50 flex h-[70dvh] max-h-full flex-col overflow-hidden rounded-panel rounded-b-none border border-haze bg-surface-100/95 backdrop-blur-xl sm:inset-x-auto sm:bottom-20 sm:right-2 sm:top-2 sm:h-auto sm:w-[380px] sm:rounded-b-panel"
 			>
 				<div class="flex shrink-0 border-b border-haze">
 					{#each [{ id: 'queue' as const, label: `Queue · ${queue.items.length}` }, { id: 'chat' as const, label: 'Chat' }] as tab (tab.id)}
