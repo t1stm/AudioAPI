@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import type { PageData } from './$types';
 	import type { SearchResult } from '$states/search.svelte';
 	import SearchRow from '$components/search/SearchRow.svelte';
@@ -8,8 +9,9 @@
 
 	let localResults = $state<SearchResult[]>([]);
 	let youtubeResults = $state<SearchResult[]>([]);
-	let localLoading = $state(Boolean(data.term));
-	let youtubeLoading = $state(Boolean(data.term));
+	// Only the first paint, before the effect below runs: the effect owns these from then on.
+	let localLoading = $state(untrack(() => Boolean(data.term)));
+	let youtubeLoading = $state(untrack(() => Boolean(data.term)));
 
 	// The library is the tab this page opens on, but an artist the library has never
 	// heard of should not open on an empty one. Until the library side has answered
