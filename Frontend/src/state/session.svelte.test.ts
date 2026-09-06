@@ -279,6 +279,28 @@ describe('queue frames', () => {
 	});
 });
 
+describe('reorder frames', () => {
+	it('take the new index without touching playback or answering the barrier', () => {
+		receive(`queue ${JSON.stringify([item(), item({ id: 'audio://b' })])}`);
+		receive('current 1');
+		session.reportLoaded();
+		receive('playing True');
+		audio.currentSeconds = 42;
+		FakeSocket.last.sent.length = 0;
+
+		// a shuffle: the same track, now at the front, and the index leads the list
+		receive('index 0');
+		receive(`queue ${JSON.stringify([item({ id: 'audio://b' }), item()])}`);
+
+		expect(queue.currentIndex).toBe(0);
+		expect(current.id).toBe('audio://b');
+		expect(audio.paused).toBe(false);
+		expect(audio.currentSeconds).toBe(42);
+		// answering this would release somebody else's barrier early
+		expect(FakeSocket.last.sent).toEqual([]);
+	});
+});
+
 describe('parsing', () => {
 	it('splits chat on the first separator only, and trims the leaked space', () => {
 		receive('chat Alice %%  hi %% there');
@@ -550,8 +572,19 @@ describe('queue verbs while connected', () => {
 		queue.playIndex(1);
 		queue.nextTrack();
 		queue.shuffle();
+		queue.clearOthers();
+		queue.move(1, 0);
+		queue.playNext({ id: 'audio://c' } as never);
 
-		expect(FakeSocket.last.sent).toEqual(['remove 0', 'skipto 1', 'next', 'shuffle']);
+		expect(FakeSocket.last.sent).toEqual([
+			'remove 0',
+			'skipto 1',
+			'next',
+			'shuffle',
+			'clear',
+			'move 1 0',
+			'addnext audio://c'
+		]);
 		expect(queue.items).toEqual(before);
 	});
 

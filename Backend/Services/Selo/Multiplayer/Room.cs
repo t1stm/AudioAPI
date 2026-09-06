@@ -158,7 +158,9 @@ public class Room
         return name.Span switch
         {
             "add" => Enqueue(value.ToString()),
+            "addnext" => Enqueue(value.ToString(), true),
             "setnext" when int.TryParse(value.Span, out var nextIndex) => Player.SetNext(nextIndex),
+            "move" when TryParseMove(value.Span, out var from, out var to) => Player.Move(from, to),
             "skipto" when int.TryParse(value.Span, out var skipIndex) => Player.SkipTo(skipIndex),
             "seek" when double.TryParse(value.Span, out var seekSeconds) => Player.SeekTo(seekSeconds),
             "remove" when int.TryParse(value.Span, out var removeIndex) => Player.Remove(removeIndex),
@@ -168,7 +170,21 @@ public class Room
         };
     }
 
-    protected async Task Enqueue(string id)
+    /// <summary>Two indexes in one argument, <c>move &lt;from&gt; &lt;to&gt;</c>.</summary>
+    protected static bool TryParseMove(ReadOnlySpan<char> value, out int from, out int to)
+    {
+        from = 0;
+        to = 0;
+
+        var argument = value.Trim();
+        var splitIndex = argument.IndexOf(' ');
+
+        return splitIndex != -1
+               && int.TryParse(argument[..splitIndex], out from)
+               && int.TryParse(argument[(splitIndex + 1)..], out to);
+    }
+
+    protected async Task Enqueue(string id, bool playNext = false)
     {
         SearchResultDto[]? results;
         try
@@ -184,7 +200,7 @@ public class Room
         var result = results?.FirstOrDefault();
         if (result is null) return;
 
-        await Player.Enqueue(result.ToTrack());
+        await Player.Enqueue(result.ToTrack(), playNext);
     }
 
     protected Task HandleUpdateRoom(ReadOnlyMemory<char> value, User user)
@@ -224,6 +240,7 @@ public class Room
             "playpause" => Player.TogglePlaying(),
             "stop" => Player.Stop(),
             "shuffle" => Player.Shuffle(),
+            "clear" => Player.Clear(),
             "loaded" => Player.SetLoaded(user.ID),
             "sync" => SyncTo(user),
             _ => Task.CompletedTask

@@ -6,7 +6,6 @@
 	import current from '$states/current.svelte';
 	import playlists, { toSnapshot } from '$states/playlists.svelte';
 	import queue from '$states/queue.svelte';
-	import session from '$states/session.svelte';
 	import type { SearchResult } from '$states/search.svelte';
 	import ArtistLink from '$components/ArtistLink.svelte';
 	import { sourceOf } from '$lib/source';
@@ -229,12 +228,9 @@
 			<button type="button" class="min-h-9 rounded-[5px] border border-haze px-2 py-1 text-xs font-semibold hover:bg-surface-200" onclick={() => queue.shuffle()}>
 				Shuffle
 			</button>
-		{#if !session.inRoom}
-			<!-- the protocol has no clear -->
 			<button type="button" class="min-h-9 rounded-[5px] border border-haze px-2 py-1 text-xs font-semibold text-fog hover:bg-surface-200 hover:text-chalk" onclick={() => queue.clearOthers()}>
 				Clear
 			</button>
-			{/if}
 		{/if}
 	</footer>
 	{/if}

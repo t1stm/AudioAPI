@@ -304,6 +304,9 @@ class Session {
 			case 'current':
 				this.setCurrent(Number(argument));
 				break;
+			case 'index':
+				this.reindex(Number(argument));
+				break;
 			case 'playing':
 				audio.paused = argument.trim() !== 'True';
 				if (!audio.paused) {
@@ -349,6 +352,20 @@ class Session {
 		// would claim the track and leave the `current` that follows looking like a
 		// replay, which is a barrier nobody ever answers.
 		this.setCurrent(queue.currentIndex);
+	}
+
+	/**
+	 * A reorder moved the current track without changing it — shuffle, clear, move, or a
+	 * removal below the current index. It leads the `queue` frame that follows, because
+	 * that frame is read against this index: arriving second, it would be read against the
+	 * old one, which now names a different track and restarts a track nobody changed.
+	 *
+	 * Deliberately not `current`: no barrier, no rewind, nothing stops the audio.
+	 */
+	private reindex(index: number) {
+		if (!Number.isFinite(index)) return;
+		queue.currentIndex = index;
+		if (this.positionedAt !== null) this.positionedAt = index;
 	}
 
 	private setCurrent(index: number) {

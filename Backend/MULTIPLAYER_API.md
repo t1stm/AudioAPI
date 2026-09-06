@@ -93,6 +93,7 @@ Server → client messages in the Join socket are prefixed strings, dispatched o
 | --- | --- | --- |
 | `queue ` | JSON array of queue items | broadcast |
 | `current ` | integer index | broadcast |
+| `index ` | integer index | broadcast |
 | `playing ` | `True` or `False` (capitalised .NET bool) | broadcast |
 | `seek ` | `<seconds> <serverUtcMs>` | broadcast, or to one user on join |
 | `stop` | — (no payload) | broadcast |
@@ -102,6 +103,13 @@ Server → client messages in the Join socket are prefixed strings, dispatched o
 
 Parse by longest prefix: `room name`/`room description` are two-token prefixes, and `sync` is distinct from
 `seek` even though both carry a time.
+
+`index` and `current` both carry the current index and mean different things. `current` is a **track change**:
+it arms the loading barrier, and you answer it with `loaded` (§4). `index` is a **reorder** — shuffle, clear,
+move, or a removal below the current index moved the same track to a different slot. Nothing about playback
+changes, there is no barrier, and answering it with `loaded` casts a vote that releases somebody else's
+barrier early. It always arrives **before** the `queue` frame it belongs to, because that list is read against
+your index: taken in the other order, the list is read against an index that now names a different track.
 
 ### 2.0 The stamp on `seek` and `sync`
 
@@ -176,11 +184,20 @@ On success everyone receives a fresh `queue …`.
 
 ### 3.2 `remove <index>`
 Removes the item at that 0-based index. Out-of-range is ignored. If the removed index is **before** the current
-one, `current` shifts down implicitly — but only a `queue …` is broadcast, no `current …`. Re-derive the current
-item from your last known index after every `queue`.
+one, the current item keeps playing at a lower index and an `index <n>` precedes the `queue …`.
 
 ### 3.3 `setnext <index>`
-Moves that item to immediately after the current item. Ignored if out of range or already current. Broadcasts `queue …`.
+Moves that item to immediately after the current item. Ignored if out of range or already current. Broadcasts
+`index …` (when the move shifted the current item) then `queue …`.
+
+### 3.3.1 `move <from> <to>`
+Moves the item at `from` to `to`, both 0-based, as a drag-and-drop lands it. Ignored if either index is out of
+range or they are equal. What is playing keeps playing: an `index …` precedes the `queue …` whenever the move
+carried a track across the current one.
+
+### 3.3.2 `addnext <id>`
+`add` (§3.1), except the track goes in immediately after the current item instead of at the end. With nothing
+playing it behaves exactly like `add`, first track and loading barrier included.
 
 ### 3.4 `skipto <index>`
 Jumps to that index. Ignored if out of range or already current. Broadcasts `playing False` then `current <index>`,
@@ -191,9 +208,13 @@ Move one item. `next` may move `current` **one past the end** (`current == queue
 `previous` clamps at 0. Both broadcast `playing False` then `current <n>` and reset the loaded barrier.
 
 ### 3.6 `shuffle`
-Shuffles the whole list in place, including the current item, and broadcasts `queue …`. `current` is not adjusted,
-so the item under the current index changes — clients keep playing what they had until the next `current`/`loaded`
-cycle. Follow with `skipto` if you want deterministic behaviour.
+Moves the current item to the front and shuffles everything else behind it, then broadcasts `index 0` and
+`queue …`. What the room is hearing does not change and the clock is not touched. With nothing playing
+(`current` past the end) the whole list is shuffled and only a `queue …` goes out.
+
+### 3.6.1 `clear`
+Drops every item except the current one, which keeps playing, and broadcasts `index 0` then `queue …`. With
+nothing playing the queue is emptied.
 
 ### 3.7 `playpause`
 Toggles play/pause for everyone. Ignored entirely before the first track has started (no `StartTime` yet).
@@ -256,6 +277,7 @@ Recommended client loop:
 
 ```
 on "current n"        → load queue[n], do NOT play, then send "loaded"
+on "index n"          → note the new index only, do NOT reload and do NOT send "loaded"
 on "seek t stamp"     → set audio.currentTime = t + flight(stamp)
 on "playing True"     → play()      | "playing False" → pause()
 on "stop"             → pause()
@@ -314,6 +336,7 @@ ws.onmessage = e => {
   switch (cmd) {
     case "queue":   setQueue(JSON.parse(arg)); break;
     case "current": load(Number(arg)); ws.send("loaded"); break;
+    case "index":   setCurrentIndex(Number(arg)); break;   // a reorder, not a track change
     case "playing": arg === "True" ? audio.play() : audio.pause(); break;
     case "seek":    { const [t, stamp] = arg.trim().split(/\s+/); seekTo(Number(t), Number(stamp)); break; }
     case "sync":    { const [t, stamp] = arg.trim().split(/\s+/); onSync(Number(t), Number(stamp)); break; }

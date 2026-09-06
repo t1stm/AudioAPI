@@ -69,7 +69,9 @@ class Queue {
 	}
 
 	playNext(item: SearchResult) {
-		if (this.remote) return this.remote(`add ${item.id}`);
+		// `add` appends; `addnext` drops it in right after the current track, which is the
+		// whole difference between this and the button above it
+		if (this.remote) return this.remote(`addnext ${item.id}`);
 
 		if (this.items.length === 0) {
 			this.items.push(item);
@@ -101,15 +103,9 @@ class Queue {
 		this.items = items;
 	}
 
-	/**
-	 * Drag-reorder: the track lands where it was dropped, rather than always next.
-	 *
-	 * ponytail: a room falls back to `setnext` — the protocol has no move, so the shared
-	 * queue can only pull a track to the front of the upcoming ones. Widen it when the
-	 * server grows a `move <from> <to>`.
-	 */
+	/** Drag-reorder: the track lands where it was dropped, rather than always next. */
 	move(from: number, to: number) {
-		if (this.remote) return this.remote(`setnext ${from}`);
+		if (this.remote) return this.remote(`move ${from} ${to}`);
 
 		const items = this.items;
 		if (from === to) return;
@@ -158,6 +154,8 @@ class Queue {
 
 	/** The Clear button: keep what is playing, drop everything around it. */
 	clearOthers() {
+		if (this.remote) return this.remote('clear');
+
 		const now = this.items[this.currentIndex];
 		this.items = now ? [now] : [];
 		this.currentIndex = 0;

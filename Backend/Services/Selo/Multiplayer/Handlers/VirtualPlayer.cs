@@ -83,13 +83,9 @@ public class VirtualPlayer(MessageQueue messageQueue)
         try
         {
             if (index < 0 || index >= Items.Count) return;
-            var oldCurrent = CurrentIndex;
             Items.RemoveAt(index);
 
-            if (oldCurrent > index)
-                CurrentIndex--;
-
-            await Broadcast(QueueMessage());
+            await ReindexCore(CurrentIndex > index ? CurrentIndex - 1 : CurrentIndex);
         }
         finally
         {
@@ -104,14 +100,14 @@ public class VirtualPlayer(MessageQueue messageQueue)
         try
         {
             if (index < 0 || index >= Items.Count || index == CurrentIndex) return;
-            if (index < CurrentIndex)
-                CurrentIndex--;
 
             var item = Items[index];
             Items.RemoveAt(index);
-            Items.Insert(CurrentIndex + 1, item);
 
-            await Broadcast(QueueMessage());
+            var target = index < CurrentIndex ? CurrentIndex - 1 : CurrentIndex;
+            Items.Insert(target + 1, item);
+
+            await ReindexCore(target);
         }
         finally
         {
@@ -160,8 +156,75 @@ public class VirtualPlayer(MessageQueue messageQueue)
 
         try
         {
+            // The current track leads and the rest is shuffled behind it. Shuffling the whole
+            // list moved the item out from under `CurrentIndex` without touching the index, so
+            // the room went on playing a track the queue no longer named there.
+            var playing = CurrentItemCore();
+            if (playing is not null) Items.RemoveAt(CurrentIndex);
+
             Random.Shared.Shuffle(CollectionsMarshal.AsSpan(Items));
-            await Broadcast(QueueMessage());
+
+            if (playing is null)
+            {
+                await Broadcast(QueueMessage());
+                return;
+            }
+
+            Items.Insert(0, playing);
+            await ReindexCore(0);
+        }
+        finally
+        {
+            Sync.Release();
+        }
+    }
+
+    /// <summary>
+    ///     The Clear button: everything goes except what is playing, which keeps playing. Nothing
+    ///     touches the clock, so this is a queue edit and not a track change.
+    /// </summary>
+    public async Task Clear()
+    {
+        await Sync.WaitAsync();
+
+        try
+        {
+            var playing = CurrentItemCore();
+            Items = playing is null ? [] : [playing];
+
+            await ReindexCore(0);
+        }
+        finally
+        {
+            Sync.Release();
+        }
+    }
+
+    /// <summary>
+    ///     Drag-reorder: the track lands where it was dropped. <see cref="SetNext" /> is the only other
+    ///     way to reorder and it can only pull a track to the front of the upcoming ones, so every drag
+    ///     used to land in the same place regardless of where it was let go.
+    /// </summary>
+    public async Task Move(int from, int to)
+    {
+        await Sync.WaitAsync();
+
+        try
+        {
+            if (from == to || from < 0 || from >= Items.Count || to < 0 || to >= Items.Count) return;
+
+            var item = Items[from];
+            Items.RemoveAt(from);
+            Items.Insert(to, item);
+
+            // whatever is playing keeps playing: only its index moves, and only when the
+            // track was carried across it
+            var index = CurrentIndex;
+            if (from == CurrentIndex) index = to;
+            else if (from < CurrentIndex && to >= CurrentIndex) index--;
+            else if (from > CurrentIndex && to <= CurrentIndex) index++;
+
+            await ReindexCore(index);
         }
         finally
         {
@@ -236,7 +299,12 @@ public class VirtualPlayer(MessageQueue messageQueue)
         }
     }
 
-    public async Task Enqueue(TrackDto result)
+    /// <summary>
+    ///     Appends a track, or drops it in right after the current one when <paramref name="playNext" />
+    ///     is set. "Play next" used to be an <c>add</c> like any other, which put the track at the end of
+    ///     the queue — the one place it was asked not to go.
+    /// </summary>
+    public async Task Enqueue(TrackDto result, bool playNext = false)
     {
         await Sync.WaitAsync();
 
@@ -245,7 +313,11 @@ public class VirtualPlayer(MessageQueue messageQueue)
             // current sits past the end of the queue exactly when nothing is playing,
             // so the item going in is the one that becomes current
             var startsPlayback = CurrentIndex >= Items.Count;
-            Items.Add(result);
+
+            if (playNext && !startsPlayback)
+                Items.Insert(CurrentIndex + 1, result);
+            else
+                Items.Add(result);
 
             await Broadcast(QueueMessage());
             if (!startsPlayback) return;
@@ -400,6 +472,30 @@ public class VirtualPlayer(MessageQueue messageQueue)
         UpdateStart();
         await SetPlayingCore(false);
         await Broadcast($"current {CurrentIndex}");
+    }
+
+    /// <summary>What is playing, or <c>null</c> when the index sits past the end of the queue.</summary>
+    protected TrackDto? CurrentItemCore()
+    {
+        return CurrentIndex >= 0 && CurrentIndex < Items.Count ? Items[CurrentIndex] : null;
+    }
+
+    /// <summary>
+    ///     A queue edit that moved the current item without changing it. The <c>index</c> frame leads
+    ///     the queue frame on purpose: a client re-derives what is playing from its own index every
+    ///     time a list lands, so a list arriving first is read against an index that now names a
+    ///     different track — a restart of a track nobody asked to change. It is not <c>current</c>,
+    ///     which arms the loading barrier; nothing here stops the audio.
+    /// </summary>
+    protected async Task ReindexCore(int index)
+    {
+        if (index != CurrentIndex)
+        {
+            CurrentIndex = index;
+            await Broadcast($"index {CurrentIndex}");
+        }
+
+        await Broadcast(QueueMessage());
     }
 
     protected Task SetPlayingCore(bool state)

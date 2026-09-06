@@ -221,8 +221,10 @@ public class VirtualPlayerTests
         await player.SetNext(0);
 
         Assert.Equal([second, first, third], player.Items);
-        Assert.Single(socket.Messages);
-        Assert.StartsWith("queue ", socket.Messages[0]);
+        // the move carried a track across the current one, so the index leads the list
+        Assert.Equal(2, socket.Messages.Count);
+        Assert.Equal("index 0", socket.Messages[0]);
+        Assert.StartsWith("queue ", socket.Messages[1]);
         socket.ClearMessages();
 
         await player.Remove(1);
@@ -232,6 +234,122 @@ public class VirtualPlayerTests
         Assert.Equal([second, third], player.Items);
         Assert.Single(socket.Messages);
         Assert.StartsWith("queue ", socket.Messages[0]);
+    }
+
+    [Fact]
+    public async Task ShuffleLeadsWithWhatIsPlayingAndKeepsPlayingIt()
+    {
+        var (player, store) = TestObjects.Player();
+        var socket = new RecordingWebSocket();
+        await store.GetOrAddUser("listener", socket);
+        var first = TestObjects.Result("audio://first");
+        var second = TestObjects.Result("audio://second");
+        var third = TestObjects.Result("audio://third");
+        player.Items.AddRange([first, second, third]);
+
+        await player.SkipTo(2);
+        socket.ClearMessages();
+
+        await player.Shuffle();
+
+        // the current track leads, everything else is behind it, and nothing about
+        // playback moved — no `current`, so no barrier
+        Assert.Same(third, player.Items[0]);
+        Assert.Equal([first, second, third], player.Items.OrderBy(item => item.Id));
+        Assert.Equal(2, socket.Messages.Count);
+        Assert.Equal("index 0", socket.Messages[0]);
+        Assert.StartsWith("queue ", socket.Messages[1]);
+    }
+
+    [Fact]
+    public async Task ClearKeepsWhatIsPlayingAndDropsTheRest()
+    {
+        var (player, store) = TestObjects.Player();
+        var socket = new RecordingWebSocket();
+        await store.GetOrAddUser("listener", socket);
+        var first = TestObjects.Result("audio://first");
+        var second = TestObjects.Result("audio://second");
+        player.Items.AddRange([first, second, TestObjects.Result("audio://third")]);
+
+        await player.SkipTo(1);
+        socket.ClearMessages();
+
+        await player.Clear();
+
+        Assert.Equal([second], player.Items);
+        Assert.Equal("index 0", socket.Messages[0]);
+        Assert.StartsWith("queue ", socket.Messages[1]);
+    }
+
+    [Fact]
+    public async Task MoveLandsTheTrackWhereItWasDroppedAndCarriesTheIndex()
+    {
+        var (player, store) = TestObjects.Player();
+        var socket = new RecordingWebSocket();
+        await store.GetOrAddUser("listener", socket);
+        var first = TestObjects.Result("audio://first");
+        var second = TestObjects.Result("audio://second");
+        var third = TestObjects.Result("audio://third");
+        player.Items.AddRange([first, second, third]);
+
+        await player.SkipTo(1);
+        socket.ClearMessages();
+
+        // an upcoming track dragged above the current one: the current track keeps
+        // playing, one slot further down
+        await player.Move(2, 0);
+
+        Assert.Equal([third, first, second], player.Items);
+        Assert.Equal("index 2", socket.Messages[0]);
+        socket.ClearMessages();
+
+        // the current track itself, dragged to the front
+        await player.Move(2, 0);
+        Assert.Equal([second, third, first], player.Items);
+        Assert.Equal("index 0", socket.Messages[0]);
+        socket.ClearMessages();
+
+        await player.Move(0, 0);
+        await player.Move(-1, 2);
+        await player.Move(0, 9);
+
+        Assert.Equal([second, third, first], player.Items);
+        Assert.Empty(socket.Messages);
+    }
+
+    [Fact]
+    public async Task PlayNextPutsTheTrackAfterTheCurrentOne()
+    {
+        var (player, store) = TestObjects.Player();
+        var socket = new RecordingWebSocket();
+        await store.GetOrAddUser("listener", socket);
+        var first = TestObjects.Result("audio://first");
+        var last = TestObjects.Result("audio://last");
+        player.Items.AddRange([first, last]);
+        await player.SetLoaded("listener");
+        socket.ClearMessages();
+
+        var added = TestObjects.Result("audio://added");
+        await player.Enqueue(added, true);
+
+        Assert.Equal([first, added, last], player.Items);
+        Assert.Single(socket.Messages);
+        Assert.StartsWith("queue ", socket.Messages[0]);
+    }
+
+    [Fact]
+    public async Task PlayNextOnAnIdleRoomStartsTheTrackLikeAnyOtherAdd()
+    {
+        var (player, store) = TestObjects.Player();
+        var socket = new RecordingWebSocket();
+        await store.GetOrAddUser("only", socket);
+        await player.SetLoaded("only");
+        socket.ClearMessages();
+
+        await player.Enqueue(TestObjects.Result("audio://one"), true);
+
+        Assert.Contains("current 0", socket.Messages);
+        Assert.Contains("playing False", socket.Messages);
     }
 
     [Fact]
