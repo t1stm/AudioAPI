@@ -341,10 +341,12 @@
 
 /* The rail. Chrome belongs at the edge of the frame: from the middle of the
    column it read as a fourth line of metadata, and it pushed the title away from
-   the artwork it names. */
+   the artwork it names. The bottom edge, not the top — on a phone that is the
+   half of the screen a thumb reaches, and on a desktop it puts the switches on
+   the same side as the transport they belong with. */
 #player[data-shape='full'] #player-docks {
 	position: absolute;
-	top: 0.75rem;
+	bottom: 0.75rem;
 	right: 0.75rem;
 	margin: 0;
 	gap: 0.75rem;
