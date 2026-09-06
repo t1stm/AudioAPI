@@ -89,3 +89,34 @@ describe('clearOthers', () => {
 		expect(queue.items).toEqual([]);
 	});
 });
+
+describe('move', () => {
+	it('drops the track where it was dropped, not at the front of the queue', () => {
+		queue.items = [track('a'), track('b'), track('c'), track('d')];
+		queue.currentIndex = 0;
+
+		queue.move(1, 3);
+		expect(queue.items.map((i) => i.id)).toEqual(['a', 'c', 'd', 'b']);
+
+		queue.move(3, 1);
+		expect(queue.items.map((i) => i.id)).toEqual(['a', 'b', 'c', 'd']);
+	});
+
+	it('keeps playing the same track when one is carried across it', () => {
+		queue.move(2, 0); // 'c' over 'b', which is playing
+		expect(queue.items.map((i) => i.id)).toEqual(['c', 'a', 'b']);
+		expect(queue.items[queue.currentIndex].id).toBe('b');
+	});
+
+	it('follows the playing track when it is the one moved', () => {
+		queue.move(1, 2);
+		expect(queue.currentIndex).toBe(2);
+		expect(queue.items[queue.currentIndex].id).toBe('b');
+	});
+
+	it('ignores an index off either end', () => {
+		queue.move(0, 5);
+		queue.move(-1, 0);
+		expect(queue.items.map((i) => i.id)).toEqual(['a', 'b', 'c']);
+	});
+});

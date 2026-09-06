@@ -49,9 +49,18 @@
 		if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
 	}
 
-	function drop(event: DragEvent) {
+	/** The row the track was dropped on is where it lands — that is the whole point of dragging it. */
+	function dropOn(targetIndex: number, event: DragEvent) {
 		event.preventDefault();
-		if (dragIndex !== null) queue.setNext(dragIndex);
+		event.stopPropagation();
+		if (dragIndex !== null) queue.move(dragIndex, targetIndex);
+		dragIndex = null;
+	}
+
+	/** Dropped past the last row rather than on one: the end of the queue is what was meant. */
+	function dropAtEnd(event: DragEvent) {
+		event.preventDefault();
+		if (dragIndex !== null) queue.move(dragIndex, queue.items.length - 1);
 		dragIndex = null;
 	}
 
@@ -126,13 +135,16 @@
 	<section class="flex min-h-0 flex-1 flex-col border-t border-haze py-3">
 		<h3 class="eyebrow mb-2">Next up · {nextItems.length}</h3>
 		{#if nextItems.length > 0}
-			<ul class="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1" ondragover={(event) => event.preventDefault()} ondrop={drop}>
+			<ul class="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1" ondragover={(event) => event.preventDefault()} ondrop={dropAtEnd}>
 				{#each nextItems as item, offset (item.id)}
 					{@const index = currentIndex + offset + 1}
 					<li
 						draggable="true"
 						class="group flex cursor-grab items-center gap-2 rounded-[5px] px-1 py-1.5 transition-colors hover:bg-surface-0 active:cursor-grabbing active:bg-surface-200"
 						ondragstart={(event) => dragStart(index, event)}
+						ondragover={(event) => event.preventDefault()}
+						ondrop={(event) => dropOn(index, event)}
+						ondragend={() => (dragIndex = null)}
 						ondblclick={(event) => playUnlessLink(index, event)}
 						title={`Double-click to play ${itemLabel(item)}`}
 					>

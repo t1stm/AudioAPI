@@ -101,6 +101,30 @@ class Queue {
 		this.items = items;
 	}
 
+	/**
+	 * Drag-reorder: the track lands where it was dropped, rather than always next.
+	 *
+	 * ponytail: a room falls back to `setnext` — the protocol has no move, so the shared
+	 * queue can only pull a track to the front of the upcoming ones. Widen it when the
+	 * server grows a `move <from> <to>`.
+	 */
+	move(from: number, to: number) {
+		if (this.remote) return this.remote(`setnext ${from}`);
+
+		const items = this.items;
+		if (from === to) return;
+		if (from < 0 || from >= items.length || to < 0 || to >= items.length) return;
+
+		const [moved] = items.splice(from, 1);
+		items.splice(to, 0, moved);
+
+		// Whatever was playing keeps playing: only its index moves, and only when the
+		// track was carried across it.
+		if (from === this.currentIndex) this.currentIndex = to;
+		else if (from < this.currentIndex && to >= this.currentIndex) this.currentIndex--;
+		else if (from > this.currentIndex && to <= this.currentIndex) this.currentIndex++;
+	}
+
 	shuffle() {
 		if (this.remote) return this.remote('shuffle');
 
