@@ -135,7 +135,7 @@
 		<h3 class="eyebrow mb-2">Next up · {nextItems.length}</h3>
 		{#if nextItems.length > 0}
 			<ul class="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1" ondragover={(event) => event.preventDefault()} ondrop={dropAtEnd}>
-				{#each nextItems as item, offset (item.id)}
+				{#each nextItems as item, offset (item.id + offset)}
 					{@const index = currentIndex + offset + 1}
 					<li
 						draggable="true"
@@ -178,7 +178,7 @@
 		</button>
 		{#if showPlayed && playedItems.length > 0}
 			<ul class="mt-2 max-h-28 space-y-1 overflow-y-auto">
-				{#each playedItems as item, index (item.id)}
+				{#each playedItems as item, index (item.id + index)}
 					<li class="flex items-center gap-2 px-1 py-1">
 						<span class="w-4 text-right font-mono text-[0.68rem] text-fog">{index + 1}</span>
 						<span class="truncate text-xs text-fog">{item.name}</span>
